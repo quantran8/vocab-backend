@@ -1,0 +1,12 @@
+{
+  "select.gloss.question": "What does this word mean?",
+  "select.gloss.audio.question": "Listen and choose the correct meaning.",
+  "select.reverseGloss.question": "Choose the English word for this meaning.",
+  "select.phoneticChoice.question": "Choose the word you heard.",
+  "select.stressChoice.question": "Which syllable is stressed?",
+  "typing.clue.question": "Write the English word for this meaning:",
+  "typing.transcription.question": "Listen and type the word you hear.",
+  "flyReorder.clue.question": "Arrange the letters to form the English word:",
+  "match.title": "Match the pairs.",
+  "recording.question": "Read this word aloud."
+}

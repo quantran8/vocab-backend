@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - esbuild
+  - '@swc/core'
+  - '@embedded-postgres/darwin-arm64'
+  - embedded-postgres
+overrides:
+  '@nestjs/platform-express': '-'

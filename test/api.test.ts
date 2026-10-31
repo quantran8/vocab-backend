@@ -1,0 +1,767 @@
+import { and, asc, eq, inArray, SQL, sql } from 'drizzle-orm';
+import { DIRECTNESS, MEMORY_SIGNAL, SKILL, TEMPLATE, VALIDITY } from '../src/common/constants/domain';
+import { ApiError } from '../src/common/http/api-error';
+import {
+  appUsers, learningSessions, meaningLocalizations, meaningPublications, memoryObservations, practiceItems, practiceTaskResults, sessionLearnSteps, sessionTasks,
+  skillEvidence, speechAssessmentReceipts, topicMeanings, topics, userMeaningProgress, userSettings, words as wordsTable,
+} from '../src/db/schema';
+import { AdminService } from '../src/modules/admin/admin.service';
+import { PublicationService } from '../src/modules/admin/publication.service';
+import { MaintenanceService } from '../src/modules/maintenance/maintenance.service';
+import { WeeklyService } from '../src/modules/weekly/weekly.service';
+import { CAPS, createHarness, Harness, seedWord } from './support/app';
+import { answers, learnIds, tasksOf, wrongEvents } from './support/driver';
+
+const USER = 'user-1';
+const words = (n: number, from = 0) => Array.from({ length: n }, (_, i) => seedWord(i + from));
+
+describe('Vocab Flow API', () => {
+  let h: Harness;
+  let auth: string;
+
+  const api = (method: 'get' | 'post' | 'put', path: string, token = auth) =>
+    h.http()[method](path).set('Authorization', `Bearer ${token}`);
+
+  async function onboard(slugWords = words(6), level = 'B1', token = auth) {
+    const seeded = await h.seed('topic-a', slugWords);
+    await api('put', '/v1/me/levels', token).send({ proficiencyLevel: level }).expect(200);
+    await api('put', '/v1/me/scope', token).send({ collectionId: seeded.collectionId, topicIds: [seeded.topicId] }).expect(200);
+    return seeded;
+  }
+  const plan = async (mode = 'daily', token = auth, capabilities = CAPS) =>
+    (await api('post', '/v1/sessions/plan', token).send({ mode, capabilities }).expect(200)).body;
+  const commit = (p: { sessionId: string }, body: object, token = auth) =>
+    api('post', `/v1/sessions/${p.sessionId}/commit`, token).send(body);
+  const goal = (n: number) => api('put', '/v1/me/settings').send({ dailyNewWordGoal: n }).expect(200);
+
+  async function learnOne(n = 1) {
+    await goal(n);
+    const p = await plan();
+    await commit(p, answers(p)).expect(200);
+    return p;
+  }
+  const firstRecallSteps = (where?: SQL) =>
+    h.db
+      .select({ firstRecallTaskId: sessionLearnSteps.firstRecallTaskId, template: sessionTasks.template })
+      .from(sessionLearnSteps)
+      .innerJoin(sessionTasks, and(eq(sessionTasks.sessionId, sessionLearnSteps.sessionId), eq(sessionTasks.id, sessionLearnSteps.firstRecallTaskId)))
+      .where(where);
+  const progressRows = () => h.db.select().from(userMeaningProgress);
+
+  beforeAll(async () => { h = await createHarness(); });
+  afterAll(async () => { await h.close(); });
+  beforeEach(async () => {
+    await h.reset();
+    h.planner.setRng(Math.random);
+    auth = await h.token(USER);
+  });
+
+  describe('http', () => {
+    const MISSING_ID = '01a18d69-b8c8-7699-b121-735a85b63537';
+    const MIB = 1024 * 1024;
+
+    it('echoes the request id in the header and the error envelope', async () => {
+      const res = await h.http().get('/v1/me').expect(401);
+      expect(res.headers['x-request-id']).toBe(res.body.requestId);
+    });
+
+    it('uses the error envelope for unknown routes', async () => {
+      const res = await h.http().get('/v1/nope').expect(404);
+      expect(res.body).toMatchObject({ code: 'NOT_FOUND', requestId: expect.any(String) });
+      expect(res.headers['x-request-id']).toBe(res.body.requestId);
+    });
+
+    it('rejects malformed JSON as a validation failure', async () => {
+      const res = await api('put', '/v1/me/settings').set('Content-Type', 'application/json').send('{oops').expect(400);
+      expect(res.body.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('rejects an unsupported content type as a validation failure', async () => {
+      const res = await api('put', '/v1/me/settings').set('Content-Type', 'text/plain').send('hi').expect(400);
+      expect(res.body.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('caps JSON bodies at 1 MiB', async () => {
+      // In-process: over a socket Fastify answers from content-length and may close while the client still writes.
+      const res = await h.app.inject({
+        method: 'PUT', url: '/v1/me/settings', headers: { authorization: `Bearer ${auth}`, 'content-type': 'application/json' },
+        payload: JSON.stringify({ padding: 'x'.repeat(MIB) }),
+      });
+      expect(res.statusCode).toBe(413);
+      expect(res.json().code).toBe('PAYLOAD_TOO_LARGE');
+    });
+
+    it('caps audio uploads with the policy limit', async () => {
+      const res = await api('post', `/v1/sessions/${MISSING_ID}/recording-assess`)
+        .field('taskId', MISSING_ID)
+        .attach('audio', Buffer.alloc(3 * MIB), { filename: 'a.wav', contentType: 'audio/wav' })
+        .expect(413);
+      expect(res.body.code).toBe('PAYLOAD_TOO_LARGE');
+    });
+
+    it('accepts an empty body sent as JSON on bodyless routes', async () => {
+      const admin = await h.token('admin-1', 'admin');
+      const res = await api('post', `/admin/meanings/${MISSING_ID}/recall?locale=vi-VN`, admin).set('Content-Type', 'application/json');
+      expect(res.status).not.toBe(400);
+    });
+
+    it('ignores a trailing slash', async () => {
+      await api('get', '/v1/me/').expect(200);
+    });
+  });
+
+  describe('auth', () => {
+    it('rejects missing and forged tokens with the error envelope', async () => {
+      const res = await h.http().get('/v1/me').expect(401);
+      expect(res.body).toMatchObject({ code: 'UNAUTHORIZED', retryable: false, requestId: expect.any(String) });
+      await h.http().get('/v1/me').set('Authorization', 'Bearer nope').expect(401);
+    });
+
+    it('provisions user + settings once, across concurrent first requests', async () => {
+      await Promise.all(Array.from({ length: 5 }, () => api('get', '/v1/me').expect(200)));
+      expect(await h.count(appUsers)).toBe(1);
+      expect(await h.count(userSettings)).toBe(1);
+    });
+
+    it('issues UUID v7 ids', async () => {
+      const { body } = await api('get', '/v1/me').expect(200);
+      expect(body.id[14]).toBe('7');
+    });
+
+    it('admin routes need app_metadata role', async () => {
+      const route = '/admin/words';
+      await api('post', route).send({}).expect(403);
+      await api('post', route, await h.token('ed', 'editor')).send({}).expect(400);
+    });
+  });
+
+  describe('identity', () => {
+    it('C38 C39 levels only touch app_user, and may differ', async () => {
+      await api('put', '/v1/me/levels').send({ proficiencyLevel: 'A2' }).expect(200);
+      let me = (await api('get', '/v1/me')).body;
+      expect(me).toMatchObject({ proficiencyLevel: 'A2', learningLevel: 'A2' });
+      await api('put', '/v1/me/levels').send({ proficiencyLevel: 'A2', learningLevel: 'B1' }).expect(200);
+      me = (await api('get', '/v1/me')).body;
+      expect(me).toMatchObject({ proficiencyLevel: 'A2', learningLevel: 'B1' });
+      expect(await h.count(userMeaningProgress)).toBe(0);
+    });
+
+    it('rejects topics outside the Collection', async () => {
+      const a = await h.seed('topic-a', words(1));
+      const b = await h.seed('topic-b', words(1, 1));
+      await api('put', '/v1/me/scope').send({ collectionId: a.collectionId, topicIds: [b.topicId] }).expect(400);
+    });
+
+    it('rejects unsupported locales and bad time zones', async () => {
+      await api('put', '/v1/me/settings').send({ explanationLocale: 'xx-XX' }).expect(400);
+      await api('put', '/v1/me/settings').send({ timeZone: 'Mars/Base' }).expect(400);
+    });
+  });
+
+  describe('publication', () => {
+    const editor = () => h.token('ed', 'editor');
+    const draft = (examples: object[] = [{ sourceText: 'Use it now.', targetLocator: { start: 4, end: 6 } }]) => ({
+      lemma: 'probe',
+      types: [{
+        partOfSpeech: 'verb',
+        pronunciations: [{ accentLocale: 'en-US', ipa: '/proʊb/' }],
+        meanings: [{ cefrLevel: 'B1', examples }],
+      }],
+    });
+
+    it('C05 rejects publishing without a localized example translation', async () => {
+      const token = await editor();
+      const { body } = await api('post', '/admin/words', token).send(draft()).expect(201);
+      const meaningId = body.types[0].meanings[0].id;
+      await api('put', `/admin/meanings/${meaningId}/locales/vi-VN`, token)
+        .send({ meaningText: 'dò', definitionText: 'dò xét', editorialState: 'approved' }).expect(200);
+      const res = await api('post', `/admin/meanings/${meaningId}/publish?locale=vi-VN`, token).expect(422);
+      expect(res.body.code).toBe('PUBLICATION_INVALID');
+    });
+
+    it('C06 C28 a new draft leaves the published snapshot and issued tasks untouched', async () => {
+      const seeded = await onboard(words(4));
+      await goal(1);
+      const issued = await plan();
+      const service = h.app.get(AdminService);
+      await service.putMeaningLocale(seeded.meaningIds[0], 'vi-VN', { meaningText: 'đã sửa', definitionText: 'x', editorialState: 'draft', exampleTranslations: [] });
+      const next = await plan();
+      expect(JSON.stringify(next.steps)).not.toContain('đã sửa');
+      await commit(issued, answers(issued)).expect(200);
+    });
+
+    it('recalled publications leave the resolver; publish restores a new revision', async () => {
+      const seeded = await onboard(words(4));
+      const publications = h.app.get(PublicationService);
+      await publications.recall(seeded.meaningIds[0], 'vi-VN');
+      expect(JSON.stringify((await plan()).steps)).not.toContain('nghĩa 0"');
+      await h.db
+        .update(meaningLocalizations)
+        .set({ meaningText: 'nghĩa mới' })
+        .where(and(eq(meaningLocalizations.meaningId, seeded.meaningIds[0]), eq(meaningLocalizations.locale, 'vi-VN')));
+      const { revision } = await publications.publish(seeded.meaningIds[0], 'vi-VN');
+      expect(revision).toBe(2);
+    });
+
+    it('snapshots are immutable at the database', async () => {
+      await h.seed('topic-a', words(1));
+      await expect(h.db.update(meaningPublications).set({ revision: 9 })).rejects.toThrow();
+    });
+
+    it('publishing an item without supersedes never retires other items', async () => {
+      const seeded = await h.seed('topic-a', words(1));
+      const admin = h.app.get(AdminService);
+      const create = async () => {
+        const { id } = await admin.createItem({
+          template: TEMPLATE.typing, variant: 'meaningRecall',
+          sourceContent: { promptVariants: { text: { text: 'cue' } } }, sourceEvaluation: { acceptedResponses: ['x'] },
+          targets: [{ meaningId: seeded.meaningIds[0] }],
+        });
+        await admin.putItemLocale(id, 'vi-VN', { localizedContent: {}, editorialState: 'approved' });
+        await admin.publishItem(id);
+        return id;
+      };
+      await create();
+      await create();
+      expect(await h.count(practiceItems, eq(practiceItems.status, 'published'))).toBe(2);
+    });
+
+    it('C52 rejects a dual target across different Words', async () => {
+      const seeded = await h.seed('topic-a', words(2));
+      await expect(h.app.get(AdminService).createItem({
+        template: TEMPLATE.select, variant: 'gloss',
+        sourceContent: { promptVariants: { text: { text: 'cue' } } }, sourceEvaluation: { correctOptionId: 1 },
+        targets: [{ meaningId: seeded.meaningIds[0], pronunciationId: seeded.pronunciationIds[1] }],
+      })).rejects.toBeInstanceOf(ApiError);
+    });
+  });
+
+  describe('daily plan', () => {
+    it('C09 C42 task payload exposes no internal ids and is self-contained', async () => {
+      await onboard();
+      const p = await plan();
+      expect(p.steps.length).toBeGreaterThan(0);
+      for (const task of tasksOf(p)) {
+        expect(Object.keys(task)).not.toEqual(expect.arrayContaining(['wordId']));
+        expect(JSON.stringify(task)).not.toMatch(/meaningId|pronunciationId|typeId|intent|referenceText/);
+        expect(task.id[14]).toBe('7');
+        expect(task.prompt.type).toMatch(/text|audio/);
+      }
+    });
+
+    it('C29 C30 C34 every new Meaning has all groups; persisted first recall is typing or flyReorder', async () => {
+      await onboard(words(6));
+      await goal(3);
+      const p = await plan();
+      expect(learnIds(p)).toHaveLength(3);
+      const steps = await firstRecallSteps();
+      for (const step of steps) expect([TEMPLATE.typing, TEMPLATE.flyReorder]).toContain(step.template);
+      const templates = tasksOf(p).map((t) => t.template);
+      expect(templates.filter((t) => t === TEMPLATE.recording)).toHaveLength(3);
+      expect(templates.filter((t) => t === TEMPLATE.select)).toHaveLength(9);
+    });
+
+    it('audioPlayback=false never issues audio', async () => {
+      await onboard();
+      const p = await plan('daily', auth, { audioPlayback: false, microphone: true });
+      expect(tasksOf(p).every((t) => t.prompt.type === 'text')).toBe(true);
+    });
+
+    it('filters new Meanings by learning level, without changing the level', async () => {
+      const seeded = await h.seed('topic-a', [...words(4), seedWord(9, { cefrLevel: 'A1', meaningText: 'mức thấp' })]);
+      await api('put', '/v1/me/levels').send({ proficiencyLevel: 'B1' }).expect(200);
+      await api('put', '/v1/me/scope').send({ collectionId: seeded.collectionId, topicIds: [seeded.topicId] }).expect(200);
+      expect(JSON.stringify((await plan()).steps.filter((s: { type: string }) => s.type === 'learn'))).not.toContain('mức thấp');
+    });
+
+    it('returns an empty plan instead of an empty session', async () => {
+      await api('get', '/v1/me').expect(200);
+      expect(await plan()).toEqual({ sessionId: null, mode: 'daily', steps: [] });
+      expect(await h.count(learningSessions)).toBe(0);
+    });
+
+    it('C53 the database rejects a malformed prompt', async () => {
+      await onboard(words(4));
+      await goal(1);
+      await plan();
+      const task = await h.first(sessionTasks);
+      await expect(h.db.insert(sessionTasks).values({
+        sessionId: task.sessionId, ordinal: 999, phase: 'newPractice', template: 'select', clientPayload: { prompt: 'clarify' }, serverEvaluation: {}, evaluatorVersion: 'x',
+      })).rejects.toThrow();
+    });
+
+    it('snapshots cannot be rewritten after issue', async () => {
+      await onboard(words(4));
+      await goal(1);
+      await plan();
+      await expect(h.db.update(sessionTasks).set({ clientPayload: {} })).rejects.toThrow();
+    });
+  });
+
+  describe('commit', () => {
+    it('C11 abandoning leaves no authoritative learning', async () => {
+      await onboard();
+      await plan();
+      expect(await progressRows()).toEqual([]);
+      expect(await h.count(memoryObservations)).toBe(0);
+      expect(await h.count(skillEvidence)).toBe(0);
+    });
+
+    it('C10 rejects a partial batch with no partial progress', async () => {
+      await onboard();
+      const p = await plan();
+      const body = answers(p);
+      body.taskResults.pop();
+      const res = await commit(p, body).expect(422);
+      expect(res.body.code).toBe('INVALID_SUBMISSION');
+      expect(await progressRows()).toEqual([]);
+    });
+
+    it('rejects one invalid task as a whole batch', async () => {
+      await onboard();
+      const p = await plan();
+      await commit(p, answers(p, { override: (t) => (t.template === TEMPLATE.typing ? [{ seq: 1, action: 'submit' }] : undefined) })).expect(422);
+      expect(await h.count(practiceTaskResults)).toBe(0);
+    });
+
+    it('C27 server re-evaluates independently and rejects client-asserted fields', async () => {
+      await onboard();
+      const p = await plan();
+      const body = answers(p);
+      (body.taskResults[0].events[0] as Record<string, unknown>).correct = true;
+      await commit(p, body).expect(422);
+    });
+
+    it('C12 retry with the same payload returns the stored response without double counting', async () => {
+      await onboard();
+      const p = await plan();
+      const body = answers(p);
+      const first = await commit(p, body).expect(200);
+      const reordered = { taskResults: body.taskResults, learnStepsCompleted: body.learnStepsCompleted };
+      const second = await commit(p, reordered).expect(200);
+      // jsonb normalizes key order, so the stored response is compared by value, not by bytes.
+      expect(second.body).toEqual(first.body);
+      expect(await h.count(memoryObservations)).toBe(learnIds(p).length);
+      expect((await progressRows()).every((r) => r.version === 1)).toBe(true);
+    });
+
+    it('C13 retry with a different payload conflicts', async () => {
+      await onboard();
+      const p = await plan();
+      await commit(p, answers(p)).expect(200);
+      const res = await commit(p, answers(p, { deliveryMode: 'fallback' })).expect(409);
+      expect(res.body.code).toBe('SESSION_PAYLOAD_CONFLICT');
+    });
+
+    it('C12 concurrent identical commits produce one result', async () => {
+      await onboard();
+      const p = await plan();
+      const body = answers(p);
+      const results = await Promise.all(Array.from({ length: 4 }, () => commit(p, body)));
+      expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+      expect(new Set(results.map((r) => r.body.committedAt)).size).toBe(1);
+      expect(await h.count(memoryObservations)).toBe(learnIds(p).length);
+    });
+
+    it('C14 two concurrent plans for the same Meaning: first commit wins, no second learnedAt', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const [a, b] = [await plan(), await plan()];
+      const results = await Promise.all([commit(a, answers(a)), commit(b, answers(b))]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(results.find((r) => r.status === 409)!.body.code).toBe('SESSION_STALE');
+      expect(await h.count(userMeaningProgress)).toBe(1);
+    });
+
+    it('403 for another user, 404 unknown, 410 expired', async () => {
+      await onboard();
+      const p = await plan();
+      const other = await h.token('intruder');
+      expect((await commit(p, answers(p), other).expect(403)).body.code).toBe('SESSION_NOT_OWNED');
+      await api('get', `/v1/sessions/${p.sessionId}/commit-status`, other).expect(403);
+      await commit({ sessionId: '0190b0a0-0000-7000-8000-000000000001' }, answers(p)).expect(404);
+      h.clock.advance(73);
+      expect((await commit(p, answers(p)).expect(410)).body.code).toBe('SESSION_EXPIRED');
+    });
+
+    it('commit-status reconciles a lost ACK', async () => {
+      await onboard();
+      const p = await plan();
+      expect((await api('get', `/v1/sessions/${p.sessionId}/commit-status`)).body.status).toBe('issued');
+      const { body } = await commit(p, answers(p)).expect(200);
+      const status = (await api('get', `/v1/sessions/${p.sessionId}/commit-status`)).body;
+      expect(status).toMatchObject({ status: 'committed', response: body });
+    });
+
+    it('C31 C32 C20 Recording unavailable or invalid still allows learning, with no Speaking failure', async () => {
+      await onboard(words(4));
+      await learnOne();
+      expect(await h.count(userMeaningProgress)).toBe(1);
+      const speaking = await h.count(skillEvidence, eq(skillEvidence.skill, SKILL.speaking));
+      expect(speaking).toBe(0);
+    });
+
+    it('C15 first recall wrong still learns, with the failed schedule', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const isRecall = (t: { template: string }) => t.template === TEMPLATE.typing || t.template === TEMPLATE.flyReorder;
+      await commit(p, answers(p, { override: (t) => (isRecall(t) ? wrongEvents(t) : undefined) })).expect(200);
+      const [row] = await progressRows();
+      expect(Number(row.intervalHours)).toBe(12);
+      expect((await h.first(memoryObservations)).signal).toBe(MEMORY_SIGNAL.failedRecall);
+    });
+
+    it('C49 flyReorder as first recall validates and learns once at Finish', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const issue = async () => {
+        const p = await plan();
+        const [step] = await firstRecallSteps(eq(sessionLearnSteps.sessionId, p.sessionId));
+        return { p, step };
+      };
+      let { p, step } = await issue();
+      // The slot is 50/50; replanning is allowed and keeps the test on the real RNG.
+      for (let i = 0; i < 30 && step.template !== TEMPLATE.flyReorder; i += 1) ({ p, step } = await issue());
+      expect(step.template).toBe(TEMPLATE.flyReorder);
+      await commit(p, answers(p)).expect(200);
+      expect(await h.count(userMeaningProgress)).toBe(1);
+      expect((await h.first(memoryObservations)).sourceTaskIds).toContain(step.firstRecallTaskId);
+    });
+
+    it('C33 C40 five opportunities produce one observation, learned once at Finish', async () => {
+      await onboard(words(4));
+      await learnOne();
+      expect(await h.count(memoryObservations)).toBe(1);
+      const [row] = await progressRows();
+      expect(row.version).toBe(1);
+      expect(row.learnedAt).toEqual(h.clock.current);
+    });
+
+    it('receipts cannot be replayed from another task or forged', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const bogus = '0190b0a0-0000-7000-8000-000000000002';
+      const body = answers(p, { override: (t) => (t.template === TEMPLATE.recording ? [{ seq: 1, action: 'assessed', assessmentReceiptId: bogus }] : undefined) });
+      await commit(p, body).expect(422);
+    });
+  });
+
+  describe('speech', () => {
+    const assess = (sessionId: string, taskId: string) =>
+      api('post', `/v1/sessions/${sessionId}/recording-assess`)
+        .field('taskId', taskId)
+        .attach('audio', Buffer.from('RIFF'), { filename: 'a.wav', contentType: 'audio/wav' });
+    const recordings = (p: object) => tasksOf(p).filter((t) => t.template === TEMPLATE.recording);
+
+    it('C31 assessed receipts become evidence only at Finish and are consumed', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const [task] = recordings(p);
+      const { body } = await assess(p.sessionId, task.id).expect(200);
+      expect(body).toMatchObject({ validity: 'valid', passed: true });
+      expect(await h.count(skillEvidence)).toBe(0);
+      const receipts = new Map([[task.id, body.assessmentReceiptId]]);
+      await commit(p, answers(p, { receipts })).expect(200);
+      const evidence = await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.speaking));
+      expect(evidence).toMatchObject({ passed: true, directness: DIRECTNESS.supporting, assessmentReceiptId: body.assessmentReceiptId });
+      expect((await h.first(speechAssessmentReceipts)).consumedAt).not.toBeNull();
+    });
+
+    it('C20 invalid audio is not a failure', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const [task] = recordings(p);
+      h.speech.next = { validity: VALIDITY.invalid, accuracyScore: null, meta: {} };
+      const { body } = await assess(p.sessionId, task.id).expect(200);
+      expect(body).toMatchObject({ validity: 'invalid', passed: null });
+      await commit(p, answers(p, { receipts: new Map([[task.id, body.assessmentReceiptId]]) })).expect(200);
+      expect(await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.speaking))).toMatchObject({ validity: 'invalid', passed: null });
+    });
+
+    it('C61 provider outage is retryable 503, not a result', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      h.speech.next = new ApiError('SPEECH_PROVIDER_UNAVAILABLE');
+      const res = await assess(p.sessionId, recordings(p)[0].id).expect(503);
+      expect(res.body).toMatchObject({ code: 'SPEECH_PROVIDER_UNAVAILABLE', retryable: true });
+      expect(await h.count(speechAssessmentReceipts)).toBe(0);
+    });
+
+    it('rejects non-recording tasks and foreign sessions', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const typingish = tasksOf(p).find((t) => t.template !== TEMPLATE.recording);
+      await assess(p.sessionId, typingish.id).expect(422);
+    });
+  });
+
+  describe('review and SRS', () => {
+    it('C01 C41 a Meaning in two Topics shares one progress row', async () => {
+      const seeded = await onboard(words(4));
+      const [other] = await h.db
+        .insert(topics)
+        .values({ collectionId: seeded.collectionId, slug: 'second', title: 'second', status: 'published' })
+        .returning({ id: topics.id });
+      await h.db.insert(topicMeanings).values({ topicId: other.id, meaningId: seeded.meaningIds[0], curatedRank: 1 });
+      await api('put', '/v1/me/scope').send({ collectionId: seeded.collectionId, topicIds: [seeded.topicId, other.id] }).expect(200);
+      await goal(4);
+      const p = await plan();
+      await commit(p, answers(p)).expect(200);
+      const ids = (await progressRows()).map((r) => r.meaningId);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('C02 C03 only the focused Meaning learns; a new Meaning of a learned Word takes its own goal slot', async () => {
+      const seeded = await onboard(words(4));
+      const admin = h.app.get(AdminService);
+      const example = { sourceText: 'Use bank here.', targetLocator: { start: 4, end: 8 } };
+      const created = await admin.createWord({
+        language: 'en', lemma: 'bank',
+        types: [{
+          partOfSpeech: 'noun',
+          pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }],
+          meanings: [{ cefrLevel: 'B1', examples: [example] }, { cefrLevel: 'B1', examples: [example] }],
+        }],
+      });
+      const [first, second] = created.types[0].meanings;
+      for (const [index, meaning] of [first, second].entries()) {
+        await admin.putMeaningLocale(meaning.id, 'vi-VN', {
+          meaningText: `ngân hàng ${index}`, definitionText: 'x', editorialState: 'approved',
+          exampleTranslations: [{ exampleId: meaning.examples[0].id, translationText: 'dịch' }],
+        });
+        await h.app.get(PublicationService).publish(meaning.id, 'vi-VN');
+      }
+      await h.db.insert(topicMeanings).values([first, second].map((m, i) => ({ topicId: seeded.topicId, meaningId: m.id, curatedRank: 100 + i })));
+      await h.db.delete(topicMeanings).where(inArray(topicMeanings.meaningId, seeded.meaningIds.slice(1)));
+
+      await goal(2);
+      const today = await plan();
+      expect(learnIds(today)).toHaveLength(2);
+      await commit(today, answers(today)).expect(200);
+      const learned = (await progressRows()).map((r) => r.meaningId);
+      expect(learned).toContain(first.id);
+      expect(learned).not.toContain(second.id);
+
+      h.clock.advance(24);
+      const tomorrow = await plan();
+      await commit(tomorrow, answers(tomorrow)).expect(200);
+      expect((await progressRows()).map((r) => r.meaningId)).toContain(second.id);
+    });
+
+    it('new Meanings stop at the daily goal, resetting on the next local day', async () => {
+      await onboard(words(4));
+      await learnOne();
+      expect(learnIds(await plan())).toHaveLength(0);
+      h.clock.advance(24);
+      expect(learnIds(await plan())).toHaveLength(1);
+    });
+
+    it('C04 due Meaning outside active Topics is not selected', async () => {
+      await onboard(words(4));
+      await learnOne();
+      const other = await h.seed('topic-b', words(1, 10));
+      await api('put', '/v1/me/scope').send({ collectionId: other.collectionId, topicIds: [other.topicId] }).expect(200);
+      h.clock.advance(100);
+      const p = await plan();
+      expect(p.steps.filter((s: { phase?: string }) => s.phase === 'dueReview')).toEqual([]);
+    });
+
+    it('due review reschedules a Meaning; C35 skill-only review leaves it due', async () => {
+      await onboard(words(4));
+      await learnOne();
+      await goal(1);
+      h.clock.advance(48);
+      const home = (await api('get', '/v1/me/learn-home').expect(200)).body;
+      expect(home).toMatchObject({ dueCount: 1, learnedTotal: 1 });
+
+      h.planner.setRng(() => 0.9);
+      const p = await plan();
+      const due = p.steps.filter((s: { phase?: string }) => s.phase === 'dueReview');
+      expect(due.length).toBeGreaterThan(0);
+      const before = (await progressRows())[0];
+      await commit(p, answers(p)).expect(200);
+      const after = await h.first(userMeaningProgress, and(eq(userMeaningProgress.userId, before.userId), eq(userMeaningProgress.meaningId, before.meaningId)));
+      expect(after.version).toBe(2);
+      expect(after.nextReviewAt.getTime()).toBeGreaterThan(h.clock.current.getTime());
+    });
+
+    it('C24 non-Daily success does not extend the schedule', async () => {
+      await onboard(words(4));
+      await learnOne();
+      const [before] = await progressRows();
+      h.clock.advance(100);
+      const p = await plan('randomPractice');
+      await commit(p, answers(p)).expect(200);
+      const [after] = await progressRows();
+      expect(after.nextReviewAt).toEqual(before.nextReviewAt);
+      expect(after.lastReviewedAt?.getTime()).toBeGreaterThanOrEqual(before.lastReviewedAt!.getTime());
+    });
+
+    it('C36 C37 contextual items reach only learners at or above the rated level', async () => {
+      const seeded = await onboard(words(5), 'A1');
+      await h.db.update(appUsers).set({ learningLevel: 'B1' });
+      await learnOne();
+      const admin = h.app.get(AdminService);
+      const content = (text: string) => ({
+        promptVariants: { text: { text } },
+        options: [{ id: 1, text: 'one' }, { id: 2, text: 'two' }],
+      });
+      const publish = async (text: string, contextCefrLevel?: 'B2') => {
+        const { id } = await admin.createItem({
+          template: TEMPLATE.select, variant: 'meaningClash', contextCefrLevel,
+          sourceContent: content(text), sourceEvaluation: { correctOptionId: 1 },
+          targets: [{ meaningId: seeded.meaningIds[0] }],
+        });
+        await admin.putItemLocale(id, 'vi-VN', { localizedContent: {}, editorialState: 'approved' });
+        await admin.publishItem(id);
+      };
+      await publish('rated context', 'B2');
+      await publish('unrated context');
+
+      const issuedText = async () => {
+        const plans = [];
+        for (let i = 0; i < 25; i += 1) plans.push(await plan('randomPractice'));
+        return JSON.stringify(plans.map((p) => tasksOf(p).map((t) => t.prompt)));
+      };
+      const lowLevel = await issuedText();
+      expect(lowLevel).not.toContain('rated context');
+
+      await h.db.update(appUsers).set({ proficiencyLevel: 'C1' });
+      const highLevel = await issuedText();
+      expect(highLevel).toContain('"rated context"');
+      expect(highLevel).not.toContain('unrated context');
+    });
+
+    it('weak practice picks Meanings with recent failures only', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      await commit(p, answers(p, { override: (t) => (t.options ? wrongEvents(t) : undefined) })).expect(200);
+      const weak = await plan('weakWordsPractice');
+      expect(tasksOf(weak).length).toBeGreaterThan(0);
+      h.clock.advance(31 * 24);
+      expect((await plan('weakWordsPractice')).steps).toEqual([]);
+    });
+
+    it('C22 C21 C51 skills verify across sessions and a later failure revokes', async () => {
+      await onboard(words(4));
+      const wordIds = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id))).map((w) => w.id);
+      await learnOne();
+      h.planner.setRng(() => 0.99);
+      const reviewAndGet = async () => {
+        h.clock.advance(30);
+        const p = await plan('randomPractice');
+        await commit(p, answers(p)).expect(200);
+        return (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
+      };
+      const statuses = (word: { meanings: { skills: Record<string, { status: string } | undefined> }[] }) =>
+        Object.values(word.meanings[0].skills).map((s) => s?.status);
+
+      await reviewAndGet();
+      const word = await reviewAndGet();
+      expect(statuses(word)).toContain('verified');
+      expect(word.fullyVerified).toBe(false);
+
+      h.clock.advance(30);
+      const failing = await plan('randomPractice');
+      await commit(failing, answers(failing, { override: (t) => (t.options || t.tiles || t.template === TEMPLATE.typing ? wrongEvents(t) : undefined) })).expect(200);
+      const revoked = (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
+      expect(statuses(revoked)).not.toContain('verified');
+      expect(revoked.needsPractice).toBe(true);
+    });
+  });
+
+  describe('weekly', () => {
+    const weekly = () => h.app.get(WeeklyService);
+
+    it('C25 creates no empty challenge', async () => {
+      await onboard(words(4));
+      h.clock.advance(24 * 8);
+      expect(await weekly().generateDue()).toBe(0);
+    });
+
+    it('C26 assigns by commit time, is idempotent, and completes once', async () => {
+      await onboard(words(4));
+      await learnOne();
+      expect(await weekly().generateDue()).toBe(0);
+
+      h.clock.advance(24 * 8);
+      expect(await weekly().generateDue()).toBe(1);
+      expect(await weekly().generateDue()).toBe(0);
+
+      const { body } = await api('get', '/v1/me/weekly-challenges').expect(200);
+      expect(body.challenges).toHaveLength(1);
+      expect(body.challenges[0].meaningCount).toBe(1);
+
+      const p = await plan('weeklyChallenge');
+      expect(tasksOf(p).length).toBeGreaterThan(0);
+      for (const task of tasksOf(p).filter((t) => t.template !== TEMPLATE.recording)) {
+        expect([TEMPLATE.typing, TEMPLATE.flyReorder, TEMPLATE.select, TEMPLATE.clozeSelect, TEMPLATE.surgery]).toContain(task.template);
+      }
+      await commit(p, answers(p)).expect(200);
+      expect((await api('get', '/v1/me/weekly-challenges')).body.challenges).toEqual([]);
+      await api('post', '/v1/sessions/plan').send({ mode: 'weeklyChallenge', capabilities: CAPS }).expect(404);
+    });
+  });
+
+  describe('timestamps', () => {
+    it('stores true instants: the query builder and raw SQL agree', async () => {
+      await onboard(words(4));
+      await learnOne();
+      const { rows: [row] } = await h.db.execute<{ iso: string }>(sql`
+        SELECT to_char(learned_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS iso FROM user_meaning_progress`);
+      expect(row.iso).toBe('2026-11-02T03:00:00Z');
+      expect((await progressRows())[0].learnedAt.toISOString()).toBe('2026-11-02T03:00:00.000Z');
+    });
+  });
+
+  describe('maintenance', () => {
+    it('expires sessions, purges snapshots after retention, keeps committed history', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const stale = await plan();
+      const kept = await plan();
+      await commit(kept, answers(kept)).expect(200);
+
+      const service = h.app.get(MaintenanceService);
+      h.clock.advance(73);
+      expect(await service.cleanup()).toBe(1);
+      expect((await h.first(learningSessions, eq(learningSessions.id, stale.sessionId))).status).toBe('expired');
+
+      h.clock.advance(24 * 31);
+      await service.cleanup();
+      expect(await h.count(sessionTasks, eq(sessionTasks.sessionId, stale.sessionId))).toBe(0);
+      expect(await h.count(sessionTasks, eq(sessionTasks.sessionId, kept.sessionId))).toBeGreaterThan(0);
+    });
+  });
+
+  describe('performance: query count does not grow with data (no N+1)', () => {
+    const measure = async (meanings: number) => {
+      await h.reset();
+      auth = await h.token(USER);
+      await onboard(words(meanings + 3));
+      await goal(meanings);
+      const planned = await h.countQueries(() => plan());
+      const body = answers(planned.result);
+      const committed = await h.countQueries(() => commit(planned.result, body).expect(200));
+      const home = await h.countQueries(() => api('get', '/v1/me/learn-home').expect(200));
+      const list = await h.countQueries(() => api('get', '/v1/me/words').expect(200));
+      return { plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries };
+    };
+
+    it('plan, commit, learn-home and me/words stay constant from 1 to 20 Meanings', async () => {
+      const small = await measure(1);
+      const large = await measure(20);
+      if (process.env.PRINT_QUERY_COUNTS) console.error('QUERY_COUNTS', JSON.stringify({ small, large }));
+      expect(large).toEqual(small);
+      for (const count of Object.values(small)) expect(count).toBeGreaterThan(0);
+      expect(small.commit).toBeLessThan(25);
+    }, 120_000);
+  });
+});

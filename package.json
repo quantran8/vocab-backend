@@ -1,0 +1,54 @@
+{
+  "name": "vocab-backend",
+  "version": "0.4.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "test": "vitest run",
+    "test:unit": "vitest run src/",
+    "test:int": "vitest run test/",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "nest build && node dist/seed/seed.js",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/static": "^10.1.8",
+    "@nestjs/common": "^12.3.2",
+    "@nestjs/core": "^12.3.2",
+    "@nestjs/platform-fastify": "^12.3.2",
+    "@nestjs/schedule": "^12.0.2",
+    "@nestjs/swagger": "^12.0.5",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.7",
+    "jose": "^6.2.14",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "uuidv7": "^1.2.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.11",
+    "@nestjs/testing": "^12.3.2",
+    "@swc/core": "^1.16.20",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "drizzle-kit": "0.31.11",
+    "embedded-postgres": "17.10.0-beta.17",
+    "eslint": "^10.14.0",
+    "supertest": "^7.3.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "unplugin-swc": "^2.0.0",
+    "vitest": "^5.0.5"
+  }
+}

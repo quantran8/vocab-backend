@@ -1,0 +1,12 @@
+{
+  "select.gloss.question": "Từ này có nghĩa là gì?",
+  "select.gloss.audio.question": "Nghe và chọn nghĩa đúng.",
+  "select.reverseGloss.question": "Chọn từ tiếng Anh đúng với nghĩa này.",
+  "select.phoneticChoice.question": "Chọn từ bạn vừa nghe.",
+  "select.stressChoice.question": "Âm tiết nào được nhấn trọng âm?",
+  "typing.clue.question": "Viết từ tiếng Anh tương ứng với nghĩa sau:",
+  "typing.transcription.question": "Nghe và gõ lại từ bạn nghe được.",
+  "flyReorder.clue.question": "Ghép các chữ cái để tạo thành từ tiếng Anh:",
+  "match.title": "Ghép các cặp tương ứng.",
+  "recording.question": "Đọc to từ này."
+}
