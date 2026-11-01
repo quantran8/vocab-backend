@@ -4,17 +4,10 @@ import { AnswerKey, ClientBody, evaluateTask, ReceiptView, TargetOutcome } from 
 import { CommitBody } from '../practice-evaluator/events';
 import { MemoryFact, reduceMemory } from '../memory-srs/memory-reducer';
 import { Prompt, ServerEvaluation } from '../practice-resolver/task.types';
+import { PlanLearnStep, PlanTask } from '../session-planner/session-plan';
 import { deriveEvidence, EvidenceDraft } from '../skill-verification/skill-evidence';
 
-export interface TaskRow {
-  id: string;
-  ordinal: number;
-  phase: string;
-  template: string;
-  clientPayload: unknown;
-  serverEvaluation: unknown;
-  evaluatorVersion: string;
-}
+export type TaskRow = Omit<PlanTask, 'targets'>;
 
 export interface TargetRow {
   taskId: string;
@@ -23,11 +16,7 @@ export interface TargetRow {
   pronunciationId: string | null;
 }
 
-export interface LearnStepRow {
-  id: string;
-  meaningId: string;
-  firstRecallTaskId: string;
-}
+export type LearnStepRow = Pick<PlanLearnStep, 'id' | 'meaningId' | 'firstRecallTaskId'>;
 
 export interface EvaluatedTask {
   task: TaskRow;
@@ -40,13 +29,13 @@ export interface EvaluatedTask {
 const invalid = (message: string) => new ApiError('INVALID_SUBMISSION', message);
 
 // The claim is cross-checked against the issued prompt; a text prompt cannot have played audio.
-function resolveDelivery(prompt: Prompt, claimed: DeliveryMode | undefined): DeliveryMode {
-  if (prompt.type === PROMPT_TYPE.audio) {
+function resolveDelivery(prompt: Prompt | undefined, claimed: DeliveryMode | undefined): DeliveryMode {
+  if (prompt?.type === PROMPT_TYPE.AUDIO) {
     if (!claimed) throw invalid('Audio task needs deliveryMode');
     return claimed;
   }
-  if (claimed === DELIVERY_MODE.audio || claimed === DELIVERY_MODE.fallback) throw invalid('deliveryMode contradicts text prompt');
-  return DELIVERY_MODE.none;
+  if (claimed === DELIVERY_MODE.AUDIO || claimed === DELIVERY_MODE.FALLBACK) throw invalid('deliveryMode contradicts text prompt');
+  return DELIVERY_MODE.NONE;
 }
 
 export function evaluateBatch(
@@ -69,7 +58,7 @@ export function evaluateBatch(
   const evaluated = tasks.map((task): EvaluatedTask => {
     const result = submitted.get(task.id);
     if (!result) throw invalid('Result missing for an issued task');
-    const payload = task.clientPayload as ClientBody & { prompt: Prompt };
+    const payload = task.clientPayload as ClientBody & { prompt?: Prompt };
     const taskReceipts = new Map([...receipts].filter(([, r]) => r.taskId === task.id));
     const evaluation = evaluateTask({
       template: task.template as Template,
@@ -98,6 +87,25 @@ export function evaluateBatch(
 const targetKey = (taskId: string, ordinal: number) => `${taskId}:${ordinal}`;
 
 const targetIndex = (targets: TargetRow[]) => new Map(targets.map((t) => [targetKey(t.taskId, t.ordinal), t]));
+
+/** The durable record of a commit; it must stay readable after the plan is purged. */
+export function sessionResult(evaluated: EvaluatedTask[], targets: TargetRow[], receipts: Map<string, { accuracyScore?: number | null }>) {
+  const index = targetIndex(targets);
+  return {
+    tasks: evaluated.map(({ task, deliveryMode, receiptId, targets: outcomes }) => ({
+      taskId: task.id,
+      template: task.template,
+      variant: task.variant,
+      intent: (task.serverEvaluation as ServerEvaluation).intent,
+      deliveryMode,
+      accuracyScore: (receiptId && receipts.get(receiptId)?.accuracyScore) ?? null,
+      targets: outcomes.map((o) => {
+        const target = index.get(targetKey(task.id, o.ordinal));
+        return { ...o, meaningId: target?.meaningId ?? null, pronunciationId: target?.pronunciationId ?? null };
+      }),
+    })),
+  };
+}
 
 export function memoryDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]) {
   const index = targetIndex(targets);

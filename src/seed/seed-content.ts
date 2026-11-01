@@ -1,5 +1,5 @@
 import { eq, max } from 'drizzle-orm';
-import { CONTENT_STATUS, DEFAULT_ACCENT, DEFAULT_LOCALE, EDITORIAL_STATE, LEARNING_LANGUAGE } from '../common/constants/domain';
+import { CONTENT_STATUS, DEFAULT_ACCENT, DEFAULT_LOCALE, EDITORIAL_STATE, LEARNING_LANGUAGE, PartOfSpeech } from '../common/constants/domain';
 import { Db } from '../db/db';
 import { collections, topicMeanings, topics } from '../db/schema';
 import { AdminService } from '../modules/admin/admin.service';
@@ -7,7 +7,7 @@ import { PublicationService } from '../modules/admin/publication.service';
 
 export interface SeedWord {
   lemma: string;
-  partOfSpeech: string;
+  partOfSpeech: PartOfSpeech;
   ipa: string;
   cefrLevel: string;
   meaningText: string;
@@ -28,12 +28,12 @@ export async function seedTopic({ db, admin, publications }: SeedServices, slug:
   // The no-op update makes RETURNING yield the existing row on conflict.
   const [collection] = await db
     .insert(collections)
-    .values({ slug, title: slug, status: CONTENT_STATUS.published })
+    .values({ slug, title: slug, status: CONTENT_STATUS.PUBLISHED })
     .onConflictDoUpdate({ target: collections.slug, set: { slug } })
     .returning({ id: collections.id });
   const [topic] = await db
     .insert(topics)
-    .values({ collectionId: collection.id, slug, title: slug, status: CONTENT_STATUS.published })
+    .values({ collectionId: collection.id, slug, title: slug, status: CONTENT_STATUS.PUBLISHED })
     .onConflictDoUpdate({ target: [topics.collectionId, topics.slug], set: { slug } })
     .returning({ id: topics.id });
 
@@ -59,7 +59,7 @@ export async function seedTopic({ db, admin, publications }: SeedServices, slug:
     await admin.putMeaningLocale(meaning.id, DEFAULT_LOCALE, {
       meaningText: word.meaningText,
       definitionText: word.definitionText,
-      editorialState: EDITORIAL_STATE.approved,
+      editorialState: EDITORIAL_STATE.APPROVED,
       exampleTranslations: [{ exampleId: meaning.examples[0].id, translationText: word.translation }],
     });
     await publications.publish(meaning.id, DEFAULT_LOCALE);

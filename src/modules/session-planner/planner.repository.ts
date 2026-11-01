@@ -1,13 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, exists, inArray, or, sql } from 'drizzle-orm';
-import { CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, OUTCOME, WEEKLY_STATE } from '../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEMORY_SIGNAL, CHECKPOINT_STATE } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { DB, Db } from '../../db/db';
-import { practiceItemLocalizations, practiceItemTargets, weeklyChallenges } from '../../db/schema';
+import { practiceItemLocalizations, practiceItemTargets, checkpointChallenges } from '../../db/schema';
 import { CuratedItem } from '../practice-resolver/curated';
 import { DistractorView, MeaningSnapshot } from '../practice-resolver/task.types';
 
 type SnapshotRow = { snapshot: MeaningSnapshot };
+
+const CEFR_ARRAY = sql`ARRAY[${sql.join(CEFR_LEVELS.map((l) => sql`${l}`), sql`, `)}]::text[]`;
 
 const inScope = (rows: SnapshotRow[]) => rows.map((r) => r.snapshot);
 
@@ -18,7 +20,7 @@ export class PlannerRepository {
   async loadLearner(userId: string) {
     const learner = await this.db.query.appUsers.findFirst({
       where: (u) => eq(u.id, userId),
-      columns: { proficiencyLevel: true, learningLevel: true },
+      columns: { proficiencyLevel: true },
       with: {
         settings: { columns: { explanationLocale: true, timeZone: true, dailyNewWordGoal: true } },
         activeTopics: { columns: { topicId: true } },
@@ -43,35 +45,33 @@ export class PlannerRepository {
       LIMIT ${limit}`)).rows);
   }
 
-  // Remaining goal is computed in the same statement to avoid a separate count.
-  async newTargets(userId: string, locale: string, level: string | null, timeZone: string, goal: number, now: Date) {
+  // Goal is per session, not per day: a finished session never blocks the next one.
+  // Level only orders: at or above it first, nearest first, then easier ones; it never empties the pool.
+  async newTargets(userId: string, locale: string, level: string | null, goal: number) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
-      WITH learned_today AS (
-        SELECT count(*)::int AS n FROM user_meaning_progress
-        WHERE user_id = ${userId}::uuid
-          AND learned_at >= date_trunc('day', ${now}::timestamptz AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}
-      ), ranked AS (
+      WITH ranked AS (
         SELECT tm.meaning_id, min(tm.curated_rank) AS curated_rank
         FROM topic_meanings tm
         JOIN user_active_topics uat ON uat.topic_id = tm.topic_id AND uat.user_id = ${userId}::uuid
-        JOIN topics t ON t.id = tm.topic_id AND t.status = ${CONTENT_STATUS.published}
+        JOIN topics t ON t.id = tm.topic_id AND t.status = ${CONTENT_STATUS.PUBLISHED}
         GROUP BY tm.meaning_id
       ), eligible AS (
-        SELECT DISTINCT ON (wt.word_id) r.meaning_id, r.curated_rank, p.snapshot
+        SELECT DISTINCT ON (wt.word_id) r.meaning_id, r.curated_rank, p.snapshot,
+          COALESCE(lv.d < 0, false) AS below, COALESCE(abs(lv.d), 0) AS gap
         FROM ranked r
         JOIN active_meaning_publications a ON a.meaning_id = r.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
         JOIN meaning_publications p ON p.id = a.publication_id
         JOIN meanings m ON m.id = r.meaning_id
         JOIN word_types wt ON wt.id = m.type_id
-        WHERE (${level}::text IS NULL OR m.cefr_level = ${level})
-          AND NOT EXISTS (
+        CROSS JOIN LATERAL (SELECT array_position(${CEFR_ARRAY}, m.cefr_level) - array_position(${CEFR_ARRAY}, ${level}::text) AS d) lv
+        WHERE NOT EXISTS (
             SELECT 1 FROM user_meaning_progress ump
             WHERE ump.user_id = ${userId}::uuid AND ump.meaning_id = r.meaning_id)
-        ORDER BY wt.word_id, r.curated_rank, r.meaning_id
+        ORDER BY wt.word_id, below, gap, r.curated_rank, r.meaning_id
       )
       SELECT snapshot FROM eligible
-      ORDER BY curated_rank, meaning_id
-      LIMIT GREATEST(${goal}::int - (SELECT n FROM learned_today), 0)`)).rows);
+      ORDER BY below, gap, curated_rank, meaning_id
+      LIMIT ${goal}::int`)).rows);
   }
 
   async randomTargets(userId: string, locale: string, limit: number) {
@@ -89,14 +89,11 @@ export class PlannerRepository {
   async weakTargets(userId: string, locale: string, since: Date, minAttempts: number, limit: number) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       WITH attempts AS (
-        SELECT stt.meaning_id, count(*) AS total,
-               count(*) FILTER (WHERE ptr.outcome <> ${OUTCOME.correct} OR ptr.hint_count > 0) AS weak
-        FROM practice_target_results ptr
-        JOIN practice_task_results r ON r.session_id = ptr.session_id AND r.task_id = ptr.task_id
-        JOIN session_task_targets stt
-          ON stt.session_id = ptr.session_id AND stt.task_id = ptr.task_id AND stt.ordinal = ptr.target_ordinal
-        WHERE r.user_id = ${userId}::uuid AND r.committed_at >= ${since}::timestamptz AND stt.meaning_id IS NOT NULL
-        GROUP BY stt.meaning_id
+        SELECT meaning_id, count(*) AS total,
+               count(*) FILTER (WHERE signal NOT IN (${MEMORY_SIGNAL.UNAIDED_RECALL}, ${MEMORY_SIGNAL.RECOGNITION_SUCCESS})) AS weak
+        FROM memory_observations
+        WHERE user_id = ${userId}::uuid AND observed_at >= ${since}::timestamptz
+        GROUP BY meaning_id
         HAVING count(*) >= ${minAttempts}
       )
       SELECT p.snapshot
@@ -110,14 +107,14 @@ export class PlannerRepository {
 
   async oldestChallenge(userId: string, challengeId?: string) {
     const [challenge] = await this.db
-      .select({ id: weeklyChallenges.id })
-      .from(weeklyChallenges)
+      .select({ id: checkpointChallenges.id })
+      .from(checkpointChallenges)
       .where(and(
-        eq(weeklyChallenges.userId, userId),
-        eq(weeklyChallenges.state, WEEKLY_STATE.available),
-        challengeId ? eq(weeklyChallenges.id, challengeId) : undefined,
+        eq(checkpointChallenges.userId, userId),
+        eq(checkpointChallenges.state, CHECKPOINT_STATE.AVAILABLE),
+        challengeId ? eq(checkpointChallenges.id, challengeId) : undefined,
       ))
-      .orderBy(asc(weeklyChallenges.cycleStartAt))
+      .orderBy(asc(checkpointChallenges.sequence))
       .limit(1);
     return challenge;
   }
@@ -125,7 +122,7 @@ export class PlannerRepository {
   async challengeTargets(challengeId: string, locale: string) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       SELECT p.snapshot
-      FROM weekly_challenge_meanings w
+      FROM checkpoint_challenge_meanings w
       JOIN active_meaning_publications a ON a.meaning_id = w.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
       WHERE w.challenge_id = ${challengeId}::uuid
@@ -146,7 +143,7 @@ export class PlannerRepository {
     if (meaningIds.length === 0 && pronunciationIds.length === 0) return [];
     const items = await this.db.query.practiceItems.findMany({
       where: (item) => and(
-        eq(item.status, ITEM_STATUS.published),
+        eq(item.status, ITEM_STATUS.PUBLISHED),
         exists(
           this.db.select({ one: sql`1` }).from(practiceItemTargets).where(and(
             eq(practiceItemTargets.practiceItemId, item.id),
@@ -157,7 +154,7 @@ export class PlannerRepository {
           this.db.select({ one: sql`1` }).from(practiceItemLocalizations).where(and(
             eq(practiceItemLocalizations.practiceItemId, item.id),
             eq(practiceItemLocalizations.locale, locale),
-            eq(practiceItemLocalizations.editorialState, EDITORIAL_STATE.approved),
+            eq(practiceItemLocalizations.editorialState, EDITORIAL_STATE.APPROVED),
           )),
         ),
       ),

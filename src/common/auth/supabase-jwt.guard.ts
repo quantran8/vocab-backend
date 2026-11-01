@@ -8,6 +8,7 @@ import { DB, Db } from '../../db/db';
 import { ADMIN_ROLES } from '../constants/domain';
 import { ApiError } from '../http/api-error';
 import { AuthUser, IS_ADMIN, IS_PUBLIC } from './auth.decorators';
+import { UserIdCache } from './user-id-cache';
 
 const BEARER_PREFIX = 'Bearer ';
 
@@ -19,6 +20,7 @@ export class SupabaseJwtGuard implements CanActivate {
     private readonly reflector: Reflector,
     @Inject(DB) private readonly db: Db,
     private readonly config: AppConfig,
+    private readonly userIds: UserIdCache,
   ) {
     this.jwks = createRemoteJWKSet(new URL(config.jwksUrl));
   }
@@ -40,7 +42,12 @@ export class SupabaseJwtGuard implements CanActivate {
       throw new ApiError('FORBIDDEN', 'Admin role required');
     }
 
-    const user: AuthUser = { id: await this.provision(claims.sub), subject: claims.sub, role };
+    let id = this.userIds.get(claims.sub);
+    if (!id) {
+      id = await this.provision(claims.sub);
+      this.userIds.set(claims.sub, id);
+    }
+    const user: AuthUser = { id, subject: claims.sub, role };
     request.user = user;
     return true;
   }

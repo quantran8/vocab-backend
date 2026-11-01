@@ -9,7 +9,6 @@ CREATE TABLE app_user (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     identity_subject TEXT NOT NULL UNIQUE,
     proficiency_level VARCHAR(2) CHECK (proficiency_level IN ('A1','A2','B1','B2','C1','C2')),
-    learning_level VARCHAR(2) CHECK (learning_level IN ('A1','A2','B1','B2','C1','C2')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -20,7 +19,6 @@ CREATE TABLE user_settings (
     ui_locale VARCHAR(32) NOT NULL DEFAULT 'vi-VN',
     time_zone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
     daily_new_word_goal SMALLINT NOT NULL DEFAULT 5 CHECK (daily_new_word_goal BETWEEN 1 AND 30),
-    weekly_anchor_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -76,7 +74,8 @@ CREATE TABLE words (
 CREATE TABLE word_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     word_id UUID NOT NULL REFERENCES words(id),
-    part_of_speech VARCHAR(32) NOT NULL,
+    part_of_speech VARCHAR(32) NOT NULL CHECK (part_of_speech IN
+       ('noun','verb','adjective','adverb','pronoun','preposition','conjunction','interjection','phrasal_verb')),
     UNIQUE (id, word_id)
 );
 CREATE TABLE pronunciations (
@@ -164,12 +163,13 @@ CREATE TABLE active_meaning_publications (
 CREATE TABLE practice_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template VARCHAR(24) NOT NULL
-       CHECK (template IN ('select','match','clozeSelect','typing','flyReorder','surgery','recording')),
-    variant VARCHAR(40),
+       CHECK (template IN ('select','match','cloze_select','typing','fly_reorder','surgery','recording')),
+    variant VARCHAR(40) CHECK (variant IN ('gloss','reverse_gloss','meaning_clash','phonetic_choice','stress_choice',
+       'meaning_pairs','word_pairs','single_blank','context_meaning','meaning_recall','transcription','spelling_recall','fix_spelling','scripted_pronunciation')),
     -- For independent contextual practice, non-NULL means editorially rated.
     -- NULL contextual level is not eligible for unassisted contextual verification.
     -- Curated source_content may include a prompt descriptor; resolve and validate
-    -- its concrete text/audio envelope before persisting a session_tasks row.
+    -- its concrete text/audio envelope before persisting it in learning_sessions.plan.
     context_cefr_level VARCHAR(2) CHECK (context_cefr_level IN ('A1','A2','B1','B2','C1','C2')),
     source_content JSONB NOT NULL CHECK (jsonb_typeof(source_content) = 'object'),
     source_evaluation JSONB NOT NULL CHECK (jsonb_typeof(source_evaluation) = 'object'),
@@ -212,7 +212,7 @@ CREATE TABLE learning_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),
     mode VARCHAR(24) NOT NULL
-       CHECK (mode IN ('daily','weeklyChallenge','randomPractice','weakWordsPractice')),
+       CHECK (mode IN ('daily','checkpoint_challenge','random_practice','weak_words_practice')),
     status VARCHAR(16) NOT NULL DEFAULT 'issued'
        CHECK (status IN ('issued','committed','expired')),
     scope_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb
@@ -225,87 +225,21 @@ CREATE TABLE learning_sessions (
     committed_at TIMESTAMPTZ,
     commit_request_sha256 CHAR(64),
     commit_response JSONB,
+    -- Immutable issued snapshot: tasks, targets, answer keys, Learn cards. NULL once purged.
+    plan JSONB CHECK (jsonb_typeof(plan) = 'object'),
+    raw_events JSONB CHECK (jsonb_typeof(raw_events) = 'array'),
+    -- Durable per-task and per-target outcomes; kept after plan and raw_events are purged.
+    result JSONB CHECK (jsonb_typeof(result) = 'object'),
     CHECK (expires_at > issued_at),
     CHECK (
-       (status = 'committed' AND committed_at IS NOT NULL AND commit_request_sha256 IS NOT NULL AND commit_response IS NOT NULL)
-       OR (status <> 'committed' AND committed_at IS NULL AND commit_request_sha256 IS NULL AND commit_response IS NULL)
+       (status = 'committed' AND committed_at IS NOT NULL AND commit_request_sha256 IS NOT NULL AND commit_response IS NOT NULL AND result IS NOT NULL)
+       OR (status <> 'committed' AND committed_at IS NULL AND commit_request_sha256 IS NULL AND commit_response IS NULL AND result IS NULL)
     ),
+    CHECK (status <> 'issued' OR plan IS NOT NULL),
     UNIQUE (id, user_id)
 );
 CREATE INDEX idx_sessions_user_issued ON learning_sessions(user_id, issued_at DESC);
 CREATE INDEX idx_sessions_expiry ON learning_sessions(expires_at) WHERE status = 'issued';
-
-CREATE TABLE session_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES learning_sessions(id),
-    -- Globally ordered with session_learn_steps.ordinal; service ensures no overlaps.
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    phase VARCHAR(32) NOT NULL
-       CHECK (phase IN ('dueReview','newPractice','weeklyChallenge','randomPractice','weakWordsPractice')),
-    template VARCHAR(24) NOT NULL
-       CHECK (template IN ('select','match','clozeSelect','typing','flyReorder','surgery','recording')),
-    variant VARCHAR(40),
-    curated_item_id UUID REFERENCES practice_items(id),
-    -- Fully resolved client task; required prompt {type:text|audio,...} checked below.
-    -- Template + variant-specific body/evaluation and audio delivery assessed by service.
-    client_payload JSONB NOT NULL CHECK (jsonb_typeof(client_payload) = 'object'),
-    -- Universal resolved prompt envelope: required for ALL templates, not just select.
-    -- Content/localization/capability/asset and no-answer-leak rules live in service validators.
-    CONSTRAINT session_task_prompt_shape CHECK (
-        (client_payload ? 'prompt')
-        AND (jsonb_typeof(client_payload->'prompt') = 'object')
-        AND COALESCE((client_payload->'prompt'->>'type') IN ('text','audio'), FALSE)
-        AND (
-            (
-                client_payload->'prompt'->>'type' = 'text'
-                AND jsonb_typeof(client_payload->'prompt'->'text') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->>'text')) > 0, FALSE)
-                AND NOT ((client_payload->'prompt') ? 'audio')
-            ) OR (
-                client_payload->'prompt'->>'type' = 'audio'
-                AND jsonb_typeof(client_payload->'prompt'->'audio') = 'object'
-                AND jsonb_typeof(client_payload->'prompt'->'audio'->'url') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->'audio'->>'url')) > 0, FALSE)
-                AND jsonb_typeof(client_payload->'prompt'->'audio'->'locale') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->'audio'->>'locale')) > 0, FALSE)
-                AND NOT ((client_payload->'prompt') ? 'text')
-            )
-        )
-    ),
-    server_evaluation JSONB NOT NULL CHECK (jsonb_typeof(server_evaluation) = 'object'),
-    evaluator_version VARCHAR(40) NOT NULL,
-    UNIQUE (session_id, ordinal),
-    UNIQUE (session_id, id)
-);
-CREATE INDEX idx_session_tasks_session ON session_tasks(session_id);
-
-CREATE TABLE session_task_targets (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    ordinal SMALLINT NOT NULL CHECK (ordinal >= 0),
-    meaning_id UUID REFERENCES meanings(id),
-    pronunciation_id UUID REFERENCES pronunciations(id),
-    PRIMARY KEY (session_id, task_id, ordinal),
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id),
-    -- Both IDs may be present when a task checks Meaning and pronunciation simultaneously,
-    -- e.g. select with an audio lexical prompt; service validates same Word/Type alignment.
-    CHECK (meaning_id IS NOT NULL OR pronunciation_id IS NOT NULL)
-);
-CREATE INDEX idx_session_target_meaning ON session_task_targets(meaning_id) WHERE meaning_id IS NOT NULL;
-
-CREATE TABLE session_learn_steps (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES learning_sessions(id),
-    meaning_id UUID NOT NULL REFERENCES meanings(id),
-    -- Globally ordered with session_tasks.ordinal; service ensures no overlaps.
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    client_card JSONB NOT NULL CHECK (jsonb_typeof(client_card) = 'object'),
-    -- Must resolve to the first Meaning-cued recall task: typing OR fly.
-    first_recall_task_id UUID NOT NULL,
-    UNIQUE (session_id, meaning_id),
-    UNIQUE (session_id, ordinal),
-    FOREIGN KEY (session_id, first_recall_task_id) REFERENCES session_tasks(session_id, id)
-);
 
 -- Azure result receipt is temporary technical staging, not learned progress.
 CREATE TABLE speech_assessment_receipts (
@@ -319,47 +253,21 @@ CREATE TABLE speech_assessment_receipts (
     assessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id),
+    FOREIGN KEY (session_id) REFERENCES learning_sessions(id),
     CHECK ((validity = 'valid' AND passed IS NOT NULL)
            OR (validity = 'invalid' AND passed IS NULL)),
     CHECK (accuracy_score IS NULL OR (accuracy_score BETWEEN 0 AND 100)),
     CHECK (expires_at > assessed_at)
 );
 CREATE INDEX idx_speech_receipts_expiry ON speech_assessment_receipts(expires_at);
+CREATE INDEX idx_speech_receipts_task ON speech_assessment_receipts(session_id, task_id);
 
 -- E. Committed practice and normalized evidence. No records before Finish commit.
-CREATE TABLE practice_task_results (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    user_id UUID NOT NULL REFERENCES app_user(id),
-    raw_events JSONB NOT NULL CHECK (jsonb_typeof(raw_events) = 'array'),
-    normalized_result JSONB NOT NULL CHECK (jsonb_typeof(normalized_result) = 'object'),
-    committed_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (session_id, task_id),
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id)
-);
-CREATE INDEX idx_practice_results_user ON practice_task_results(user_id, committed_at DESC);
-
-CREATE TABLE practice_target_results (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    target_ordinal SMALLINT NOT NULL,
-    outcome VARCHAR(40) NOT NULL,
-    first_attempt_correct BOOLEAN,
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    hint_count INTEGER NOT NULL DEFAULT 0 CHECK (hint_count >= 0),
-    -- Actual delivery, independent of planned prompt.type; text fallback is not Listening direct.
-    delivery_mode VARCHAR(16) CHECK (delivery_mode IN ('audio','fallback','none')),
-    PRIMARY KEY (session_id, task_id, target_ordinal),
-    FOREIGN KEY (session_id, task_id) REFERENCES practice_task_results(session_id, task_id),
-    FOREIGN KEY (session_id, task_id, target_ordinal)
-        REFERENCES session_task_targets(session_id, task_id, ordinal)
-);
-
 CREATE TABLE user_meaning_progress (
     user_id UUID NOT NULL REFERENCES app_user(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     learned_at TIMESTAMPTZ NOT NULL,
+    learned_session_id UUID REFERENCES learning_sessions(id),
     last_reviewed_at TIMESTAMPTZ,
     next_review_at TIMESTAMPTZ NOT NULL,
     interval_hours NUMERIC(12,3) NOT NULL CHECK (interval_hours >= 0),
@@ -378,7 +286,7 @@ CREATE TABLE memory_observations (
     user_id UUID NOT NULL REFERENCES app_user(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     signal VARCHAR(24) NOT NULL CHECK (signal IN
-       ('unaidedRecall','assistedRecall','failedRecall','recognitionSuccess','failedRecognition')),
+       ('unaided_recall','assisted_recall','failed_recall','recognition_success','failed_recognition')),
     is_primed BOOLEAN NOT NULL DEFAULT false,
     source_task_ids JSONB NOT NULL DEFAULT '[]'::jsonb
        CHECK (jsonb_typeof(source_task_ids) = 'array'),
@@ -403,8 +311,7 @@ CREATE TABLE skill_evidence (
     committed_at TIMESTAMPTZ NOT NULL,
     assessment_receipt_id UUID REFERENCES speech_assessment_receipts(id),
     evaluator_version VARCHAR(40) NOT NULL,
-    FOREIGN KEY (session_id, task_id, target_ordinal)
-       REFERENCES practice_target_results(session_id, task_id, target_ordinal),
+    FOREIGN KEY (session_id, user_id) REFERENCES learning_sessions(id, user_id),
     UNIQUE (session_id, task_id, target_ordinal, skill),
     CHECK ((meaning_id IS NOT NULL) <> (pronunciation_id IS NOT NULL)),
     CHECK ((skill IN ('reading','writing') AND meaning_id IS NOT NULL)
@@ -417,26 +324,23 @@ CREATE INDEX idx_skill_meaning ON skill_evidence(user_id, skill, meaning_id, com
 CREATE INDEX idx_skill_pronunciation ON skill_evidence(user_id, skill, pronunciation_id, committed_at DESC)
     WHERE pronunciation_id IS NOT NULL;
 
--- F. Weekly challenge snapshots by user-specific 7-day period.
-CREATE TABLE weekly_challenges (
+-- F. Checkpoint challenge snapshots, one per N learning sessions.
+CREATE TABLE checkpoint_challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),
-    cycle_start_at TIMESTAMPTZ NOT NULL,
-    cycle_end_at TIMESTAMPTZ NOT NULL,
+    sequence INTEGER NOT NULL,
     state VARCHAR(16) NOT NULL DEFAULT 'available'
        CHECK (state IN ('available','completed')),
     completed_session_id UUID REFERENCES learning_sessions(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, cycle_start_at),
-    CHECK (cycle_end_at > cycle_start_at),
+    UNIQUE (user_id, sequence),
     CHECK ((state = 'completed' AND completed_session_id IS NOT NULL)
         OR (state = 'available' AND completed_session_id IS NULL))
 );
-CREATE TABLE weekly_challenge_meanings (
-    challenge_id UUID NOT NULL REFERENCES weekly_challenges(id),
+CREATE TABLE checkpoint_challenge_meanings (
+    challenge_id UUID NOT NULL REFERENCES checkpoint_challenges(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     PRIMARY KEY (challenge_id, meaning_id)
 );
-CREATE INDEX idx_weekly_challenges_user ON weekly_challenges(user_id, cycle_start_at DESC);
 
 COMMIT;

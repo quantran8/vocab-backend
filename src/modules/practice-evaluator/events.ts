@@ -8,21 +8,21 @@ const id = z.number().int().nonnegative();
 export const eventSchema = z.discriminatedUnion('action', [
   z.strictObject({
     ...base,
-    action: z.literal(EVENT_ACTION.submit),
+    action: z.literal(EVENT_ACTION.SUBMIT),
     optionId: id.optional(),
     value: z.string().max(200).optional(),
     tileIds: z.array(id).max(64).optional(),
     graphemeIndex: id.optional(),
     replacement: z.string().max(32).optional(),
   }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.pair), leftId: id, rightId: id }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.tapTile), tileId: id }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.removeTile), tileId: id }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.moveTile), tileId: id, toIndex: id }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.hint) }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.reveal) }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.assessed), assessmentReceiptId: z.uuid() }),
-  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.unavailable), reason: z.string().max(64) }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.PAIR), leftId: id, rightId: id }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.TAP_TILE), tileId: id }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.REMOVE_TILE), tileId: id }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.MOVE_TILE), tileId: id, toIndex: id }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.HINT) }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.REVEAL) }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.ASSESSED), assessmentReceiptId: z.uuid() }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.UNAVAILABLE), reason: z.string().max(64) }),
 ]);
 export type TaskEvent = z.infer<typeof eventSchema>;
 

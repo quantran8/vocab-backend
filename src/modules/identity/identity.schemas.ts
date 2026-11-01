@@ -14,7 +14,7 @@ const isTimeZone = (value: string) => {
 const cefr = z.enum(CEFR_LEVELS);
 const locale = z.string().refine(hasLocaleCopy, 'Unsupported locale');
 
-export const levelsSchema = z.strictObject({ proficiencyLevel: cefr, learningLevel: cefr.optional() });
+export const levelsSchema = z.strictObject({ proficiencyLevel: cefr });
 
 export const settingsSchema = z
   .strictObject({

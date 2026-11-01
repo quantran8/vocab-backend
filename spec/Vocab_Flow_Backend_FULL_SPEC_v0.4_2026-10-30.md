@@ -26,7 +26,7 @@
 
 1. **[AGREED]** App ưu tiên vocabulary; tổ chức **Collection → Topic → Word → Type → Meaning**; Topic curate đến từng Meaning; progress duy nhất `(userId, meaningId)` dù xuất hiện nhiều Topics.
 2. **[AGREED]** Một Daily Session: `Review Due → Learn New → Active Recall → Finish`; một new-Word goal slot = **một Meaning mới** của Word đó.
-3. **[AGREED]** Daily, Weekly, Random, Weak đều **all-or-nothing**: abandon trước Finish không cập nhật learning; chỉ backend commit thành công mới có `learnedAt`, review progress, skill evidence.
+3. **[AGREED]** Daily, Checkpoint, Random, Weak đều **all-or-nothing**: abandon trước Finish không cập nhật learning; chỉ backend commit thành công mới có `learnedAt`, review progress, skill evidence.
 4. **[AGREED product direction — v0.4]** 7 templates: `select`, `match`, `clozeSelect`, `typing`, `flyReorder`, `surgery`, `recording`; mọi template nhận prompt `text` hoặc `audio` qua envelope chung, subject to capability/content validation.
 5. **[AGREED]** Practice Content = **Generated + Curated**. Hints theo template rule; generic explain được hệ thống cung cấp; contextual explain là curated optional. Core Meaning examples dùng ở Learn, **không tự động thành gameplay**.
 6. **[AGREED]** Client **nhận task đã resolve đủ typed prompt text/audio/options/evaluation**, chấm bài ngay (trừ Azure Recording); không phải query Meaning để dựng câu hỏi; không trả `wordId`, `meaningId`, target metadata không cần thiết trong task response.
@@ -37,7 +37,7 @@
 11. **[AGREED]** Publish unit **Meaning × explanation locale**, yêu cầu approved linguistic + localized meaning/definition + ≥1 usable localized example + CEFR + IPA; audio không bắt buộc để publish.
 12. **[AGREED — UPDATED v0.4]** Mỗi Meaning mới trong Daily Learning phải trải qua `select`, một trong `typing | flyReorder`, `recording`; các lượt thực hành được **interleave** với các Meaning khác. `recording` invalid/unavailable không phải failure hoặc lý do hủy học những Meaning còn lại.
 13. **[AGREED — NEW]** Review/Practice có thể random giữa các template hợp lệ; **không** áp sequence New Learning cho Review. `meaningClash`/contextual usage phải phù hợp với năng lực ước lượng, tránh đánh đố người mới.
-14. **[AGREED — NEW]** Trình độ lưu trực tiếp ở `app_user.proficiency_level` và `app_user.learning_level`; onboarding Quick Test hoặc Self-select, **không** lập bảng learner profile/placement history ở MVP.
+14. **[AGREED — NEW]** Trình độ lưu trực tiếp ở `app_user.proficiency_level` (không có `learning_level`); onboarding Quick Test hoặc Self-select, **không** lập bảng learner profile/placement history ở MVP.
 
 ### 0.2. Các lựa chọn kỹ thuật, chính sách và tham số
 
@@ -51,7 +51,7 @@
 | AR-06 | Plan đã phát được giữ trong DB (metadata + snapshots) nhưng không lưu **user in-progress learning state** | `[PROPOSED]` |
 | AR-07 | Client grades locally; backend replays submitted attempts against canonical session snapshot tại Finish | `[PROPOSED]` |
 | AR-08 | Idempotency bằng `sessionId + SHA-256 canonical commit request`; user-level serialization khi commit | `[PROPOSED]` |
-| AR-09 | UTC timestamp commit là nguồn `learnedAt`; user cycle = 168 giờ tính từ `weekly_anchor_at` | `[PROPOSED]` |
+| AR-09 | UTC timestamp commit là nguồn `learnedAt`; Checkpoint Challenge mở sau mỗi 7 session có học từ mới, không theo thời gian | `[PROPOSED]` |
 | AR-10 | SRS interval-based trial + Recognition Grace một lần | `[TRIAL]` |
 | AR-11 | Default review cap 10/session, daily goal 5, delayed skill ≥24h; giới hạn tùy chỉnh | `[TRIAL]` |
 | AR-12 | New learning: 4–5 lượt interleaved, mặc định 3 Select + 1 (Typing hoặc FlyReorder) + 1 Recording/Meaning | `[TRIAL]` |
@@ -131,8 +131,7 @@ flowchart LR
   C[collections] --> TP[topics] --> TM[topic_meanings] --> M
   PI[practice_items] --> PIT[practice_item_targets] --> M
   PI --> PIL[practice_item_localizations]
-  US[app_user] --> S[learning_sessions] --> ST[session_tasks] --> STT[session_task_targets]
-  ST --> PR[practice_task_results] --> PTR[practice_target_results]
+  US[app_user] --> S[learning_sessions: plan + result]
   US --> UMP[user_meaning_progress]
   US --> ME[memory_observations]
   US --> SE[skill_evidence]
@@ -144,7 +143,7 @@ flowchart LR
 
 | Bảng/nhóm | Mục tiêu | Điểm mấu chốt |
 |---|---|---|
-| `app_user` | Identity + `proficiency_level`/`learning_level` | A1–C2 nullable trước onboarding, **không có bảng placement riêng** |
+| `app_user` | Identity + `proficiency_level` | A1–C2 nullable trước onboarding, **không có bảng placement riêng** |
 | `words`, `word_types`, `meanings`, `pronunciations`, `meaning_examples` | Lexical source | FK, CEFR Meaning, IPA/type, examples thuộc Meaning |
 | `meaning_localizations`, `example_localizations` | Editorial text theo locale | Không cho runtime đọc draft để thay bản published |
 | `meaning_publications`, `active_meaning_publications` | Immutable approved snapshot per Meaning×locale | Editing mới không đổi bản đã phát |
@@ -153,13 +152,13 @@ flowchart LR
 | `practice_items` | **Chỉ Curated** core data và evaluation rules, mọi template chung 1 bảng | `source_content JSONB`, `source_evaluation JSONB`, optional `context_cefr_level` |
 | `practice_item_localizations` | Clue/question/context explain ngôn ngữ giải thích | Không nhân bản source English context vô cớ |
 | `practice_item_targets` | Item→Meaning/pronunciation targets | Matching có nhiều target |
-| `learning_sessions` | Issued plan, policy version, commit state | Issued ≠ in-progress learning record |
-| `session_tasks`, `session_task_targets`, `session_learn_steps` | **Immutable per-session snapshots** | Generated tasks cũng xuất hiện ở đây sau khi resolve |
+| `learning_sessions` | **Một session là một dòng lịch sử practice**: issued plan, policy version, commit state, `plan`, `raw_events`, `result` | Issued ≠ in-progress learning record. `plan` bất biến, chỉ retention được xoá; `plan` và `raw_events` có thể purge, `result` giữ lâu dài |
+| `learning_sessions.plan` | **Immutable per-session snapshot**: tasks, targets, Learn cards, answer key | Generated tasks cũng nằm ở đây sau khi resolve |
 | `speech_assessment_receipts` | Azure technical staging để commit sau | Receipt không tạo learning evidence trước Finish |
-| `practice_task_results`, `practice_target_results` | Committed raw/re-evaluated outcomes | Matching phải lưu per pair |
+| `learning_sessions.result` | Committed re-evaluated outcomes | Matching phải lưu per pair; giữ được sau khi `plan` bị purge |
 | `memory_observations`, `user_meaning_progress` | SRS event + current state | PK `(user_id, meaning_id)` |
 | `skill_evidence` | Direct/supporting/invalid evidence | Reading/Writing→Meaning; Listening/Speaking→Pronunciation; audio-meaning task có thể sinh semantic memory + Listening Evidence theo cặp target đã xác thực |
-| `weekly_challenges`, `weekly_challenge_meanings` | Immutable user-cycle challenge membership | Không tạo empty challenge |
+| `checkpoint_challenges`, `checkpoint_challenge_meanings` | Immutable challenge membership theo nhóm session | Không tạo empty challenge |
 
 **Backend-only IDs** (`meaning_id`, `pronunciation_id`, `practice_item_targets`, `source_content`) tồn tại trong DB, **không tự động xuất hiện trong Practice response**.
 
@@ -181,7 +180,7 @@ flowchart LR
 |---|---|---|---|
 | `select` | Chọn **một** đáp án trong `options` theo `correctOptionId` | `gloss`, `reverseGloss`, `meaningClash`, `phoneticChoice` (trước là audioSelect), `stressChoice` (trước là sound split) | Chữ/câu hoặc phát audio; `options` có thể chứa từ, nghĩa hay lựa chọn trọng âm |
 | `match` | Ghép các cặp từ ↔ nghĩa, theo pair IDs | `meaningPairs`, `wordPairs` | Text/audio hướng dẫn; media của từng pair là phần riêng của body |
-| `clozeSelect` | **Chọn từ** trong các options để lấp một ô trống của câu, không xếp lại toàn câu | `singleBlank`, optional `contextMeaning` | Text/audio clue/context; body có `sentenceParts` và `options` |
+| `clozeSelect` | **Chọn từ** trong các options để lấp một ô trống của câu, không xếp lại toàn câu | `singleBlank`, optional `contextMeaning` | Text/audio clue tuỳ chọn, bỏ `prompt` khi không có clue thật; câu chỉ nằm ở `sentenceParts`, body có `sentenceParts` và `options` |
 | `typing` | Nhập câu trả lời tự do bằng keyboard | `meaningRecall` hoặc `transcription` (trước là audio trace) | Text Meaning cue, audio Meaning cue hoặc tiếng Anh được phát để chép |
 | `flyReorder` | Chọn/sắp thứ tự các grapheme tiles bay vào ô đáp án | `spellingRecall` | Text/audio cue; trả ordered `tileIds`, không gửi chuỗi đáp án như nguồn tin |
 | `surgery` | Chọn/sửa grapheme lỗi | `fixSpelling` | Text/audio cue, lỗi chính tả nằm trong `word` body |
@@ -195,7 +194,7 @@ flowchart LR
 
 **Authoring representation `[PROPOSED]`:** `practice_items.source_content` cho curated tasks có thể lưu `promptVariants.text` và/hoặc `promptVariants.audio` (symbolic approved asset references + locale + cue descriptor), **không** lưu client-ready expiring URLs; Generated templates nhận options từ resolver. Tại issuance chỉ chọn **một** mode, tạo fully resolved `client_payload.prompt` như §2.5; không bắt Curated item nào cũng phải có cả hai modes nếu không có media/QA, nhưng **mọi template** phải có code path xử lý cả text và audio. Nếu thiếu variant, reject candidate hoặc planner chọn alternative hợp lệ — không tự đổi audio stimulus thành text khi cần Listening direct.
 
-**Dual-target mapping:** `practice_item_targets`/`session_task_targets` cho phép `(meaning_id, pronunciation_id)` cùng hiện diện nếu thật sự là một Word/Type hợp lệ; ít nhất một non-null. Ví dụ `select(audio)` cần Meaning target để cập nhật semantic memory, Pronunciation target để cấp Listening evidence. Recording chỉ cần pronunciation. Backend chống linking hai IDs thuộc các Word/Type khác nhau.
+**Dual-target mapping:** `practice_item_targets`/targets trong `learning_sessions.plan` cho phép `(meaning_id, pronunciation_id)` cùng hiện diện nếu thật sự là một Word/Type hợp lệ; ít nhất một non-null. Ví dụ `select(audio)` cần Meaning target để cập nhật semantic memory, Pronunciation target để cấp Listening evidence. Recording chỉ cần pronunciation. Backend chống linking hai IDs thuộc các Word/Type khác nhau.
 
 ### 2.5. Localization pipeline: câu hỏi Generated dịch thế nào?
 
@@ -319,7 +318,6 @@ Các fixture dưới đây minh họa JSON shape, không phải nội dung produ
 ```json
 {
   "id":"10000000-0000-4000-8000-000000000002", "template":"clozeSelect", "variant":"singleBlank",
-  "prompt":{"type":"text","text":"Could you ____ the requirements?"},
   "sentenceParts":{"before":"Could you ","after":" the requirements?"},
   "options":[{"id":1,"text":"clarify"},{"id":2,"text":"arrive"},{"id":3,"text":"forget"}],
   "evaluation":{"correctOptionId":1}
@@ -397,8 +395,7 @@ Các fixture dưới đây minh họa JSON shape, không phải nội dung produ
 **[AGREED]** Giữ tối giản, không có `user_learning_profiles`, `placement_sessions`, proficiency history hoặc auto-adjust algorithm trong MVP.
 
 - `proficiency_level`: khả năng ước lượng của user tại onboarding; nhận từ quiz ngắn hoặc user tự đánh giá. NULL khi chưa onboarding. **Đây không phải chứng chỉ CEFR.**
-- `learning_level`: mức nội dung user muốn học, user có thể đổi trong Settings; mặc định = `proficiency_level` ngay khi onboarding. NULL khi chưa chọn.
-- `learning_level` giúp lọc/prioritize **Meaning CEFR** khi chọn new items; scope Collection/Topics vẫn có hiệu lực, và không thay `user_meaning_progress`.
+- `proficiency_level` cũng dùng để **sắp xếp** Meaning CEFR khi chọn new items (không lọc cứng): từ có CEFR ≥ level trước, gần level nhất trước, sau đó mới đến từ dễ hơn, nên pool không bao giờ rỗng chỉ vì thiếu từ đúng level; scope Collection/Topics vẫn có hiệu lực, và không thay `user_meaning_progress`.
 - `proficiency_level` giúp chọn độ khó **câu contextual** trong Review và Practice. Nếu NULL, default dùng bài direct meaning, không ép contextual assessment.
 - Quick Test và Self-select chỉ tạo **giá trị cuối** trên user; không lưu từng câu thử hoặc nâng/giảm level tự động theo SRS trong MVP.
 - Trình độ do user tự chọn cũng có thể bị ước lượng sai; client nên cho đổi dễ dàng, nhưng backend không coi nó là khả năng được xác minh.
@@ -409,14 +406,13 @@ Các fixture dưới đây minh họa JSON shape, không phải nội dung produ
 
 ```json
 {
-  "proficiencyLevel": "A2",
-  "learningLevel": "B1"
+  "proficiencyLevel": "A2"
 }
 ```
 
-Backend kiểm tra A1/A2/B1/B2/C1/C2 và set trực tiếp hai field. UI có thể chấm Quick Test trên client (bộ câu đã kiểm duyệt) hoặc người dùng chọn level; kết quả không tạo `learnedAt`, review history, Skill Evidence. Không lưu `placementSource` để tránh thêm metadata chưa cần.
+Backend kiểm tra A1/A2/B1/B2/C1/C2 và set trực tiếp field này. UI có thể chấm Quick Test trên client (bộ câu đã kiểm duyệt) hoặc người dùng chọn level; kết quả không tạo `learnedAt`, review history, Skill Evidence. Không lưu `placementSource` để tránh thêm metadata chưa cần.
 
-**DB invariant:** một cặp level có thể khác nhau (`A2` proficiency, `B1` learning); không cần cưỡng ép bằng nhau sau onboarding. Selection nên theo CEFR yêu cầu nhưng không chọn Meaning chưa published/không đúng scope. `[OPEN]` Chính sách thiếu nội dung ở level đã chọn: empty-state hay đề xuất mở rộng level; không âm thầm thay đổi `learning_level` của user.
+**DB invariant:** chỉ có `proficiency_level`. Selection ưu tiên theo CEFR nhưng không chọn Meaning chưa published/không đúng scope; thiếu từ đúng level thì lấy từ gần level nhất thay vì trả plan rỗng.
 
 ### 2.8. Daily New Learning — Learning Cycle & interleaving
 
@@ -443,7 +439,7 @@ Select C(audio) → Select A(text) → Select B(audio)
 Finish → 1 atomic commit
 ```
 
-`session_learn_steps.first_recall_task_id` trỏ tới task được planner chọn (`typing` **hoặc** `flyReorder`), và service phải validate cùng Meaning, `phase=newPractice` và first meaningful recall attempt; **không** hardcode typing. `select` cần submitted attempt; `typing | flyReorder` cần submit first attempt; `recording` cần terminal `assessed` hoặc `unavailable`. Lỗi kỹ thuật Recording không hủy khả năng Finish; một attempt recording sai hợp lệ vẫn không ngăn learnedAt. Actual memory/skill chỉ commit tại Finish. Không tính 5 SRS successes từ 5 opportunities trong cùng session.
+`plan.learnSteps[].firstRecallTaskId` trỏ tới task được planner chọn (`typing` **hoặc** `flyReorder`), và service phải validate cùng Meaning, `phase=newPractice` và first meaningful recall attempt; **không** hardcode typing. `select` cần submitted attempt; `typing | flyReorder` cần submit first attempt; `recording` cần terminal `assessed` hoặc `unavailable`. Lỗi kỹ thuật Recording không hủy khả năng Finish; một attempt recording sai hợp lệ vẫn không ngăn learnedAt. Actual memory/skill chỉ commit tại Finish. Không tính 5 SRS successes từ 5 opportunities trong cùng session.
 
 **Meaning-cued recall eligibility:** prompt phải cung cấp nghĩa/hint hợp lệ, không chứa sẵn spelling target. `typing/flyReorder` audio prompt đọc nghĩa là hợp lệ; audio đọc chính spelling Word là transcription, **không** thỏa điều kiện new Meaning first semantic recall. FlyReorder có tiles từ đáp án nên evidence Writing có thể yếu hơn typing; ở MVP vẫn dùng cho Meaning recall nhưng local hint/reveal/priming cần được ghi lại. Hãy giữ nhóm `typing | flyReorder` trước `recording` để hạn chế priming.
 
@@ -451,10 +447,10 @@ Finish → 1 atomic commit
 
 ### 2.9. Review/Practice Selection & Contextual Gating
 
-- **[AGREED]** Daily Due, Weekly, Random, Weak dùng weighted random giữa **7 template** phù hợp capability/content. Planner quyết định **template + prompt modality + assessment intent** trước khi issue, không ép thứ tự New.
+- **[AGREED]** Daily Due, Checkpoint, Random, Weak dùng weighted random giữa **7 template** phù hợp capability/content. Planner quyết định **template + prompt modality + assessment intent** trước khi issue, không ép thứ tự New.
 - **[PROPOSED]** Daily Due chỉ consume/đổi Meaning SRS nếu có eligible semantic task: `select` text/audio với nghĩa → lựa chọn Meaning, Meaning-cued `typing | flyReorder`, hoặc curated contextual semantic assessment. `select(audio)` có **cả** recognition MemoryObservation trên Meaning và direct Listening candidate trên Pronunciation nếu real audio/first try/no hint; Recording/Split/Sound-only không consume meaning due.
 - `select.phoneticChoice` giữ khả năng phân biệt từ có âm gần nhau, nhưng không coi thành công đó là semantic recognition; nghe từ rồi chọn nghĩa dùng `select.gloss` với audio prompt.
-- Curated contextual `context_cefr_level <= app_user.proficiency_level` mới eligible independent contextual tests; NULL => only direct/simple teaching. `learning_level` chọn Meaning mới, không phải proof of language skill.
+- Curated contextual `context_cefr_level <= app_user.proficiency_level` mới eligible independent contextual tests; NULL => only direct/simple teaching. `proficiency_level` cũng chỉ sắp xếp Meaning mới, không phải proof of language skill.
 - Reading có thể được xác minh ở **phạm vi nhận diện từ-đến-nghĩa**, không bắt buộc contextual meaningClash. Curated contextual vẫn là value-add cho nâng cao, không phải gate bắt buộc để hoàn tất MVP word verification.
 - `prompt.type` **không phải** skill mapping: `typing(audio)` với audio đọc nghĩa tiếng Việt → Writing; `select(audio)` đọc tiếng Anh và chọn nghĩa → Listening; `recording(audio)` luyện nói → Speaking; `match(audio)` dạng instructions audio mà từ target không được nghe → không cấp Listening direct.
 - Nếu prompt audio không khả dụng trước plan, chọn eligible text variant **của cùng template** hoặc template khác; task-specific audio gates (`typing.transcription`, audio-only auditory recognition) có thể khiến candidate không eligible. Không fallback transcript khi đã chấm direct Listening. Không chọn task chỉ vì template có tên `audio`.
@@ -462,6 +458,8 @@ Finish → 1 atomic commit
 **Random không có nghĩa là uniform.** Check locale, assets, targets, CEFR, response type & no-answer-leak trước; sau đó mới random giữa eligible candidates.
 
 ## 3. PostgreSQL Schema — full proposed DDL
+
+**Quy ước giá trị enum:** trong DB, JSONB và API, giá trị enum viết lower_snake_case (`random_practice`, `fly_reorder`). Tên camelCase trong phần mô tả của tài liệu này là tên logic của cùng giá trị.
 
 **Phạm vi DDL:** schema v0.4 tham chiếu cho DB trống; chưa migrate trên DB production; tên/index/ACL còn được review. Dùng PostgreSQL 16+ (policy lựa chọn, không phải phụ thuộc tính năng độc quyền PG16). File `001_initial_schema_v0.4_FULL_SPEC_PROPOSED.sql` đi kèm là cùng nội dung để team lấy làm khởi tạo DB trống; chưa có migration delta cho DB đã triển khai v0.1/v0.2.
 
@@ -477,7 +475,6 @@ CREATE TABLE app_user (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     identity_subject TEXT NOT NULL UNIQUE,
     proficiency_level VARCHAR(2) CHECK (proficiency_level IN ('A1','A2','B1','B2','C1','C2')),
-    learning_level VARCHAR(2) CHECK (learning_level IN ('A1','A2','B1','B2','C1','C2')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -488,7 +485,6 @@ CREATE TABLE user_settings (
     ui_locale VARCHAR(32) NOT NULL DEFAULT 'vi-VN',
     time_zone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
     daily_new_word_goal SMALLINT NOT NULL DEFAULT 5 CHECK (daily_new_word_goal BETWEEN 1 AND 30),
-    weekly_anchor_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -544,7 +540,8 @@ CREATE TABLE words (
 CREATE TABLE word_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     word_id UUID NOT NULL REFERENCES words(id),
-    part_of_speech VARCHAR(32) NOT NULL,
+    part_of_speech VARCHAR(32) NOT NULL CHECK (part_of_speech IN
+       ('noun','verb','adjective','adverb','pronoun','preposition','conjunction','interjection','phrasal_verb')),
     UNIQUE (id, word_id)
 );
 CREATE TABLE pronunciations (
@@ -632,12 +629,13 @@ CREATE TABLE active_meaning_publications (
 CREATE TABLE practice_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template VARCHAR(24) NOT NULL
-       CHECK (template IN ('select','match','clozeSelect','typing','flyReorder','surgery','recording')),
-    variant VARCHAR(40),
+       CHECK (template IN ('select','match','cloze_select','typing','fly_reorder','surgery','recording')),
+    variant VARCHAR(40) CHECK (variant IN ('gloss','reverse_gloss','meaning_clash','phonetic_choice','stress_choice',
+       'meaning_pairs','word_pairs','single_blank','context_meaning','meaning_recall','transcription','spelling_recall','fix_spelling','scripted_pronunciation')),
     -- For independent contextual practice, non-NULL means editorially rated.
     -- NULL contextual level is not eligible for unassisted contextual verification.
     -- Curated source_content may include a prompt descriptor; resolve and validate
-    -- its concrete text/audio envelope before persisting a session_tasks row.
+    -- its concrete text/audio envelope before persisting it in learning_sessions.plan.
     context_cefr_level VARCHAR(2) CHECK (context_cefr_level IN ('A1','A2','B1','B2','C1','C2')),
     source_content JSONB NOT NULL CHECK (jsonb_typeof(source_content) = 'object'),
     source_evaluation JSONB NOT NULL CHECK (jsonb_typeof(source_evaluation) = 'object'),
@@ -680,7 +678,7 @@ CREATE TABLE learning_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),
     mode VARCHAR(24) NOT NULL
-       CHECK (mode IN ('daily','weeklyChallenge','randomPractice','weakWordsPractice')),
+       CHECK (mode IN ('daily','checkpoint_challenge','random_practice','weak_words_practice')),
     status VARCHAR(16) NOT NULL DEFAULT 'issued'
        CHECK (status IN ('issued','committed','expired')),
     scope_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb
@@ -693,87 +691,21 @@ CREATE TABLE learning_sessions (
     committed_at TIMESTAMPTZ,
     commit_request_sha256 CHAR(64),
     commit_response JSONB,
+    -- Immutable issued snapshot: tasks, targets, answer keys, Learn cards. NULL once purged.
+    plan JSONB CHECK (jsonb_typeof(plan) = 'object'),
+    raw_events JSONB CHECK (jsonb_typeof(raw_events) = 'array'),
+    -- Durable per-task and per-target outcomes; kept after plan and raw_events are purged.
+    result JSONB CHECK (jsonb_typeof(result) = 'object'),
     CHECK (expires_at > issued_at),
     CHECK (
-       (status = 'committed' AND committed_at IS NOT NULL AND commit_request_sha256 IS NOT NULL AND commit_response IS NOT NULL)
-       OR (status <> 'committed' AND committed_at IS NULL AND commit_request_sha256 IS NULL AND commit_response IS NULL)
+       (status = 'committed' AND committed_at IS NOT NULL AND commit_request_sha256 IS NOT NULL AND commit_response IS NOT NULL AND result IS NOT NULL)
+       OR (status <> 'committed' AND committed_at IS NULL AND commit_request_sha256 IS NULL AND commit_response IS NULL AND result IS NULL)
     ),
+    CHECK (status <> 'issued' OR plan IS NOT NULL),
     UNIQUE (id, user_id)
 );
 CREATE INDEX idx_sessions_user_issued ON learning_sessions(user_id, issued_at DESC);
 CREATE INDEX idx_sessions_expiry ON learning_sessions(expires_at) WHERE status = 'issued';
-
-CREATE TABLE session_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES learning_sessions(id),
-    -- Globally ordered with session_learn_steps.ordinal; service ensures no overlaps.
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    phase VARCHAR(32) NOT NULL
-       CHECK (phase IN ('dueReview','newPractice','weeklyChallenge','randomPractice','weakWordsPractice')),
-    template VARCHAR(24) NOT NULL
-       CHECK (template IN ('select','match','clozeSelect','typing','flyReorder','surgery','recording')),
-    variant VARCHAR(40),
-    curated_item_id UUID REFERENCES practice_items(id),
-    -- Fully resolved client task; required prompt {type:text|audio,...} checked below.
-    -- Template + variant-specific body/evaluation and audio delivery assessed by service.
-    client_payload JSONB NOT NULL CHECK (jsonb_typeof(client_payload) = 'object'),
-    -- Universal resolved prompt envelope: required for ALL templates, not just select.
-    -- Content/localization/capability/asset and no-answer-leak rules live in service validators.
-    CONSTRAINT session_task_prompt_shape CHECK (
-        (client_payload ? 'prompt')
-        AND (jsonb_typeof(client_payload->'prompt') = 'object')
-        AND COALESCE((client_payload->'prompt'->>'type') IN ('text','audio'), FALSE)
-        AND (
-            (
-                client_payload->'prompt'->>'type' = 'text'
-                AND jsonb_typeof(client_payload->'prompt'->'text') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->>'text')) > 0, FALSE)
-                AND NOT ((client_payload->'prompt') ? 'audio')
-            ) OR (
-                client_payload->'prompt'->>'type' = 'audio'
-                AND jsonb_typeof(client_payload->'prompt'->'audio') = 'object'
-                AND jsonb_typeof(client_payload->'prompt'->'audio'->'url') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->'audio'->>'url')) > 0, FALSE)
-                AND jsonb_typeof(client_payload->'prompt'->'audio'->'locale') = 'string'
-                AND COALESCE(length(btrim(client_payload->'prompt'->'audio'->>'locale')) > 0, FALSE)
-                AND NOT ((client_payload->'prompt') ? 'text')
-            )
-        )
-    ),
-    server_evaluation JSONB NOT NULL CHECK (jsonb_typeof(server_evaluation) = 'object'),
-    evaluator_version VARCHAR(40) NOT NULL,
-    UNIQUE (session_id, ordinal),
-    UNIQUE (session_id, id)
-);
-CREATE INDEX idx_session_tasks_session ON session_tasks(session_id);
-
-CREATE TABLE session_task_targets (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    ordinal SMALLINT NOT NULL CHECK (ordinal >= 0),
-    meaning_id UUID REFERENCES meanings(id),
-    pronunciation_id UUID REFERENCES pronunciations(id),
-    PRIMARY KEY (session_id, task_id, ordinal),
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id),
-    -- Both IDs may be present when a task checks Meaning and pronunciation simultaneously,
-    -- e.g. select with an audio lexical prompt; service validates same Word/Type alignment.
-    CHECK (meaning_id IS NOT NULL OR pronunciation_id IS NOT NULL)
-);
-CREATE INDEX idx_session_target_meaning ON session_task_targets(meaning_id) WHERE meaning_id IS NOT NULL;
-
-CREATE TABLE session_learn_steps (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES learning_sessions(id),
-    meaning_id UUID NOT NULL REFERENCES meanings(id),
-    -- Globally ordered with session_tasks.ordinal; service ensures no overlaps.
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    client_card JSONB NOT NULL CHECK (jsonb_typeof(client_card) = 'object'),
-    -- Must resolve to the first Meaning-cued recall task: typing OR fly.
-    first_recall_task_id UUID NOT NULL,
-    UNIQUE (session_id, meaning_id),
-    UNIQUE (session_id, ordinal),
-    FOREIGN KEY (session_id, first_recall_task_id) REFERENCES session_tasks(session_id, id)
-);
 
 -- Azure result receipt is temporary technical staging, not learned progress.
 CREATE TABLE speech_assessment_receipts (
@@ -787,7 +719,7 @@ CREATE TABLE speech_assessment_receipts (
     assessed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id),
+    FOREIGN KEY (session_id) REFERENCES learning_sessions(id),
     CHECK ((validity = 'valid' AND passed IS NOT NULL)
            OR (validity = 'invalid' AND passed IS NULL)),
     CHECK (accuracy_score IS NULL OR (accuracy_score BETWEEN 0 AND 100)),
@@ -796,38 +728,11 @@ CREATE TABLE speech_assessment_receipts (
 CREATE INDEX idx_speech_receipts_expiry ON speech_assessment_receipts(expires_at);
 
 -- E. Committed practice and normalized evidence. No records before Finish commit.
-CREATE TABLE practice_task_results (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    user_id UUID NOT NULL REFERENCES app_user(id),
-    raw_events JSONB NOT NULL CHECK (jsonb_typeof(raw_events) = 'array'),
-    normalized_result JSONB NOT NULL CHECK (jsonb_typeof(normalized_result) = 'object'),
-    committed_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (session_id, task_id),
-    FOREIGN KEY (session_id, task_id) REFERENCES session_tasks(session_id, id)
-);
-CREATE INDEX idx_practice_results_user ON practice_task_results(user_id, committed_at DESC);
-
-CREATE TABLE practice_target_results (
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    target_ordinal SMALLINT NOT NULL,
-    outcome VARCHAR(40) NOT NULL,
-    first_attempt_correct BOOLEAN,
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    hint_count INTEGER NOT NULL DEFAULT 0 CHECK (hint_count >= 0),
-    -- Actual delivery, independent of planned prompt.type; text fallback is not Listening direct.
-    delivery_mode VARCHAR(16) CHECK (delivery_mode IN ('audio','fallback','none')),
-    PRIMARY KEY (session_id, task_id, target_ordinal),
-    FOREIGN KEY (session_id, task_id) REFERENCES practice_task_results(session_id, task_id),
-    FOREIGN KEY (session_id, task_id, target_ordinal)
-        REFERENCES session_task_targets(session_id, task_id, ordinal)
-);
-
 CREATE TABLE user_meaning_progress (
     user_id UUID NOT NULL REFERENCES app_user(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     learned_at TIMESTAMPTZ NOT NULL,
+    learned_session_id UUID REFERENCES learning_sessions(id),
     last_reviewed_at TIMESTAMPTZ,
     next_review_at TIMESTAMPTZ NOT NULL,
     interval_hours NUMERIC(12,3) NOT NULL CHECK (interval_hours >= 0),
@@ -846,7 +751,7 @@ CREATE TABLE memory_observations (
     user_id UUID NOT NULL REFERENCES app_user(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     signal VARCHAR(24) NOT NULL CHECK (signal IN
-       ('unaidedRecall','assistedRecall','failedRecall','recognitionSuccess','failedRecognition')),
+       ('unaided_recall','assisted_recall','failed_recall','recognition_success','failed_recognition')),
     is_primed BOOLEAN NOT NULL DEFAULT false,
     source_task_ids JSONB NOT NULL DEFAULT '[]'::jsonb
        CHECK (jsonb_typeof(source_task_ids) = 'array'),
@@ -871,8 +776,7 @@ CREATE TABLE skill_evidence (
     committed_at TIMESTAMPTZ NOT NULL,
     assessment_receipt_id UUID REFERENCES speech_assessment_receipts(id),
     evaluator_version VARCHAR(40) NOT NULL,
-    FOREIGN KEY (session_id, task_id, target_ordinal)
-       REFERENCES practice_target_results(session_id, task_id, target_ordinal),
+    FOREIGN KEY (session_id, user_id) REFERENCES learning_sessions(id, user_id),
     UNIQUE (session_id, task_id, target_ordinal, skill),
     CHECK ((meaning_id IS NOT NULL) <> (pronunciation_id IS NOT NULL)),
     CHECK ((skill IN ('reading','writing') AND meaning_id IS NOT NULL)
@@ -885,27 +789,24 @@ CREATE INDEX idx_skill_meaning ON skill_evidence(user_id, skill, meaning_id, com
 CREATE INDEX idx_skill_pronunciation ON skill_evidence(user_id, skill, pronunciation_id, committed_at DESC)
     WHERE pronunciation_id IS NOT NULL;
 
--- F. Weekly challenge snapshots by user-specific 7-day period.
-CREATE TABLE weekly_challenges (
+-- F. Checkpoint challenge snapshots, one per N learning sessions.
+CREATE TABLE checkpoint_challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),
-    cycle_start_at TIMESTAMPTZ NOT NULL,
-    cycle_end_at TIMESTAMPTZ NOT NULL,
+    sequence INTEGER NOT NULL,
     state VARCHAR(16) NOT NULL DEFAULT 'available'
        CHECK (state IN ('available','completed')),
     completed_session_id UUID REFERENCES learning_sessions(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, cycle_start_at),
-    CHECK (cycle_end_at > cycle_start_at),
+    UNIQUE (user_id, sequence),
     CHECK ((state = 'completed' AND completed_session_id IS NOT NULL)
         OR (state = 'available' AND completed_session_id IS NULL))
 );
-CREATE TABLE weekly_challenge_meanings (
-    challenge_id UUID NOT NULL REFERENCES weekly_challenges(id),
+CREATE TABLE checkpoint_challenge_meanings (
+    challenge_id UUID NOT NULL REFERENCES checkpoint_challenges(id),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
     PRIMARY KEY (challenge_id, meaning_id)
 );
-CREATE INDEX idx_weekly_challenges_user ON weekly_challenges(user_id, cycle_start_at DESC);
 
 COMMIT;
 ```
@@ -915,13 +816,13 @@ COMMIT;
 SQL constraints trên đã làm phần **row-level**. Service transaction và publish validator cần đảm bảo thêm:
 
 - `user_active_topics.topic_id` thuộc Collection đang active của user; selected Topic/Collection đang published.
-- `session_tasks` có universal resolved `prompt` text/audio cho mọi template. Với audio: URI playable, locale có thật, không leak transcript/answer; DB chỉ validate JSON shape, service validator chịu trách nhiệm semantic security.
-- `session_tasks` và `session_task_targets` cùng target với `session_learn_steps.first_recall_task_id` (**typing hoặc flyReorder**), đúng phase và không có task giả từ client.
-- `practice_item_targets` / `session_task_targets` có ít nhất một trong Meaning hoặc Pronunciation; nếu có **cả hai** phải trỏ cùng Word/Type, không được cross-link tuỳ ý.
+- Mọi task trong `plan` có universal resolved `prompt` text/audio cho mọi template; DB không kiểm shape từng task, `findTaskProblem` chịu trách nhiệm cả shape lẫn semantic security (URI playable, locale có thật, không leak transcript/answer).
+- Task và target trong `plan` khớp với `learnSteps[].firstRecallTaskId` (**typing hoặc flyReorder**), đúng phase và không có task giả từ client.
+- `practice_item_targets` / targets trong `plan` có ít nhất một trong Meaning hoặc Pronunciation; nếu có **cả hai** phải trỏ cùng Word/Type, không được cross-link tuỳ ý.
 - `practice_items` published có ≥1 target, đúng template variant, content hợp lệ & locale approved; `meaning_publications.snapshot` thỏa ≥1 example localized và IPA hợp lệ.
-- `skill_evidence.user_id`, `memory_observations.user_id`, `practice_task_results.user_id` trùng owner của `learning_sessions` (FK chủ yếu kiểm tra ID, application kiểm tra ownership; có thể chuyển sang composite FK sau review).
+- `skill_evidence.user_id` trùng owner của session qua composite FK; `memory_observations.user_id` do application kiểm tra.
 - `skill_evidence.scope` trùng session target scope; Listening/Speaking theo Pronunciation, Reading/Writing theo Meaning. `select(audio)` có thể sinh Meaning memory + Listening Evidence nếu snapshot có cả hai scoped targets hợp lệ; không cấp semantic SRS chỉ vì có audio.
-- Không sửa `client_payload` hoặc `server_evaluation` sau khi plan phát; không sửa published snapshots (enforce bằng application DB role/triggers/immutable insert policy).
+- Không sửa `plan` sau khi phát (trigger chỉ cho phép retention đặt NULL); không sửa published snapshots (enforce bằng application DB role/triggers/immutable insert policy).
 - `SpeechReceipt` được phát và consumed bởi **đúng task/session**; score không do client tự gửi.
 
 **Index policy:** B-tree trước cho `due(user,next_review_at)`, topic membership và skill evidence. Chỉ thêm GIN index trên JSONB nếu query thật sự dùng `@>`, `?`, jsonpath; không mặc định GIN toàn bộ snapshot. PostgreSQL hỗ trợ GIN trên JSONB nhưng index có write/storage cost.
@@ -935,18 +836,18 @@ SQL constraints trên đã làm phần **row-level**. Service transaction và pu
 | Method | Route | Owner | Ghi chú |
 |---|---|---|---|
 | `GET` | `/v1/catalog/collections` | catalog | Published collection, localized titles/topics |
-| `GET` | `/v1/me` | identity | Hồ sơ tối giản; gồm `proficiencyLevel`/`learningLevel` |
+| `GET` | `/v1/me` | identity | Hồ sơ tối giản; gồm `proficiencyLevel` |
 | `PUT` | `/v1/me/levels` | identity | Quick Test hoặc Self-select ghi trực tiếp hai cột `app_user` |
 | `PUT` | `/v1/me/settings` | identity | `explanationLocale`, `uiLocale`, time zone, daily goal |
 | `PUT` | `/v1/me/scope` | identity | Active Collection + Topics, validated |
-| `GET` | `/v1/me/learn-home` | progress | Due count trong active Topics, weekly availability |
+| `GET` | `/v1/me/learn-home` | progress | Due count trong active Topics, checkpoint availability, tiến độ tới challenge kế tiếp (`checkpointSessionsDone`/`checkpointSessionsRequired`) |
 | `GET` | `/v1/me/words` | progress | Learned Word list, facets, weak indicators |
 | `GET` | `/v1/words/{wordId}` | catalog/progress | Word Overview all available published Meanings, user state |
-| `POST` | `/v1/sessions/plan` | planner | Daily / Weekly / Random / Weak; returns resolved payload |
+| `POST` | `/v1/sessions/plan` | planner | Daily / Checkpoint / Random / Weak; returns resolved payload |
 | `POST` | `/v1/sessions/{sessionId}/recording-assess` | speech | Auth audio upload / external assessed receipt |
 | `POST` | `/v1/sessions/{sessionId}/commit` | commit | Full batch, idempotent; **only** progress mutation |
 | `GET` | `/v1/sessions/{sessionId}/commit-status` | commit | Network timeout reconciliation |
-| `GET` | `/v1/me/weekly-challenges` | weekly | Outstanding user cycles |
+| `GET` | `/v1/me/checkpoint-challenges` | checkpoint | Outstanding challenges |
 
 ### 4.2. Plan request
 
@@ -993,7 +894,7 @@ Backend dùng authenticated user, proficiency/learning level, scope và locales 
 
 ### 4.3. Session state & abandon semantics
 
-- `POST /plan` lưu `learning_sessions(status=issued)`, `session_tasks` và `session_learn_steps`; **không** lưu attempted answers/mastery.
+- `POST /plan` lưu một dòng `learning_sessions(status=issued)` kèm `plan`; **không** lưu attempted answers/mastery.
 - App session active chỉ giữ trong bộ nhớ; user thoát trước Finish => client discard. Server chỉ còn snapshot kỹ thuật có TTL để audit/cleanup; không cho resume interaction từ server.
 - Session có thể được plan lại; planner nên tránh gửi trùng Meaning vào nhiều outstanding plans khi cùng user, nhưng correctness cuối cùng do commit kiểm tra.
 - Nếu `POST /commit` đã gửi mà mất ACK, app được lưu **pending immutable submission** để retry/reconcile; đây không phải resume learning.
@@ -1024,6 +925,7 @@ Backend dùng authenticated user, proficiency/learning level, scope và locales 
 - Với audio prompt ở **mọi** template: `deliveryMode` được báo/kiểm và đối chiếu issued prompt/asset & platform state. Fallback không cho direct Listening; không tin client chọn arbitrary `skill`.
 - Với `recording`: event có `assessmentReceiptId` (UUID) đã được backend xác nhận. Nếu assessment invalid, ghi `invalid`, không `failed`.
 - Attempt sequence/schema khác nhau theo template phải được versioned; `seq` tăng đơn điệu, giới hạn số events & payload bytes. Validation áp dụng cả consistency giữa event sequence và task state (hint, retry, reveal).
+- `[TRIAL]` Mỗi task có `maxRetries` trong `client_payload`: số lần retry tối đa sau khi sai, tổng số lần thử = 1 + `maxRetries`, cấu hình theo template. Hết lượt, app tự chuyển câu, không cần event riêng, task có outcome `incorrect`. Backend reject submit vượt giới hạn; `match` tính theo từng pair, `recording` tính theo số receipt.
 
 **Commit response**:
 
@@ -1080,7 +982,7 @@ Backend dùng authenticated user, proficiency/learning level, scope và locales 
 }
 ```
 
-Mẫu trên cố ý là first attempt sai để test replay, không phải từ hoàn chỉnh. Actual delivery mode hợp lệ: `audio`, `fallback`, `none`; backend ghi normalized `practice_target_results.delivery_mode` cho từng target. **Không** ghi `correct`, `meaningId`, `pronunciationId`, `skill` trong client events.
+Mẫu trên cố ý là first attempt sai để test replay, không phải từ hoàn chỉnh. Actual delivery mode hợp lệ: `audio`, `fallback`, `none`; backend ghi `deliveryMode` cho từng task trong `learning_sessions.result`. **Không** ghi `correct`, `meaningId`, `pronunciationId`, `skill` trong client events.
 
 ### 5.2. Result reducer
 
@@ -1103,7 +1005,7 @@ Reducer ưu tiên valid meaning recall trước recognition; wrong FlyReorder/Ty
 
 - **Daily New:** Sau Learn + first **`typing | flyReorder`** Meaning-cued recall attempt + đủ mandatory group interactions (`select`, `typing | flyReorder`, `recording` terminal assessed/unavailable) + Finish, khởi tạo `learned_at` kể cả answer sai. Đếm **một Word goal slot** cho Meaning mới; 4–5 lượt cùng session gộp thành **1 MemoryObservation/Meaning/session**, không được cộng dồn 5 SRS successes.
 - **Daily Due:** Template lựa chọn linh hoạt, weighted random trên eligible pool. **Chỉ** semantic memory task hợp lệ mới cập nhật Meaning SRS (bao gồm `select(audio)` nghe từ chọn nghĩa và `typing | flyReorder` meaning-cued); `recording`/sound-only `select.phoneticChoice`/`select.stressChoice`/`typing.transcription` đơn lẻ không tự xóa due. Due từ active Topics, review cap, backlog không chặn New.
-- **Weekly / Random / Weak:** Random/adaptive giữa 7 eligible templates, không dùng new-learning mandatory checklist. Record skill evidence khi đủ điều kiện; **success không kéo dài Meaning SRS**; failure có thể kéo due sớm (`min(oldNextDue, now+failureDelay)`). Đây là lựa chọn chống farming success, vẫn `[OPEN]` về việc non-Daily có consume due hay không.
+- **Checkpoint / Random / Weak:** Random/adaptive giữa 7 eligible templates, không dùng new-learning mandatory checklist. Record skill evidence khi đủ điều kiện; **success không kéo dài Meaning SRS**; failure có thể kéo due sớm (`min(oldNextDue, now+failureDelay)`). Đây là lựa chọn chống farming success, vẫn `[OPEN]` về việc non-Daily có consume due hay không.
 - `last_reviewed_at` chỉ cập nhật khi đã commit MemoryObservation nghĩa, không khi user chỉ thực hiện `recording` hoặc `select.stressChoice`.
 - Một Meaning không được khởi tạo lần 2 khi user học lại ở Topic/Collection khác.
 
@@ -1175,15 +1077,15 @@ Một Meaning mới của Word verified có thể khiến Word không còn fully
      hash equal -> return stored commit_response (idempotent);
      hash different -> 409 SESSION_PAYLOAD_CONFLICT.
 5. Validate owner, session issued/within expiration, task IDs, learn steps, and complete task outcomes.
-6. Re-evaluate all answer events against immutable session_tasks.server_evaluation.
+6. Re-evaluate all answer events against immutable learning_sessions.plan.
 7. Validate Recording receipt belongs to same session+task, server-authorized, not expired/consumed.
 8. For each newly learned Meaning, validate Learn Card completed; required `select` attempt,
    `typing | flyReorder` first Meaning-cued recall attempt and `recording` terminal assessed/unavailable; valid Speaking pass NOT required.
 9. Re-check fresh learned/duplicate state + active scope according to plan policy;
    if stale conflict that changes first-learned eligibility -> reject FULL batch, do not partially commit.
-10. Insert raw results and per-target results; derive MemoryObservations, SkillEvidence.
+10. Write raw_events and result on the session row; derive MemoryObservations, SkillEvidence.
 11. Update user_meaning_progress (lock rows, apply deterministic SRS reducer).
-12. Mark speech receipts consumed, weekly challenge completion if applicable.
+12. Mark speech receipts consumed, checkpoint challenge completion if applicable; Daily có từ mới thì tạo challenge khi đủ session.
 13. UPDATE learning_sessions status=committed, committed_at=server now,
     commit_request_sha256, commit_response.
 14. COMMIT transaction; return response.
@@ -1203,19 +1105,19 @@ Các bước 6–8 nên chuẩn hóa/đánh giá **trước khi giữ khóa** n�
 | Một task trong batch invalid | Reject **whole batch**, không partial SRS |
 | Concurrent plans cùng user cùng new Meaning | Commit đầu thắng; commit stale bị reject hoặc cần replan; không tạo 2 `learnedAt` |
 | Published word thay đổi trong session | Grade theo snapshot lúc phát; immutable snapshot protected |
-| Weekly cycle qua boundary trong active session | `[PROPOSED]` dùng commit timestamp cho learnedAt và challenge cycle |
+| Session commit muộn | `[PROPOSED]` thứ tự session trong challenge theo commit timestamp (`learnedAt`) |
 
 **Trust boundary:** Client sở hữu answer key để chấm tức thì, nên **không thể chống gian lận tuyệt đối**. Backend replay cải thiện consistency và ngăn client gửi `verified`/`nextReviewAt`, nhưng không chứng minh user thật sự đã nhập mà không nhìn key. Nếu sản phẩm chuyển thành high-stakes assessment, cần threat model/assessment architecture khác.
 
 ---
 
-## 8. Weekly Challenge & selection
+## 8. Checkpoint Challenge & selection
 
 ### 8.1. Daily selection
 
 1. Query active Topics của user, union Meaning IDs qua `topic_meanings`, lọc Meaning đang published cho explanation locale và có capability để tạo task.
 2. Due = đã `learnedAt` và `nextReviewAt <= server now`; ưu tiên recent failure/old overdue; cap `[TRIAL]` 10/session.
-3. New = eligible chưa learned, deduplicate across Topics, chọn Meaning với `learning_level` như target CEFR, theo `curated_rank` ổn định cross Types (nếu nhiều Topic rank tie dùng deterministic tie-break by topic priority/Meaning UUID); **một focused Meaning cho một new Word slot**; không tự đổi level nếu pool thiếu.
+3. New = eligible chưa learned, deduplicate across Topics, sắp xếp theo `proficiency_level` làm target CEFR (≥ level trước, gần nhất trước, rồi đến từ dễ hơn), theo `curated_rank` ổn định cross Types (nếu nhiều Topic rank tie dùng deterministic tie-break by topic priority/Meaning UUID); **một focused Meaning cho một new Word slot**; pool thiếu từ đúng level thì lấy từ gần level nhất.
 4. `PracticeResolver` giải quyết task theo nhu cầu memory/skills, giới hạn workload; New phải có Select + (Typing hoặc FlyReorder) + Recording, nhưng **không ép đủ 4 skills Verified trong lần học mới**.
 5. **New Meaning Learning Cycle** builds interleaved `steps[]` and validates every new Meaning has `select`, **one of `typing | flyReorder`**, `recording` (see §2.8); an attempted Recording with technical failure is represented by terminal unavailable, not a failed Speaking score.
 6. Review/Practice picks eligible templates flexibly; do not force 3 new-learning templates. Contextual tasks gated by `proficiency_level`, `context_cefr_level` and authored content readiness (§2.9).
@@ -1224,14 +1126,14 @@ Các bước 6–8 nên chuẩn hóa/đánh giá **trước khi giữ khóa** n�
 ### 8.2. Seven-day user cycle
 
 - `[AGREED]` Không phải lịch thứ Hai–Chủ nhật; Challenge lấy Meaning có lần đầu learned trong đúng chu kỳ 7 ngày user và đã commit; zero Meaning => không tạo Challenge.
-- `[PROPOSED]` `weekly_anchor_at` UTC là anchor; mỗi cycle `[anchor+7n days, anchor+7(n+1) days)`. Khi plan/commit span boundary, `learnedAt=committedAt`. Nếu yêu cầu 7 **calendar days** theo timezone user, phải điều chỉnh trước khi lock API/schema.
-- Challenge generation tạo snapshot `weekly_challenges` + `weekly_challenge_meanings` khi cycle kết thúc; user quay lại muộn vẫn thấy. Một Meaning mới học tuần sau dù thuộc Word từng học cũng được đưa vào cycle mới.
+- `[PROPOSED]` Một ngày có thể có nhiều session nên challenge đếm theo session, không theo ngày: cứ `POLICY.checkpoint.sessionsPerChallenge` (7) session có học từ mới thì mở một challenge. Session chỉ ôn tập và các mode khác không được đếm. `user_meaning_progress.learned_session_id` ghi session đã học Meaning.
+- Challenge generation chạy trong transaction commit, tạo snapshot `checkpoint_challenges` + `checkpoint_challenge_meanings` ngay khi commit session thứ 7; user quay lại muộn vẫn thấy. Một Meaning mới dù thuộc Word từng học cũng được đưa vào challenge kế tiếp.
 - Challenge dùng recall tasks, độc lập SRS due; completed once per cycle; multiple backlog challenges hiển thị có thứ tự cũ→mới (`[PROPOSED]`).
 
 ### 8.3. Random/Weak selection
 
 - Random Practice: pool learned Meanings ưu tiên `last_reviewed_at` cũ, random trong top priority pool, không thứ tự cứng.
-- Weak: rolling recent failure/hint/error history, đủ sample size; không dùng lifetime wrong count đơn giản. Ranking formula `[OPEN]`.
+- Weak: rolling recent failure/hint/error history từ `memory_observations`, đủ sample size theo session; không dùng lifetime wrong count đơn giản. Ranking formula `[OPEN]`.
 
 ---
 
@@ -1289,7 +1191,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | C11 | Abandon before Finish | Zero authoritative learning |
 | C12 | Timeout after DB commit + same retry | Same response; no new history/evidence |
 | C13 | Retry different body same session ID | 409 conflict |
-| C14 | Two concurrent plans learn same Meaning | No duplicated learnedAt/weekly membership |
+| C14 | Two concurrent plans learn same Meaning | No duplicated learnedAt/checkpoint membership |
 | C15 | Typing first wrong, then correct | Failed recall, not unaided |
 | C16 | Hint before first correct | Assisted recall, not verified Writing |
 | C17 | Select right before Recall leaks answer | No strong unprimed credit |
@@ -1300,7 +1202,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | C22 | 2 verified skill sessions + later valid direct fail | Verified removed, needsPractice true |
 | C23 | Recognition-only due reviews repeated | Grace used once; due not postponed forever |
 | C24 | Non-Daily success repeated | Does not repeatedly extend Meaning nextReviewAt |
-| C25 | Weekly cycle no learned Meanings | No empty challenge |
+| C25 | Chưa đủ 7 session học từ mới, dù đã qua bao lâu | No challenge |
 | C26 | Meaning first learned last-minute of cycle | Cycle assigned by authoritative committedAt trial policy |
 | C27 | App task correct locally | Instant feedback; server still independent re-eval at Finish |
 | C28 | Data re-release during active plan | Evaluation uses issued snapshot |
@@ -1313,7 +1215,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | C35 | Daily Due chỉ có `recording` hoặc `select.stressChoice` | Does not claim Meaning memory review success; due remains if no semantic evidence |
 | C36 | User A1 with difficult contextual B2 item | Filter item out for independent test; choose direct/simple task |
 | C37 | Contextual content lacks reviewed context CEFR | Not selected for unassisted contextual verification |
-| C38 | Onboarding Self-select A2 | Only app_user.proficiency_level/learning_level changed; no placement table |
+| C38 | Onboarding Self-select A2 | Only app_user.proficiency_level changed; no placement table |
 | C39 | Quick Test sends A2, then user chooses B1 Learning | Persist proficiency A2 + learning B1; planner uses respective fields |
 | C40 | Learn Word Overview and SRS after 5 tasks in same session | Only focused Meaning learned once on Finish, no intermediate commit |
 | C41 | User newly learns Meaning through other Topic | Shared progress prevents duplicate initial learning schedule |
@@ -1363,7 +1265,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 4. Build SessionPlanner + `NewMeaningLearningPlan` interleaving (3 new Meanings × select/(typing | flyReorder)/recording) và immutable session/task snapshots; run Daily vertical slice và 1 due review ngẫu nhiên hợp lệ.
 5. Build evaluator/event normalizer + atomic commit/idempotency + Meaning SRS.
 6. Add skill evidence/directness/WordStatus derivation; add 7 templates and Azure receipts.
-7. Add Weekly/Random/Weak modes, contextual gating theo proficiency và learningLevel filter, backlog handling, admin QA and metrics.
+7. Add Checkpoint/Random/Weak modes, contextual gating theo proficiency và level ordering, backlog handling, admin QA and metrics.
 8. Approve SRS/delayed verification thresholds after simulation and usability testing.
 
 ---
@@ -1380,7 +1282,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | D06 | Atomic commit | 1 transaction, server replay, per-user lock, session idempotency | P0 |
 | D07 | Intro SRS | Trial schedule + bounded Recognition Grace; no non-Daily success extension | P0 |
 | D08 | Client event schema | Per-template event types, first attempt/hint/reveal/priming, multi-target | P0 |
-| D09 | Weekly boundary | 168h UTC anchor; `learnedAt=committedAt` | P1 |
+| D09 | Checkpoint trigger | Mỗi 7 session có học từ mới; `learnedAt=committedAt` | P1 |
 | D10 | Delayed skill verification | ≥24h trial; latest failure resets current verified status | P1 |
 | D11 | Azure | Scripted assessment via authenticated backend adapter, trial threshold 80 | P1 |
 | D12 | Locale policy | Launch English learning / vi-VN explanation / en-US accent, strict ready check | P1 |
@@ -1395,7 +1297,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | D21 | Recording technical unavailable | Terminal event lets Daily finish, no Speaking evidence, no wrong score | PROPOSED |
 | D22 | Review task choice | Weighted random among eligible **7** templates and text/audio modes, with memory vs skill gate | PROPOSED |
 | D23 | Contextual eligibility | `practice_items.context_cefr_level <= app_user.proficiency_level` for unassisted contexts | PROPOSED |
-| D24 | Level storage | `app_user.proficiency_level`, `app_user.learning_level`, no extra tables | AGREED |
+| D24 | Level storage | `app_user.proficiency_level`, no extra tables | AGREED |
 | D25 | Level assessment | Quick quiz or self-select sets same two fields; no automatic level recalibration | AGREED MVP scope |
 | D26 | Existing schema v0.1/v0.2 migration | v0.4 SQL is DB-trống bootstrap only; write delta migration separately if older schema deployed | OPEN |
 | D27 | Universal prompt | All **7** templates require discriminated text/audio `prompt` envelope; strict resolver/client/snapshot contract | AGREED direction / PROPOSED schema |

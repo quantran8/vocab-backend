@@ -4,7 +4,12 @@ import { relations } from 'drizzle-orm';
 import {
   boolean, char, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
 } from 'drizzle-orm/pg-core';
+import {
+  CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, SESSION_STATUS, CHECKPOINT_STATE,
+  type CefrLevel, type ContentStatus, type Directness, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState,
+} from '../common/constants/domain';
 import { newId } from '../common/ids';
+import type { SessionPlan } from '../modules/session-planner/session-plan';
 
 const id = () => uuid('id').primaryKey().$defaultFn(newId);
 const ts = (name: string) => timestamp(name, { withTimezone: true, precision: 6 });
@@ -14,8 +19,7 @@ const createdAt = () => ts('created_at').notNull().defaultNow();
 export const appUsers = pgTable('app_user', {
   id: id(),
   identitySubject: text('identity_subject').notNull().unique('app_user_identity_subject_key'),
-  proficiencyLevel: varchar('proficiency_level', { length: 2 }),
-  learningLevel: varchar('learning_level', { length: 2 }),
+  proficiencyLevel: varchar('proficiency_level', { length: 2 }).$type<CefrLevel>(),
   createdAt: createdAt(),
 });
 
@@ -26,7 +30,6 @@ export const userSettings = pgTable('user_settings', {
   uiLocale: varchar('ui_locale', { length: 32 }).notNull().default('vi-VN'),
   timeZone: varchar('time_zone', { length: 64 }).notNull().default('Asia/Ho_Chi_Minh'),
   dailyNewWordGoal: smallint('daily_new_word_goal').notNull().default(5),
-  weeklyAnchorAt: ts('weekly_anchor_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 
@@ -34,7 +37,7 @@ export const collections = pgTable('collections', {
   id: id(),
   slug: text('slug').notNull().unique('collections_slug_key'),
   title: text('title').notNull(),
-  status: varchar('status', { length: 16 }).notNull().default('draft'),
+  status: varchar('status', { length: 16 }).$type<ContentStatus>().notNull().default(CONTENT_STATUS.DRAFT),
 });
 
 export const topics = pgTable('topics', {
@@ -42,7 +45,7 @@ export const topics = pgTable('topics', {
   collectionId: uuid('collection_id').notNull(),
   slug: text('slug').notNull(),
   title: text('title').notNull(),
-  status: varchar('status', { length: 16 }).notNull().default('draft'),
+  status: varchar('status', { length: 16 }).$type<ContentStatus>().notNull().default(CONTENT_STATUS.DRAFT),
 }, (t) => [unique('topics_collection_id_slug_key').on(t.collectionId, t.slug)]);
 
 export const collectionLocalizations = pgTable('collection_localizations', {
@@ -82,7 +85,7 @@ export const words = pgTable('words', {
 export const wordTypes = pgTable('word_types', {
   id: id(),
   wordId: uuid('word_id').notNull(),
-  partOfSpeech: varchar('part_of_speech', { length: 32 }).notNull(),
+  partOfSpeech: varchar('part_of_speech', { length: 32 }).$type<PartOfSpeech>().notNull(),
 }, (t) => [unique('word_types_id_word_id_key').on(t.id, t.wordId)]);
 
 export const pronunciations = pgTable('pronunciations', {
@@ -97,7 +100,7 @@ export const pronunciations = pgTable('pronunciations', {
 export const meanings = pgTable('meanings', {
   id: id(),
   typeId: uuid('type_id').notNull(),
-  cefrLevel: varchar('cefr_level', { length: 2 }),
+  cefrLevel: varchar('cefr_level', { length: 2 }).$type<CefrLevel>(),
   coreDefinition: text('core_definition'),
   createdAt: createdAt(),
 });
@@ -114,7 +117,7 @@ export const meaningLocalizations = pgTable('meaning_localizations', {
   locale: varchar('locale', { length: 32 }).notNull(),
   meaningText: text('meaning_text').notNull(),
   definitionText: text('definition_text').notNull(),
-  editorialState: varchar('editorial_state', { length: 16 }).notNull().default('draft'),
+  editorialState: varchar('editorial_state', { length: 16 }).$type<EditorialState>().notNull().default(EDITORIAL_STATE.DRAFT),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.meaningId, t.locale] })]);
 
@@ -156,12 +159,12 @@ export const activeMeaningPublications = pgTable('active_meaning_publications', 
 // C. Curated practice: each row is one immutable content revision
 export const practiceItems = pgTable('practice_items', {
   id: id(),
-  template: varchar('template', { length: 24 }).notNull(),
-  variant: varchar('variant', { length: 40 }),
-  contextCefrLevel: varchar('context_cefr_level', { length: 2 }),
+  template: varchar('template', { length: 24 }).$type<Template>().notNull(),
+  variant: varchar('variant', { length: 40 }).$type<Variant>(),
+  contextCefrLevel: varchar('context_cefr_level', { length: 2 }).$type<CefrLevel>(),
   sourceContent: jsonb('source_content').notNull(),
   sourceEvaluation: jsonb('source_evaluation').notNull(),
-  status: varchar('status', { length: 16 }).notNull().default('draft'),
+  status: varchar('status', { length: 16 }).$type<ItemStatus>().notNull().default(ITEM_STATUS.DRAFT),
   supersedesItemId: uuid('supersedes_item_id'),
   approvedAt: ts('approved_at'),
   createdAt: createdAt(),
@@ -172,7 +175,7 @@ export const practiceItemLocalizations = pgTable('practice_item_localizations', 
   locale: varchar('locale', { length: 32 }).notNull(),
   localizedContent: jsonb('localized_content').notNull().default({}).$type<Record<string, unknown>>(),
   contextualExplain: text('contextual_explain'),
-  editorialState: varchar('editorial_state', { length: 16 }).notNull().default('draft'),
+  editorialState: varchar('editorial_state', { length: 16 }).$type<EditorialState>().notNull().default(EDITORIAL_STATE.DRAFT),
   approvedAt: ts('approved_at'),
 }, (t) => [
   primaryKey({ columns: [t.practiceItemId, t.locale] }),
@@ -186,12 +189,12 @@ export const practiceItemTargets = pgTable('practice_item_targets', {
   pronunciationId: uuid('pronunciation_id'),
 }, (t) => [primaryKey({ columns: [t.practiceItemId, t.ordinal] })]);
 
-// D. Session plans persist technical snapshots only
+// D. One session is one practice-history row; plan and raw_events are purgeable, result is kept
 export const learningSessions = pgTable('learning_sessions', {
   id: id(),
   userId: uuid('user_id').notNull(),
-  mode: varchar('mode', { length: 24 }).notNull(),
-  status: varchar('status', { length: 16 }).notNull().default('issued'),
+  mode: varchar('mode', { length: 24 }).$type<SessionMode>().notNull(),
+  status: varchar('status', { length: 16 }).$type<SessionStatus>().notNull().default(SESSION_STATUS.ISSUED),
   scopeSnapshot: jsonb('scope_snapshot').notNull().default({}).$type<{ challengeId?: string; [key: string]: unknown }>(),
   planVersion: varchar('plan_version', { length: 40 }).notNull(),
   policyVersions: jsonb('policy_versions').notNull().default({}),
@@ -200,89 +203,33 @@ export const learningSessions = pgTable('learning_sessions', {
   committedAt: ts('committed_at'),
   commitRequestSha256: char('commit_request_sha256', { length: 64 }),
   commitResponse: jsonb('commit_response'),
+  plan: jsonb('plan').$type<SessionPlan>(),
+  rawEvents: jsonb('raw_events'),
+  result: jsonb('result'),
 }, (t) => [
   unique('learning_sessions_id_user_id_key').on(t.id, t.userId),
   index('idx_sessions_user_issued').on(t.userId, t.issuedAt.desc()),
-]);
-
-export const sessionTasks = pgTable('session_tasks', {
-  id: id(),
-  sessionId: uuid('session_id').notNull(),
-  ordinal: integer('ordinal').notNull(),
-  phase: varchar('phase', { length: 32 }).notNull(),
-  template: varchar('template', { length: 24 }).notNull(),
-  variant: varchar('variant', { length: 40 }),
-  curatedItemId: uuid('curated_item_id'),
-  clientPayload: jsonb('client_payload').notNull(),
-  serverEvaluation: jsonb('server_evaluation').notNull(),
-  evaluatorVersion: varchar('evaluator_version', { length: 40 }).notNull(),
-}, (t) => [
-  unique('session_tasks_session_id_ordinal_key').on(t.sessionId, t.ordinal),
-  unique('session_tasks_session_id_id_key').on(t.sessionId, t.id),
-  index('idx_session_tasks_session').on(t.sessionId),
-]);
-
-export const sessionTaskTargets = pgTable('session_task_targets', {
-  sessionId: uuid('session_id').notNull(),
-  taskId: uuid('task_id').notNull(),
-  ordinal: smallint('ordinal').notNull(),
-  meaningId: uuid('meaning_id'),
-  pronunciationId: uuid('pronunciation_id'),
-}, (t) => [primaryKey({ columns: [t.sessionId, t.taskId, t.ordinal] })]);
-
-export const sessionLearnSteps = pgTable('session_learn_steps', {
-  id: id(),
-  sessionId: uuid('session_id').notNull(),
-  meaningId: uuid('meaning_id').notNull(),
-  ordinal: integer('ordinal').notNull(),
-  clientCard: jsonb('client_card').notNull(),
-  firstRecallTaskId: uuid('first_recall_task_id').notNull(),
-}, (t) => [
-  unique('session_learn_steps_session_id_meaning_id_key').on(t.sessionId, t.meaningId),
-  unique('session_learn_steps_session_id_ordinal_key').on(t.sessionId, t.ordinal),
 ]);
 
 export const speechAssessmentReceipts = pgTable('speech_assessment_receipts', {
   id: id(),
   sessionId: uuid('session_id').notNull(),
   taskId: uuid('task_id').notNull(),
-  validity: varchar('validity', { length: 12 }).notNull(),
+  validity: varchar('validity', { length: 12 }).$type<Validity>().notNull(),
   passed: boolean('passed'),
   accuracyScore: numeric('accuracy_score', { precision: 5, scale: 2, mode: 'number' }),
   providerMeta: jsonb('provider_meta').notNull().default({}),
   assessedAt: ts('assessed_at').notNull().defaultNow(),
   expiresAt: ts('expires_at').notNull(),
   consumedAt: ts('consumed_at'),
-}, (t) => [index('idx_speech_receipts_expiry').on(t.expiresAt)]);
+}, (t) => [index('idx_speech_receipts_expiry').on(t.expiresAt), index('idx_speech_receipts_task').on(t.sessionId, t.taskId)]);
 
-// E. Committed practice and normalized evidence
-export const practiceTaskResults = pgTable('practice_task_results', {
-  sessionId: uuid('session_id').notNull(),
-  taskId: uuid('task_id').notNull(),
-  userId: uuid('user_id').notNull(),
-  rawEvents: jsonb('raw_events').notNull(),
-  normalizedResult: jsonb('normalized_result').notNull(),
-  committedAt: ts('committed_at').notNull(),
-}, (t) => [
-  primaryKey({ columns: [t.sessionId, t.taskId] }),
-  index('idx_practice_results_user').on(t.userId, t.committedAt.desc()),
-]);
-
-export const practiceTargetResults = pgTable('practice_target_results', {
-  sessionId: uuid('session_id').notNull(),
-  taskId: uuid('task_id').notNull(),
-  targetOrdinal: smallint('target_ordinal').notNull(),
-  outcome: varchar('outcome', { length: 40 }).notNull(),
-  firstAttemptCorrect: boolean('first_attempt_correct'),
-  attemptCount: integer('attempt_count').notNull().default(0),
-  hintCount: integer('hint_count').notNull().default(0),
-  deliveryMode: varchar('delivery_mode', { length: 16 }),
-}, (t) => [primaryKey({ columns: [t.sessionId, t.taskId, t.targetOrdinal] })]);
-
+// E. Cross-session learning state and evidence
 export const userMeaningProgress = pgTable('user_meaning_progress', {
   userId: uuid('user_id').notNull(),
   meaningId: uuid('meaning_id').notNull(),
   learnedAt: ts('learned_at').notNull(),
+  learnedSessionId: uuid('learned_session_id'),
   lastReviewedAt: ts('last_reviewed_at'),
   nextReviewAt: ts('next_review_at').notNull(),
   intervalHours: numeric('interval_hours', { precision: 12, scale: 3, mode: 'number' }).notNull(),
@@ -301,7 +248,7 @@ export const memoryObservations = pgTable('memory_observations', {
   sessionId: uuid('session_id').notNull(),
   userId: uuid('user_id').notNull(),
   meaningId: uuid('meaning_id').notNull(),
-  signal: varchar('signal', { length: 24 }).notNull(),
+  signal: varchar('signal', { length: 24 }).$type<MemorySignal>().notNull(),
   isPrimed: boolean('is_primed').notNull().default(false),
   sourceTaskIds: jsonb('source_task_ids').notNull().default([]).$type<string[]>(),
   observedAt: ts('observed_at').notNull(),
@@ -316,9 +263,9 @@ export const skillEvidence = pgTable('skill_evidence', {
   sessionId: uuid('session_id').notNull(),
   taskId: uuid('task_id').notNull(),
   targetOrdinal: smallint('target_ordinal').notNull(),
-  skill: varchar('skill', { length: 12 }).notNull(),
-  directness: varchar('directness', { length: 12 }).notNull(),
-  validity: varchar('validity', { length: 12 }).notNull(),
+  skill: varchar('skill', { length: 12 }).$type<Skill>().notNull(),
+  directness: varchar('directness', { length: 12 }).$type<Directness>().notNull(),
+  validity: varchar('validity', { length: 12 }).$type<Validity>().notNull(),
   passed: boolean('passed'),
   meaningId: uuid('meaning_id'),
   pronunciationId: uuid('pronunciation_id'),
@@ -328,21 +275,17 @@ export const skillEvidence = pgTable('skill_evidence', {
   evaluatorVersion: varchar('evaluator_version', { length: 40 }).notNull(),
 }, (t) => [unique('skill_evidence_session_id_task_id_target_ordinal_skill_key').on(t.sessionId, t.taskId, t.targetOrdinal, t.skill)]);
 
-// F. Weekly challenge snapshots by user-specific 7-day period
-export const weeklyChallenges = pgTable('weekly_challenges', {
+// F. Checkpoint challenge snapshots, one per N learning sessions
+export const checkpointChallenges = pgTable('checkpoint_challenges', {
   id: id(),
   userId: uuid('user_id').notNull(),
-  cycleStartAt: ts('cycle_start_at').notNull(),
-  cycleEndAt: ts('cycle_end_at').notNull(),
-  state: varchar('state', { length: 16 }).notNull().default('available'),
+  sequence: integer('sequence').notNull(),
+  state: varchar('state', { length: 16 }).$type<CheckpointState>().notNull().default(CHECKPOINT_STATE.AVAILABLE),
   completedSessionId: uuid('completed_session_id'),
   createdAt: createdAt(),
-}, (t) => [
-  unique('weekly_challenges_user_id_cycle_start_at_key').on(t.userId, t.cycleStartAt),
-  index('idx_weekly_challenges_user').on(t.userId, t.cycleStartAt.desc()),
-]);
+}, (t) => [unique('checkpoint_challenges_user_id_sequence_key').on(t.userId, t.sequence)]);
 
-export const weeklyChallengeMeanings = pgTable('weekly_challenge_meanings', {
+export const checkpointChallengeMeanings = pgTable('checkpoint_challenge_meanings', {
   challengeId: uuid('challenge_id').notNull(),
   meaningId: uuid('meaning_id').notNull(),
 }, (t) => [primaryKey({ columns: [t.challengeId, t.meaningId] })]);

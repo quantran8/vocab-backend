@@ -68,10 +68,10 @@ export class AzureRestSpeechProvider extends SpeechProvider {
     const best = body.NBest?.[0];
     const accuracyScore = best?.PronunciationAssessment?.AccuracyScore ?? best?.AccuracyScore;
     if (accuracyScore === undefined) return this.invalid('noScore');
-    return { validity: VALIDITY.valid, accuracyScore, meta: { provider: 'azure', recognitionStatus: body.RecognitionStatus } };
+    return { validity: VALIDITY.VALID, accuracyScore, meta: { provider: 'azure', recognitionStatus: body.RecognitionStatus } };
   }
 
   private invalid(reason: string): SpeechResult {
-    return { validity: VALIDITY.invalid, accuracyScore: null, meta: { provider: 'azure', reason } };
+    return { validity: VALIDITY.INVALID, accuracyScore: null, meta: { provider: 'azure', reason } };
   }
 }

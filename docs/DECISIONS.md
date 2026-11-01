@@ -6,23 +6,24 @@ Spec v0.4 leaves these points open or undefined. Each default below is what the 
 
 | Topic | Current behavior | Spec reference | Impact |
 |---|---|---|---|
-| Event shapes **iOS** | `select`/`clozeSelect`: `submit{optionId}`. `match`: `pair{leftId,rightId}`. `typing`: `submit{value}`. `surgery`: `submit{graphemeIndex,replacement}`. `recording`: `assessed{assessmentReceiptId}` or `unavailable{reason}`. All: `hint`, `reveal`. `flyReorder` as specified | §4.4, §5.1 only show samples | iOS must send exactly these; unknown fields are rejected |
+| Event shapes **iOS** | `select`/`cloze_select`: `submit{optionId}`. `match`: `pair{leftId,rightId}`. `typing`: `submit{value}`. `surgery`: `submit{graphemeIndex,replacement}`. `recording`: `assessed{assessmentReceiptId}` or `unavailable{reason}`. All: `hint`, `reveal`. `fly_reorder` as specified | §4.4, §5.1 only show samples | iOS must send exactly these; unknown fields are rejected |
 | `deliveryMode` **iOS** | Required on audio-prompt tasks; `audio` or `fallback` on a text prompt is rejected | §4.4 says "may be required" | Missing value rejects the whole commit |
+| Retries before auto-next **iOS** **Learning** | Each task's `clientPayload.maxRetries` is the number of retries after a wrong answer; total tries = 1 + `maxRetries`. When they run out the client moves on with no extra event and the task scores `incorrect`. A submit past the limit fails the whole commit. `match` counts per left item; `recording` counts all assessments, including invalid audio (422 past the limit). Trial values: `select`/`cloze_select`/`match` 1, `typing`/`fly_reorder`/`surgery`/`recording` 2 | §4.4 mentions retry, no limit | iOS must honor the limit from the payload; values are fixed in the session snapshot |
 | Commit completeness **iOS** | Every issued task and Learn step must be submitted; otherwise the whole batch fails | §7.1 step 5 | The client must terminate every task, including Recording |
-| New-learning evidence **Learning** | Evidence in phase `newPractice` is `supporting` and does not count toward verified | §5.2 implies it, does not state it | Skills verify only from review and practice sessions |
+| New-learning evidence **Learning** | Evidence in phase `new_practice` is `supporting` and does not count toward verified | §5.2 implies it, does not state it | Skills verify only from review and practice sessions |
 | `demonstrated` **Learning** | At least one valid direct success, not yet verified. After a revocation, prior passes keep the status at `demonstrated` | Undefined in §6 | Affects the status shown to users |
 | Daily Due SRS for assisted and failed **Learning** | Assisted: next = now + min(interval, 24h), streak reset. Failed recall: interval 12h, streak reset, lapse + 1. Failed recognition: min(next, now + 24h) | §5.4 gives formulas only for unaided and recognition | Sets review frequency after mistakes |
 | Priming **Learning** | Recall is primed when its answer appears in the immediately preceding step. A primed correct recall counts as assisted | §5.2 undefined window | A one-Meaning session is always primed: reverseGloss directly precedes recall, so first interval is 24h, not 48h |
-| Non-Daily while due (D17) **Learning** | Random, Weak and Weekly never consume due; only failures pull it earlier | §5.3 `[OPEN]` | Due Meanings stay due after practice |
-| Weak ranking | Fail or hint rate over 30 days, minimum 3 attempts, top 10 | §8.3 `[OPEN]` | |
+| Non-Daily while due (D17) **Learning** | Random, Weak and Checkpoint never consume due; only failures pull it earlier | §5.3 `[OPEN]` | Due Meanings stay due after practice |
+| Weak ranking **Learning** | From `memory_observations`: rate of non-unaided, non-recognition-success signals over 30 days, minimum 3 sessions, top 10 | §8.3 `[OPEN]` | One signal per session, and a correct recall hides a wrong `select` in the same session |
 | Due ordering | Oldest `next_review_at` first | §8.1 also asks for recent failures first | Failures rank by their pulled-in due date, no separate signal |
 | Review skill tasks **Learning** | 30% chance per due Meaning of one extra skill-only task | §2.9 | Controls how often Speaking and Listening get direct evidence |
-| Weekly plan request **iOS** | Adds optional `challengeId`; defaults to oldest available | §4.2 lists only `mode` | |
+| Checkpoint plan request **iOS** | Adds optional `challengeId`; defaults to oldest available | §4.2 lists only `mode` | |
 | Empty plan **iOS** | Returns `{sessionId: null, steps: []}`; no session row | §2.7 `[OPEN]` | The client needs an empty state |
 | Plan with no audio URL | Audio candidate rejected, text used instead | §2.5 | |
-| Generated vs curated | Generated: `select.gloss/reverseGloss`, `typing`, `flyReorder`, `match`, `recording`. Curated only: `clozeSelect`, `surgery`, `meaningClash`, `phoneticChoice`, `stressChoice`, and any audio that reads a Meaning | §2.4, §2.5 | Schema has no syllable or confusable-word data. These templates appear only once items are authored |
+| Generated vs curated | Generated: `select.gloss/reverseGloss`, `typing`, `fly_reorder`, `match`, `recording`. Curated only: `cloze_select`, `surgery`, `meaning_clash`, `phonetic_choice`, `stress_choice`, and any audio that reads a Meaning | §2.4, §2.5 | Schema has no syllable or confusable-word data. These templates appear only once items are authored |
 | `match` and `surgery` evidence | Always `supporting`, with no memory signal | Absent from §5.2 table | |
-| Retention | Issued snapshots purged 30 days after expiry. Committed sessions kept | §12 `[OPEN]` | Legal/product input needed |
+| Retention | `plan` and `raw_events` cleared 30 days after expiry or commit. `result` and the session row kept | §12 `[OPEN]` | Legal/product input needed |
 | Cron | In-process hourly job; assumes one running instance or tolerates a failed retry | §1.1 | Run with `ENABLE_CRON=false` on extra replicas |
 
 ## Not implemented
@@ -38,7 +39,7 @@ Spec v0.4 leaves these points open or undefined. Each default below is what the 
 
 - `id` columns are UUID v7 generated by the app, with no database default. Direct SQL inserts must supply `id`.
 - Unique rules are unique indexes rather than constraints, with identical effect. FKs work the same.
-- Added: RLS on all tables, and triggers blocking updates to `meaning_publications`, `session_tasks` payloads and published `practice_items` content.
+- Added: RLS on all tables, and triggers blocking updates to `meaning_publications`, `learning_sessions.plan` and published `practice_items` content.
 
 ## Operational constraints
 

@@ -12,9 +12,9 @@ describe('planNewMeanings', () => {
     const slots = planNewMeanings(3, seeded(7));
     for (const m of [0, 1, 2]) {
       const mine = tasks(slots).filter((t) => t.meaningIndex === m).map((t) => t.template);
-      expect(mine.filter((t) => t === TEMPLATE.select)).toHaveLength(3);
-      expect(mine).toContain(TEMPLATE.recording);
-      expect(mine.filter((t) => t === TEMPLATE.typing || t === TEMPLATE.flyReorder)).toHaveLength(1);
+      expect(mine.filter((t) => t === TEMPLATE.SELECT)).toHaveLength(3);
+      expect(mine).toContain(TEMPLATE.RECORDING);
+      expect(mine.filter((t) => t === TEMPLATE.TYPING || t === TEMPLATE.FLY_REORDER)).toHaveLength(1);
     }
   });
 
@@ -30,13 +30,27 @@ describe('planNewMeanings', () => {
     for (const m of [0, 1]) {
       const mine = list.filter((t) => t.meaningIndex === m);
       expect(mine[2].isFirstRecall).toBe(true);
-      expect(mine[3].template).toBe(TEMPLATE.recording);
+      expect(mine[3].template).toBe(TEMPLATE.RECORDING);
     }
   });
 
   it('randomizes typing and flyReorder at the recall slot', () => {
     const picks = Array.from({ length: 60 }, (_, seed) => tasks(planNewMeanings(1, seeded((seed + 1) * 715_827_883)))[2].template);
-    expect(new Set(picks)).toEqual(new Set([TEMPLATE.typing, TEMPLATE.flyReorder]));
+    expect(new Set(picks)).toEqual(new Set([TEMPLATE.TYPING, TEMPLATE.FLY_REORDER]));
+  });
+
+  it('introduces Meanings in batches of 2-3 before any practice', () => {
+    for (const [count, sizes] of [[1, [1]], [3, [3]], [4, [2, 2]], [5, [2, 3]], [7, [2, 2, 3]]] as const) {
+      const slots = planNewMeanings(count, seeded(5));
+      let at = 0;
+      for (const size of sizes) {
+        expect(slots.slice(at, at + size).every((s) => s.kind === 'learn')).toBe(true);
+        expect(slots[at + size].kind).toBe('task');
+        const next = slots.findIndex((s, i) => i > at + size && s.kind === 'learn');
+        at = next === -1 ? slots.length : next;
+      }
+      expect(slots.filter((s) => s.kind === 'learn')).toHaveLength(count);
+    }
   });
 
   it('plans nothing for zero Meanings', () => {

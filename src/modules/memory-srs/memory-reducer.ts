@@ -18,25 +18,25 @@ export interface MemoryDraft {
 }
 
 const recallSignal = (fact: MemoryFact): MemorySignal => {
-  if (fact.outcome !== OUTCOME.correct) return MEMORY_SIGNAL.failedRecall;
-  return fact.hintCount > 0 ? MEMORY_SIGNAL.assistedRecall : MEMORY_SIGNAL.unaidedRecall;
+  if (fact.outcome !== OUTCOME.CORRECT) return MEMORY_SIGNAL.FAILED_RECALL;
+  return fact.hintCount > 0 ? MEMORY_SIGNAL.ASSISTED_RECALL : MEMORY_SIGNAL.UNAIDED_RECALL;
 };
 
 const recognitionSignal = (fact: MemoryFact): MemorySignal =>
-  fact.outcome === OUTCOME.correct ? MEMORY_SIGNAL.recognitionSuccess : MEMORY_SIGNAL.failedRecognition;
+  fact.outcome === OUTCOME.CORRECT ? MEMORY_SIGNAL.RECOGNITION_SUCCESS : MEMORY_SIGNAL.FAILED_RECOGNITION;
 
 // Worst first: a wrong recall must not be hidden by a later success.
 const SEVERITY: MemorySignal[] = [
-  MEMORY_SIGNAL.failedRecall,
-  MEMORY_SIGNAL.assistedRecall,
-  MEMORY_SIGNAL.unaidedRecall,
-  MEMORY_SIGNAL.failedRecognition,
-  MEMORY_SIGNAL.recognitionSuccess,
+  MEMORY_SIGNAL.FAILED_RECALL,
+  MEMORY_SIGNAL.ASSISTED_RECALL,
+  MEMORY_SIGNAL.UNAIDED_RECALL,
+  MEMORY_SIGNAL.FAILED_RECOGNITION,
+  MEMORY_SIGNAL.RECOGNITION_SUCCESS,
 ];
 
 const signalOf = (fact: MemoryFact) => {
-  if (fact.intent === ASSESSMENT_INTENT.meaningRecall) return recallSignal(fact);
-  return fact.intent === ASSESSMENT_INTENT.meaningRecognition ? recognitionSignal(fact) : null;
+  if (fact.intent === ASSESSMENT_INTENT.MEANING_RECALL) return recallSignal(fact);
+  return fact.intent === ASSESSMENT_INTENT.MEANING_RECOGNITION ? recognitionSignal(fact) : null;
 };
 
 /** At most one observation per Meaning per session; recall outranks recognition. */

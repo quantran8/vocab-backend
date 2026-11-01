@@ -29,15 +29,15 @@ export interface EvidenceDraft {
 }
 
 const isCleanAttempt = (fact: SkillFact) =>
-  fact.hintCount === 0 && fact.outcome !== OUTCOME.revealed && !fact.isPrimed && fact.phase !== TASK_PHASE.newPractice;
+  fact.hintCount === 0 && fact.outcome !== OUTCOME.REVEALED && !fact.isPrimed && fact.phase !== TASK_PHASE.NEW_PRACTICE;
 
 const meaningEvidence = (fact: SkillFact, skill: Skill, direct: boolean): EvidenceDraft[] =>
   fact.meaningId
     ? [{
         skill,
-        directness: direct ? DIRECTNESS.direct : DIRECTNESS.supporting,
-        validity: VALIDITY.valid,
-        passed: fact.outcome === OUTCOME.correct,
+        directness: direct ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+        validity: VALIDITY.VALID,
+        passed: fact.outcome === OUTCOME.CORRECT,
         meaningId: fact.meaningId,
         pronunciationId: null,
       }]
@@ -46,25 +46,25 @@ const meaningEvidence = (fact: SkillFact, skill: Skill, direct: boolean): Eviden
 function listeningEvidence(fact: SkillFact, direct: boolean): EvidenceDraft[] {
   if (!fact.pronunciationId) return [];
   // Audio that never played says nothing about listening: invalid, not failed.
-  const delivered = fact.deliveryMode === DELIVERY_MODE.audio;
+  const delivered = fact.deliveryMode === DELIVERY_MODE.AUDIO;
   return [{
-    skill: SKILL.listening,
-    directness: direct && delivered ? DIRECTNESS.direct : DIRECTNESS.supporting,
-    validity: delivered ? VALIDITY.valid : VALIDITY.invalid,
-    passed: delivered ? fact.outcome === OUTCOME.correct : null,
+    skill: SKILL.LISTENING,
+    directness: direct && delivered ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+    validity: delivered ? VALIDITY.VALID : VALIDITY.INVALID,
+    passed: delivered ? fact.outcome === OUTCOME.CORRECT : null,
     meaningId: null,
     pronunciationId: fact.pronunciationId,
   }];
 }
 
 function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
-  if (!fact.pronunciationId || fact.outcome === OUTCOME.unavailable) return [];
-  const valid = fact.outcome !== OUTCOME.invalid;
+  if (!fact.pronunciationId || fact.outcome === OUTCOME.UNAVAILABLE) return [];
+  const valid = fact.outcome !== OUTCOME.INVALID;
   return [{
-    skill: SKILL.speaking,
-    directness: valid && fact.phase !== TASK_PHASE.newPractice ? DIRECTNESS.direct : DIRECTNESS.supporting,
-    validity: valid ? VALIDITY.valid : VALIDITY.invalid,
-    passed: valid ? fact.outcome === OUTCOME.assessedPassed : null,
+    skill: SKILL.SPEAKING,
+    directness: valid && fact.phase !== TASK_PHASE.NEW_PRACTICE ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+    validity: valid ? VALIDITY.VALID : VALIDITY.INVALID,
+    passed: valid ? fact.outcome === OUTCOME.ASSESSED_PASSED : null,
     meaningId: null,
     pronunciationId: fact.pronunciationId,
   }];
@@ -74,23 +74,23 @@ function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
 export function deriveEvidence(fact: SkillFact): EvidenceDraft[] {
   const clean = isCleanAttempt(fact);
   switch (fact.intent) {
-    case ASSESSMENT_INTENT.meaningRecognition: {
+    case ASSESSMENT_INTENT.MEANING_RECOGNITION: {
       if (fact.promptIsTargetAudio) return listeningEvidence(fact, clean);
-      const isPlainSelect = fact.template === TEMPLATE.select && fact.qualityQualified;
-      return meaningEvidence(fact, SKILL.reading, clean && isPlainSelect);
+      const isPlainSelect = fact.template === TEMPLATE.SELECT && fact.qualityQualified;
+      return meaningEvidence(fact, SKILL.READING, clean && isPlainSelect);
     }
-    case ASSESSMENT_INTENT.meaningRecall:
-      return meaningEvidence(fact, SKILL.writing, clean && fact.qualityQualified);
-    case ASSESSMENT_INTENT.transcription:
+    case ASSESSMENT_INTENT.MEANING_RECALL:
+      return meaningEvidence(fact, SKILL.WRITING, clean && fact.qualityQualified);
+    case ASSESSMENT_INTENT.TRANSCRIPTION:
       return fact.promptIsTargetAudio ? listeningEvidence(fact, clean) : [];
-    case ASSESSMENT_INTENT.soundDiscrimination:
+    case ASSESSMENT_INTENT.SOUND_DISCRIMINATION:
       return listeningEvidence(fact, false);
-    case ASSESSMENT_INTENT.pronunciation:
+    case ASSESSMENT_INTENT.PRONUNCIATION:
       return speakingEvidence(fact);
-    case ASSESSMENT_INTENT.pairing:
-      return meaningEvidence(fact, SKILL.reading, false);
-    case ASSESSMENT_INTENT.spellingRepair:
-      return meaningEvidence(fact, SKILL.writing, false);
+    case ASSESSMENT_INTENT.PAIRING:
+      return meaningEvidence(fact, SKILL.READING, false);
+    case ASSESSMENT_INTENT.SPELLING_REPAIR:
+      return meaningEvidence(fact, SKILL.WRITING, false);
   }
 }
 
@@ -113,12 +113,12 @@ export function deriveSkillStatus(rows: EvidenceRow[]): SkillState {
 
   if (passes.length === 0) {
     const hadPass = rows.some((r) => r.passed === true);
-    return { status: hadPass ? SKILL_STATUS.demonstrated : SKILL_STATUS.notVerified, needsPractice };
+    return { status: hadPass ? SKILL_STATUS.DEMONSTRATED : SKILL_STATUS.NOT_VERIFIED, needsPractice };
   }
   const sessions = new Set(passes.map((r) => r.sessionId));
   const spanHours = (passes.at(-1)!.committedAt.getTime() - passes[0].committedAt.getTime()) / MS_PER_HOUR;
   const verified = sessions.size >= POLICY.skill.requiredSessions && spanHours >= POLICY.skill.delayedRecheckHours;
-  return { status: verified ? SKILL_STATUS.verified : SKILL_STATUS.demonstrated, needsPractice };
+  return { status: verified ? SKILL_STATUS.VERIFIED : SKILL_STATUS.DEMONSTRATED, needsPractice };
 }
 
 export interface WordScopes {
@@ -129,4 +129,4 @@ export interface WordScopes {
 
 export const isWordFullyVerified = ({ readingWriting, listeningSpeaking, learnedMeaningCount }: WordScopes) =>
   learnedMeaningCount > 0 &&
-  [...readingWriting, ...listeningSpeaking].every((s) => s === SKILL_STATUS.verified);
+  [...readingWriting, ...listeningSpeaking].every((s) => s === SKILL_STATUS.VERIFIED);

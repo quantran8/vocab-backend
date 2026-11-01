@@ -21,16 +21,16 @@ export interface Observation {
 
 // A primed "unaided" answer earns no strong credit (C17).
 const effectiveSignal = ({ signal, isPrimed }: Observation) =>
-  signal === MEMORY_SIGNAL.unaidedRecall && isPrimed ? MEMORY_SIGNAL.assistedRecall : signal;
+  signal === MEMORY_SIGNAL.UNAIDED_RECALL && isPrimed ? MEMORY_SIGNAL.ASSISTED_RECALL : signal;
 
 const earlier = (a: Date, b: Date) => (a < b ? a : b);
 
 export function initialState(observation: Observation | undefined, at: Date): SrsState {
-  const signal = observation ? effectiveSignal(observation) : MEMORY_SIGNAL.failedRecall;
+  const signal = observation ? effectiveSignal(observation) : MEMORY_SIGNAL.FAILED_RECALL;
   const intervalHours =
-    signal === MEMORY_SIGNAL.unaidedRecall
+    signal === MEMORY_SIGNAL.UNAIDED_RECALL
       ? SRS.initialUnaidedHours
-      : signal === MEMORY_SIGNAL.assistedRecall
+      : signal === MEMORY_SIGNAL.ASSISTED_RECALL
         ? SRS.initialAssistedHours
         : SRS.initialFailedHours;
   return {
@@ -38,7 +38,7 @@ export function initialState(observation: Observation | undefined, at: Date): Sr
     lastReviewedAt: at,
     nextReviewAt: addHours(at, intervalHours),
     intervalHours,
-    unaidedStreak: signal === MEMORY_SIGNAL.unaidedRecall ? 1 : 0,
+    unaidedStreak: signal === MEMORY_SIGNAL.UNAIDED_RECALL ? 1 : 0,
     lapseCount: 0,
     recognitionGraceUsed: false,
   };
@@ -47,7 +47,7 @@ export function initialState(observation: Observation | undefined, at: Date): Sr
 export function applyDailyDue(state: SrsState, observation: Observation, at: Date): SrsState {
   const reviewed = { ...state, lastReviewedAt: at };
   switch (effectiveSignal(observation)) {
-    case MEMORY_SIGNAL.unaidedRecall: {
+    case MEMORY_SIGNAL.UNAIDED_RECALL: {
       const factor = Math.min(SRS.maxGrowth, SRS.baseGrowth + SRS.streakBonus * state.unaidedStreak);
       const intervalHours = Math.min(SRS.maxIntervalHours, Math.max(SRS.minIntervalHours, state.intervalHours * factor));
       return {
@@ -58,13 +58,13 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
         recognitionGraceUsed: false,
       };
     }
-    case MEMORY_SIGNAL.assistedRecall:
+    case MEMORY_SIGNAL.ASSISTED_RECALL:
       return {
         ...reviewed,
         unaidedStreak: 0,
         nextReviewAt: addHours(at, Math.min(state.intervalHours, SRS.assistedFollowUpHours)),
       };
-    case MEMORY_SIGNAL.failedRecall:
+    case MEMORY_SIGNAL.FAILED_RECALL:
       return {
         ...reviewed,
         intervalHours: SRS.failedRecallIntervalHours,
@@ -72,9 +72,9 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
         unaidedStreak: 0,
         lapseCount: state.lapseCount + 1,
       };
-    case MEMORY_SIGNAL.failedRecognition:
+    case MEMORY_SIGNAL.FAILED_RECOGNITION:
       return { ...reviewed, nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.failedRecognitionDelayHours)) };
-    case MEMORY_SIGNAL.recognitionSuccess: {
+    case MEMORY_SIGNAL.RECOGNITION_SUCCESS: {
       const isDue = state.nextReviewAt <= at;
       if (!isDue || state.recognitionGraceUsed) return reviewed;
       return { ...reviewed, nextReviewAt: addHours(at, SRS.recognitionGraceHours), recognitionGraceUsed: true };
@@ -82,9 +82,9 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
   }
 }
 
-const FAILURE_SIGNALS: MemorySignal[] = [MEMORY_SIGNAL.failedRecall, MEMORY_SIGNAL.failedRecognition];
+const FAILURE_SIGNALS: MemorySignal[] = [MEMORY_SIGNAL.FAILED_RECALL, MEMORY_SIGNAL.FAILED_RECOGNITION];
 
-/** Weekly/Random/Weak: success never extends the schedule; failure can only pull it closer. */
+/** Checkpoint/Random/Weak: success never extends the schedule; failure can only pull it closer. */
 export function applyNonDaily(state: SrsState, observation: Observation, at: Date): SrsState {
   const reviewed = { ...state, lastReviewedAt: at };
   if (!FAILURE_SIGNALS.includes(observation.signal)) return reviewed;

@@ -2,142 +2,162 @@ export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
 
 export const TEMPLATE = {
-  select: 'select',
-  match: 'match',
-  clozeSelect: 'clozeSelect',
-  typing: 'typing',
-  flyReorder: 'flyReorder',
-  surgery: 'surgery',
-  recording: 'recording',
+  SELECT: 'select',
+  MATCH: 'match',
+  CLOZE_SELECT: 'cloze_select',
+  TYPING: 'typing',
+  FLY_REORDER: 'fly_reorder',
+  SURGERY: 'surgery',
+  RECORDING: 'recording',
 } as const;
 export type Template = (typeof TEMPLATE)[keyof typeof TEMPLATE];
 export const TEMPLATES = Object.values(TEMPLATE);
 
 export const VARIANT = {
-  gloss: 'gloss',
-  reverseGloss: 'reverseGloss',
-  meaningClash: 'meaningClash',
-  phoneticChoice: 'phoneticChoice',
-  stressChoice: 'stressChoice',
-  meaningPairs: 'meaningPairs',
-  wordPairs: 'wordPairs',
-  singleBlank: 'singleBlank',
-  contextMeaning: 'contextMeaning',
-  meaningRecall: 'meaningRecall',
-  transcription: 'transcription',
-  spellingRecall: 'spellingRecall',
-  fixSpelling: 'fixSpelling',
-  scriptedPronunciation: 'scriptedPronunciation',
+  GLOSS: 'gloss',
+  REVERSE_GLOSS: 'reverse_gloss',
+  MEANING_CLASH: 'meaning_clash',
+  PHONETIC_CHOICE: 'phonetic_choice',
+  STRESS_CHOICE: 'stress_choice',
+  MEANING_PAIRS: 'meaning_pairs',
+  WORD_PAIRS: 'word_pairs',
+  SINGLE_BLANK: 'single_blank',
+  CONTEXT_MEANING: 'context_meaning',
+  MEANING_RECALL: 'meaning_recall',
+  TRANSCRIPTION: 'transcription',
+  SPELLING_RECALL: 'spelling_recall',
+  FIX_SPELLING: 'fix_spelling',
+  SCRIPTED_PRONUNCIATION: 'scripted_pronunciation',
 } as const;
 export type Variant = (typeof VARIANT)[keyof typeof VARIANT];
+export const VARIANTS = Object.values(VARIANT);
 
 export const TEMPLATE_VARIANTS: Record<Template, readonly Variant[]> = {
-  select: [VARIANT.gloss, VARIANT.reverseGloss, VARIANT.meaningClash, VARIANT.phoneticChoice, VARIANT.stressChoice],
-  match: [VARIANT.meaningPairs, VARIANT.wordPairs],
-  clozeSelect: [VARIANT.singleBlank, VARIANT.contextMeaning],
-  typing: [VARIANT.meaningRecall, VARIANT.transcription],
-  flyReorder: [VARIANT.spellingRecall, VARIANT.transcription],
-  surgery: [VARIANT.fixSpelling],
-  recording: [VARIANT.scriptedPronunciation],
+  [TEMPLATE.SELECT]: [VARIANT.GLOSS, VARIANT.REVERSE_GLOSS, VARIANT.MEANING_CLASH, VARIANT.PHONETIC_CHOICE, VARIANT.STRESS_CHOICE],
+  [TEMPLATE.MATCH]: [VARIANT.MEANING_PAIRS, VARIANT.WORD_PAIRS],
+  [TEMPLATE.CLOZE_SELECT]: [VARIANT.SINGLE_BLANK, VARIANT.CONTEXT_MEANING],
+  [TEMPLATE.TYPING]: [VARIANT.MEANING_RECALL, VARIANT.TRANSCRIPTION],
+  [TEMPLATE.FLY_REORDER]: [VARIANT.SPELLING_RECALL, VARIANT.TRANSCRIPTION],
+  [TEMPLATE.SURGERY]: [VARIANT.FIX_SPELLING],
+  [TEMPLATE.RECORDING]: [VARIANT.SCRIPTED_PRONUNCIATION],
 };
 
-export const PROMPT_TYPE = { text: 'text', audio: 'audio' } as const;
+export const PART_OF_SPEECH = {
+  NOUN: 'noun',
+  VERB: 'verb',
+  ADJECTIVE: 'adjective',
+  ADVERB: 'adverb',
+  PRONOUN: 'pronoun',
+  PREPOSITION: 'preposition',
+  CONJUNCTION: 'conjunction',
+  INTERJECTION: 'interjection',
+  PHRASAL_VERB: 'phrasal_verb',
+} as const;
+export type PartOfSpeech = (typeof PART_OF_SPEECH)[keyof typeof PART_OF_SPEECH];
+export const PARTS_OF_SPEECH = Object.values(PART_OF_SPEECH);
+
+export const PROMPT_TYPE = { TEXT: 'text', AUDIO: 'audio' } as const;
 export type PromptType = (typeof PROMPT_TYPE)[keyof typeof PROMPT_TYPE];
 
 export const SESSION_MODE = {
-  daily: 'daily',
-  weeklyChallenge: 'weeklyChallenge',
-  randomPractice: 'randomPractice',
-  weakWordsPractice: 'weakWordsPractice',
+  DAILY: 'daily',
+  CHECKPOINT_CHALLENGE: 'checkpoint_challenge',
+  RANDOM_PRACTICE: 'random_practice',
+  WEAK_WORDS_PRACTICE: 'weak_words_practice',
 } as const;
 export type SessionMode = (typeof SESSION_MODE)[keyof typeof SESSION_MODE];
 export const SESSION_MODES = Object.values(SESSION_MODE);
 
-export const SESSION_STATUS = { issued: 'issued', committed: 'committed', expired: 'expired' } as const;
+export const SESSION_STATUS = { ISSUED: 'issued', COMMITTED: 'committed', EXPIRED: 'expired' } as const;
+export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 export const TASK_PHASE = {
-  dueReview: 'dueReview',
-  newPractice: 'newPractice',
-  weeklyChallenge: 'weeklyChallenge',
-  randomPractice: 'randomPractice',
-  weakWordsPractice: 'weakWordsPractice',
+  DUE_REVIEW: 'due_review',
+  NEW_PRACTICE: 'new_practice',
+  CHECKPOINT_CHALLENGE: 'checkpoint_challenge',
+  RANDOM_PRACTICE: 'random_practice',
+  WEAK_WORDS_PRACTICE: 'weak_words_practice',
 } as const;
 export type TaskPhase = (typeof TASK_PHASE)[keyof typeof TASK_PHASE];
 
 export const MEMORY_SIGNAL = {
-  unaidedRecall: 'unaidedRecall',
-  assistedRecall: 'assistedRecall',
-  failedRecall: 'failedRecall',
-  recognitionSuccess: 'recognitionSuccess',
-  failedRecognition: 'failedRecognition',
+  UNAIDED_RECALL: 'unaided_recall',
+  ASSISTED_RECALL: 'assisted_recall',
+  FAILED_RECALL: 'failed_recall',
+  RECOGNITION_SUCCESS: 'recognition_success',
+  FAILED_RECOGNITION: 'failed_recognition',
 } as const;
 export type MemorySignal = (typeof MEMORY_SIGNAL)[keyof typeof MEMORY_SIGNAL];
 
 export const SKILL = {
-  listening: 'listening',
-  speaking: 'speaking',
-  reading: 'reading',
-  writing: 'writing',
+  LISTENING: 'listening',
+  SPEAKING: 'speaking',
+  READING: 'reading',
+  WRITING: 'writing',
 } as const;
 export type Skill = (typeof SKILL)[keyof typeof SKILL];
 
 export const SKILL_STATUS = {
-  notVerified: 'notVerified',
-  demonstrated: 'demonstrated',
-  verified: 'verified',
+  NOT_VERIFIED: 'not_verified',
+  DEMONSTRATED: 'demonstrated',
+  VERIFIED: 'verified',
 } as const;
 export type SkillStatus = (typeof SKILL_STATUS)[keyof typeof SKILL_STATUS];
 
-export const DIRECTNESS = { direct: 'direct', supporting: 'supporting' } as const;
+export const DIRECTNESS = { DIRECT: 'direct', SUPPORTING: 'supporting' } as const;
 export type Directness = (typeof DIRECTNESS)[keyof typeof DIRECTNESS];
 
-export const VALIDITY = { valid: 'valid', invalid: 'invalid' } as const;
+export const VALIDITY = { VALID: 'valid', INVALID: 'invalid' } as const;
 export type Validity = (typeof VALIDITY)[keyof typeof VALIDITY];
 
-export const DELIVERY_MODE = { audio: 'audio', fallback: 'fallback', none: 'none' } as const;
+export const DELIVERY_MODE = { AUDIO: 'audio', FALLBACK: 'fallback', NONE: 'none' } as const;
 export type DeliveryMode = (typeof DELIVERY_MODE)[keyof typeof DELIVERY_MODE];
 
 export const EVENT_ACTION = {
-  submit: 'submit',
-  pair: 'pair',
-  tapTile: 'tapTile',
-  removeTile: 'removeTile',
-  moveTile: 'moveTile',
-  hint: 'hint',
-  reveal: 'reveal',
-  assessed: 'assessed',
-  unavailable: 'unavailable',
+  SUBMIT: 'submit',
+  PAIR: 'pair',
+  TAP_TILE: 'tap_tile',
+  REMOVE_TILE: 'remove_tile',
+  MOVE_TILE: 'move_tile',
+  HINT: 'hint',
+  REVEAL: 'reveal',
+  ASSESSED: 'assessed',
+  UNAVAILABLE: 'unavailable',
 } as const;
 export type EventAction = (typeof EVENT_ACTION)[keyof typeof EVENT_ACTION];
 
 // What a task proves, independent of template and prompt modality (AR-15).
 export const ASSESSMENT_INTENT = {
-  meaningRecognition: 'meaningRecognition',
-  meaningRecall: 'meaningRecall',
-  transcription: 'transcription',
-  soundDiscrimination: 'soundDiscrimination',
-  spellingRepair: 'spellingRepair',
-  pronunciation: 'pronunciation',
-  pairing: 'pairing',
+  MEANING_RECOGNITION: 'meaning_recognition',
+  MEANING_RECALL: 'meaning_recall',
+  TRANSCRIPTION: 'transcription',
+  SOUND_DISCRIMINATION: 'sound_discrimination',
+  SPELLING_REPAIR: 'spelling_repair',
+  PRONUNCIATION: 'pronunciation',
+  PAIRING: 'pairing',
 } as const;
 export type AssessmentIntent = (typeof ASSESSMENT_INTENT)[keyof typeof ASSESSMENT_INTENT];
 
 export const OUTCOME = {
-  correct: 'correct',
-  incorrect: 'incorrect',
-  correctedAfterRetry: 'correctedAfterRetry',
-  revealed: 'revealed',
-  assessedPassed: 'assessedPassed',
-  assessedFailed: 'assessedFailed',
-  invalid: 'invalid',
-  unavailable: 'unavailable',
+  CORRECT: 'correct',
+  INCORRECT: 'incorrect',
+  CORRECTED_AFTER_RETRY: 'corrected_after_retry',
+  REVEALED: 'revealed',
+  ASSESSED_PASSED: 'assessed_passed',
+  ASSESSED_FAILED: 'assessed_failed',
+  INVALID: 'invalid',
+  UNAVAILABLE: 'unavailable',
 } as const;
 export type Outcome = (typeof OUTCOME)[keyof typeof OUTCOME];
 
-export const CONTENT_STATUS = { draft: 'draft', published: 'published', archived: 'archived' } as const;
-export const EDITORIAL_STATE = { draft: 'draft', approved: 'approved' } as const;
-export const ITEM_STATUS = { draft: 'draft', approved: 'approved', published: 'published', retired: 'retired' } as const;
-export const WEEKLY_STATE = { available: 'available', completed: 'completed' } as const;
+export const CONTENT_STATUS = { DRAFT: 'draft', PUBLISHED: 'published', ARCHIVED: 'archived' } as const;
+export type ContentStatus = (typeof CONTENT_STATUS)[keyof typeof CONTENT_STATUS];
+export const EDITORIAL_STATE = { DRAFT: 'draft', APPROVED: 'approved' } as const;
+export type EditorialState = (typeof EDITORIAL_STATE)[keyof typeof EDITORIAL_STATE];
+export const ITEM_STATUS = { DRAFT: 'draft', APPROVED: 'approved', PUBLISHED: 'published', RETIRED: 'retired' } as const;
+export type ItemStatus = (typeof ITEM_STATUS)[keyof typeof ITEM_STATUS];
+export const CHECKPOINT_STATE = { AVAILABLE: 'available', COMPLETED: 'completed' } as const;
+export type CheckpointState = (typeof CHECKPOINT_STATE)[keyof typeof CHECKPOINT_STATE];
 
 export const ADMIN_ROLES = ['editor', 'admin'] as const;
 

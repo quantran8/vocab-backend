@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock';
 import { SESSION_STATUS, TEMPLATE, VALIDITY } from '../../common/constants/domain';
 import { addHours } from '../../common/constants/time';
 import { ApiError } from '../../common/http/api-error';
 import { POLICY } from '../../config/policy';
-import { DB, Db } from '../../db/db';
-import { learningSessions, sessionTasks, speechAssessmentReceipts } from '../../db/schema';
+import { DB, Db, toDate } from '../../db/db';
+import { speechAssessmentReceipts } from '../../db/schema';
 import { ServerEvaluation } from '../practice-resolver/task.types';
 import { SpeechProvider } from './speech.provider';
 
@@ -26,32 +26,38 @@ export class SpeechService {
   async assess(userId: string, sessionId: string, taskId: string, audio: AudioUpload | undefined) {
     if (!audio?.buffer.length) throw new ApiError('INVALID_SUBMISSION', 'Audio is required');
 
-    const [task] = await this.db
-      .select({
-        template: sessionTasks.template,
-        serverEvaluation: sessionTasks.serverEvaluation,
-        ownerId: learningSessions.userId,
-        status: learningSessions.status,
-        expiresAt: learningSessions.expiresAt,
-      })
-      .from(sessionTasks)
-      .innerJoin(learningSessions, eq(learningSessions.id, sessionTasks.sessionId))
-      .where(and(eq(sessionTasks.sessionId, sessionId), eq(sessionTasks.id, taskId)));
+    const { rows: [task] } = await this.db.execute<{
+      template: string;
+      serverEvaluation: ServerEvaluation;
+      maxRetries: number | null;
+      attemptsUsed: number;
+      ownerId: string;
+      status: string;
+      expiresAt: string;
+    }>(sql`
+      SELECT t->>'template' AS template, t->'serverEvaluation' AS "serverEvaluation",
+             (t->'clientPayload'->>'maxRetries')::int AS "maxRetries",
+             (SELECT count(*)::int FROM speech_assessment_receipts r WHERE r.session_id = s.id AND r.task_id = ${taskId}::uuid) AS "attemptsUsed",
+             s.user_id AS "ownerId", s.status, s.expires_at AS "expiresAt"
+      FROM learning_sessions s, jsonb_array_elements(s.plan->'tasks') t
+      WHERE s.id = ${sessionId}::uuid AND t->>'id' = ${taskId}::text`);
     if (!task) throw new ApiError('NOT_FOUND', 'Task not found');
     if (task.ownerId !== userId) throw new ApiError('SESSION_NOT_OWNED');
-    if (task.template !== TEMPLATE.recording) throw new ApiError('INVALID_SUBMISSION', 'Not a recording task');
+    if (task.template !== TEMPLATE.RECORDING) throw new ApiError('INVALID_SUBMISSION', 'Not a recording task');
 
     const now = this.clock.now();
-    if (task.status === SESSION_STATUS.committed) throw new ApiError('SESSION_STALE', 'Session already committed');
-    if (task.status === SESSION_STATUS.expired || task.expiresAt <= now) throw new ApiError('SESSION_EXPIRED');
+    if (task.status === SESSION_STATUS.COMMITTED) throw new ApiError('SESSION_STALE', 'Session already committed');
+    if (task.status === SESSION_STATUS.EXPIRED || toDate(task.expiresAt) <= now) throw new ApiError('SESSION_EXPIRED');
 
-    const { referenceText, referenceLocale } = task.serverEvaluation as ServerEvaluation;
+    if (task.maxRetries !== null && task.attemptsUsed > task.maxRetries) throw new ApiError('INVALID_SUBMISSION', 'Attempt limit exceeded');
+
+    const { referenceText, referenceLocale } = task.serverEvaluation;
     if (!referenceText || !referenceLocale) throw new ApiError('TASK_DATA_INVALID', 'Recording has no reference');
 
     // Audio stays in memory only and is dropped after this call; never inside a DB transaction.
     const result = await this.provider.assess({ audio: audio.buffer, contentType: audio.mimetype, referenceText, locale: referenceLocale });
 
-    const valid = result.validity === VALIDITY.valid;
+    const valid = result.validity === VALIDITY.VALID;
     const passed = valid ? (result.accuracyScore ?? 0) >= POLICY.speech.passAccuracy : null;
     const [receipt] = await this.db
       .insert(speechAssessmentReceipts)

@@ -41,10 +41,10 @@ export interface PlannedTask {
 export type PlannedStep = PlannedLearn | PlannedTask;
 
 const PHASE_BY_MODE: Record<SessionMode, TaskPhase> = {
-  [SESSION_MODE.daily]: TASK_PHASE.dueReview,
-  [SESSION_MODE.weeklyChallenge]: TASK_PHASE.weeklyChallenge,
-  [SESSION_MODE.randomPractice]: TASK_PHASE.randomPractice,
-  [SESSION_MODE.weakWordsPractice]: TASK_PHASE.weakWordsPractice,
+  [SESSION_MODE.DAILY]: TASK_PHASE.DUE_REVIEW,
+  [SESSION_MODE.CHECKPOINT_CHALLENGE]: TASK_PHASE.CHECKPOINT_CHALLENGE,
+  [SESSION_MODE.RANDOM_PRACTICE]: TASK_PHASE.RANDOM_PRACTICE,
+  [SESSION_MODE.WEAK_WORDS_PRACTICE]: TASK_PHASE.WEAK_WORDS_PRACTICE,
 };
 
 const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance } = POLICY.review;
@@ -74,7 +74,7 @@ const curatedFor = (input: PlanInput, target: MeaningSnapshot) => {
 const curatedTasks = (input: PlanInput, target: MeaningSnapshot, semantic: boolean) =>
   curatedFor(input, target)
     .filter((item) => SEMANTIC_INTENTS.includes(intentOf(item.variant)!) === semantic)
-    .flatMap((item) => [resolveCurated(item, PROMPT_TYPE.text, input.ctx), resolveCurated(item, PROMPT_TYPE.audio, input.ctx)]);
+    .flatMap((item) => [resolveCurated(item, PROMPT_TYPE.TEXT, input.ctx), resolveCurated(item, PROMPT_TYPE.AUDIO, input.ctx)]);
 
 const weighted = (tasks: (ResolvedTask | null)[], weight: number) =>
   tasks.filter((task): task is ResolvedTask => task !== null).map((value) => ({ value, weight }));
@@ -83,8 +83,8 @@ function semanticCandidates(target: MeaningSnapshot, input: PlanInput) {
   const { pool, ctx, rng } = input;
   return weighted(
     [
-      buildSelectGloss(target, pool, PROMPT_TYPE.text, ctx, rng),
-      buildSelectGloss(target, pool, PROMPT_TYPE.audio, ctx, rng),
+      buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng),
+      buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng),
       buildTypingRecall(target, ctx),
       buildFlyReorder(target, ctx, rng),
       ...curatedTasks(input, target, true),
@@ -94,14 +94,14 @@ function semanticCandidates(target: MeaningSnapshot, input: PlanInput) {
 }
 
 const recallOnly = <T extends { value: ResolvedTask }>(candidates: T[]) =>
-  candidates.filter(({ value }) => value.serverEvaluation.intent === ASSESSMENT_INTENT.meaningRecall);
+  candidates.filter(({ value }) => value.serverEvaluation.intent === ASSESSMENT_INTENT.MEANING_RECALL);
 
 function skillCandidates(target: MeaningSnapshot, input: PlanInput) {
   const { ctx } = input;
   return weighted(
     [
-      buildRecording(target, PROMPT_TYPE.text, ctx),
-      buildRecording(target, PROMPT_TYPE.audio, ctx),
+      buildRecording(target, PROMPT_TYPE.TEXT, ctx),
+      buildRecording(target, PROMPT_TYPE.AUDIO, ctx),
       buildTranscription(target, ctx),
       ...curatedTasks(input, target, false),
     ],
@@ -114,47 +114,47 @@ function reviewTasks(input: PlanInput): ResolvedTask[] {
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {
     const semantic = semanticCandidates(target, input);
-    const primary = pickWeighted(mode === SESSION_MODE.weeklyChallenge ? recallOnly(semantic) : semantic, rng);
+    const primary = pickWeighted(mode === SESSION_MODE.CHECKPOINT_CHALLENGE ? recallOnly(semantic) : semantic, rng);
     if (!primary) continue;
     tasks.push(primary);
     if (rng() >= skillBonusChance) continue;
     const bonus = pickWeighted(skillCandidates(target, input), rng);
     if (bonus) tasks.push(bonus);
   }
-  if (mode !== SESSION_MODE.daily && mode !== SESSION_MODE.weeklyChallenge && rng() < matchChance) {
+  if (mode !== SESSION_MODE.DAILY && mode !== SESSION_MODE.CHECKPOINT_CHALLENGE && rng() < matchChance) {
     const match = buildMatch(shuffle(reviewTargets, rng).slice(0, POLICY.newLearning.matchPairCount), ctx, rng);
     if (match) tasks.push(match);
   }
   return shuffle(tasks, rng);
 }
 
-const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYPE.audio : PROMPT_TYPE.text);
+const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYPE.AUDIO : PROMPT_TYPE.TEXT);
 
 function buildGloss(target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
   return (
-    buildSelectGloss(target, pool, pickModality(rng), ctx, rng) ?? buildSelectGloss(target, pool, PROMPT_TYPE.text, ctx, rng)
+    buildSelectGloss(target, pool, pickModality(rng), ctx, rng) ?? buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng)
   );
 }
 
 function buildNewSlot(slot: TaskSlot, target: MeaningSnapshot, input: PlanInput) {
   const { pool, ctx, rng } = input;
-  if (slot.template === TEMPLATE.recording) {
-    return buildRecording(target, pickModality(rng), ctx) ?? buildRecording(target, PROMPT_TYPE.text, ctx);
+  if (slot.template === TEMPLATE.RECORDING) {
+    return buildRecording(target, pickModality(rng), ctx) ?? buildRecording(target, PROMPT_TYPE.TEXT, ctx);
   }
   if (slot.isFirstRecall) {
-    const fly = slot.template === TEMPLATE.flyReorder ? buildFlyReorder(target, ctx, rng) : null;
+    const fly = slot.template === TEMPLATE.FLY_REORDER ? buildFlyReorder(target, ctx, rng) : null;
     return fly ?? buildTypingRecall(target, ctx);
   }
-  return slot.variant === VARIANT.reverseGloss ? buildSelectReverse(target, pool, ctx, rng) : buildGloss(target, input);
+  return slot.variant === VARIANT.REVERSE_GLOSS ? buildSelectReverse(target, pool, ctx, rng) : buildGloss(target, input);
 }
 
 // C29/C30: a Meaning lacking any mandatory group is dropped before issue.
 const canLearn = (target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) =>
   Boolean(
-    buildSelectGloss(target, pool, PROMPT_TYPE.text, ctx, rng) &&
+    buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng) &&
       buildSelectReverse(target, pool, ctx, rng) &&
       buildTypingRecall(target, ctx) &&
-      buildRecording(target, PROMPT_TYPE.text, ctx),
+      buildRecording(target, PROMPT_TYPE.TEXT, ctx),
   );
 
 const visibleText = ({ task }: PlannedTask) => {
@@ -169,7 +169,7 @@ const previousShowsAnswer = (step: PlannedStep, answers: string[]) =>
 
 function markPriming(steps: PlannedStep[]) {
   steps.forEach((step, index) => {
-    if (step.kind !== 'task' || step.task.serverEvaluation.intent !== ASSESSMENT_INTENT.meaningRecall) return;
+    if (step.kind !== 'task' || step.task.serverEvaluation.intent !== ASSESSMENT_INTENT.MEANING_RECALL) return;
     const window = steps.slice(Math.max(0, index - POLICY.priming.windowTasks), index);
     step.task.serverEvaluation.isPrimed = window.some((previous) => previousShowsAnswer(previous, step.task.serverEvaluation.answerTexts));
   });
@@ -200,7 +200,7 @@ export function buildPlan(input: PlanInput): PlannedStep[] {
     }
     const built = buildNewSlot(slot, target, input);
     if (!built) continue;
-    const planned = addTask(built, TASK_PHASE.newPractice);
+    const planned = addTask(built, TASK_PHASE.NEW_PRACTICE);
     if (slot.isFirstRecall) {
       planned.task.serverEvaluation.isFirstRecall = true;
       learnSteps.get(slot.meaningIndex)!.firstRecallTaskId = planned.id;

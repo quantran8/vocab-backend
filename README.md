@@ -12,7 +12,7 @@ Requires Node 22.18+ and pnpm.
 pnpm install
 cp .env.example .env      # fill in Supabase values
 pnpm db:migrate           # needs DIRECT_URL
-pnpm db:seed              # optional 8-word demo; set ALLOW_PLACEHOLDER_AUDIO only for local use
+pnpm db:seed              # optional demo: 4 collections, 20 words, 33 curated items (text-only, no audio)
 pnpm start:dev
 ```
 
@@ -23,6 +23,7 @@ API docs are served at `/docs`.
 - `DATABASE_URL` is the transaction pooler (6543); `DIRECT_URL` is for migrations only.
 - The database session TimeZone must be UTC (the Supabase default). The app refuses to boot otherwise.
 - Migrations enable RLS on every table with no policies, so anon and authenticated roles cannot reach them through PostgREST. The app uses the `postgres` role, which bypasses RLS.
+- `/v1/auth/{signup,login,google,refresh}` are public and proxy Supabase Auth (needs `SUPABASE_ANON_KEY`). Google: enable the provider in the Supabase dashboard; the client sends the Google ID token (and the raw `nonce` if it used one). Email confirmation on means signup returns `session: null`.
 - Admin routes require `app_metadata.role` of `editor` or `admin`, set server-side in Supabase Auth.
 
 ## Audio

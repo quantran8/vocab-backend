@@ -1,0 +1,642 @@
+{
+  "collections": [
+    {
+      "id": "01a18faf-6900-7b77-ac74-babe5c95cea3",
+      "slug": "everyday-english",
+      "title": "Everyday English",
+      "vi": {
+        "title": "Tiếng Anh hằng ngày",
+        "description": "Từ vựng giao tiếp trong các tình huống thường gặp."
+      },
+      "topics": [
+        {
+          "id": "01a18faf-6900-763d-85e2-a1da20420433",
+          "slug": "travel",
+          "title": "Travel",
+          "vi": {
+            "title": "Du lịch & Di chuyển",
+            "description": "Đi lại, vé, hành lý và đặt chỗ."
+          },
+          "meanings": [
+            "01a18faf-6900-715e-ba6d-3121d482c283",
+            "01a18faf-6900-727d-8d70-5f16ea0e82be",
+            "01a18faf-6900-77c0-a341-597c05982083",
+            "01a18faf-6900-7f9c-93d8-7878775bc0a1",
+            "01a18faf-6900-768a-a353-9a25eb909720"
+          ]
+        },
+        {
+          "id": "01a18faf-6900-7c16-ba2d-9558b55f714f",
+          "slug": "food-drinks",
+          "title": "Food & Drinks",
+          "vi": {
+            "title": "Ăn uống",
+            "description": "Nhà hàng, thực đơn và gọi món."
+          },
+          "meanings": [
+            "01a18faf-6900-7490-883d-0751210cfdab",
+            "01a18faf-6900-7096-a14e-3e28130e787b",
+            "01a18faf-6900-7d7b-bc9e-5be8bfe5c734"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7ae1-b873-fa45aef4dc7e",
+      "slug": "toeic",
+      "title": "TOEIC",
+      "vi": {
+        "title": "TOEIC",
+        "description": "Từ vựng công việc và giao tiếp thường gặp trong TOEIC."
+      },
+      "topics": [
+        {
+          "id": "01a18faf-6900-721c-b5b8-50f80d698e12",
+          "slug": "office-meetings",
+          "title": "Office & Meetings",
+          "vi": {
+            "title": "Văn phòng & Cuộc họp",
+            "description": "Cuộc họp, công việc và thời hạn."
+          },
+          "meanings": [
+            "01a18faf-6900-785b-8c38-519a7a11c16b",
+            "01a18faf-6900-70bf-83a3-c7aa0923f214",
+            "01a18faf-6900-7f9c-93d8-7878775bc0a1",
+            "01a18faf-6900-74d9-b1b5-fc347d8bccaa"
+          ]
+        },
+        {
+          "id": "01a18faf-6900-76a0-9e7c-0d1bb060e9a9",
+          "slug": "scheduling-communication",
+          "title": "Scheduling & Communication",
+          "vi": {
+            "title": "Lịch hẹn & Giao tiếp",
+            "description": "Thông báo, xác nhận và thay đổi lịch."
+          },
+          "meanings": [
+            "01a18faf-6900-768a-a353-9a25eb909720",
+            "01a18faf-6900-77a0-ac2a-964244d8eeef"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7134-92bc-258e96025954",
+      "slug": "ielts",
+      "title": "IELTS",
+      "vi": {
+        "title": "IELTS",
+        "description": "Từ vựng theo chủ đề phù hợp để luyện tập IELTS."
+      },
+      "topics": [
+        {
+          "id": "01a18faf-6900-744e-9d25-0d1e1d09fae2",
+          "slug": "environment",
+          "title": "Environment & Sustainability",
+          "vi": {
+            "title": "Môi trường",
+            "description": "Biến đổi khí hậu, ô nhiễm và tái chế."
+          },
+          "meanings": [
+            "01a18faf-6900-7b22-a928-ecec894c7a49",
+            "01a18faf-6900-723a-9ecf-18472576592e",
+            "01a18faf-6900-7d37-a267-c04a5021e4e0"
+          ]
+        },
+        {
+          "id": "01a18faf-6900-742f-8b81-89c91a5cfc3b",
+          "slug": "education-research",
+          "title": "Education & Research",
+          "vi": {
+            "title": "Giáo dục & Nghiên cứu",
+            "description": "Nghiên cứu, báo cáo và lập luận."
+          },
+          "meanings": [
+            "01a18faf-6900-7b1c-ad4d-6ea834041137",
+            "01a18faf-6900-766f-89bc-4bc327a06128"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7433-bf1e-2f2eddecde68",
+      "slug": "business-work",
+      "title": "Business & Work",
+      "vi": {
+        "title": "Kinh doanh & Công việc",
+        "description": "Từ vựng dùng trong tài chính, thương lượng và công việc."
+      },
+      "topics": [
+        {
+          "id": "01a18faf-6900-70ba-91f7-e710bf0e3175",
+          "slug": "finance-billing",
+          "title": "Finance & Billing",
+          "vi": {
+            "title": "Tài chính & Thanh toán",
+            "description": "Ngân sách, hóa đơn và thanh toán."
+          },
+          "meanings": [
+            "01a18faf-6900-78b8-8032-64b612eacea8",
+            "01a18faf-6900-74d9-b1b5-fc347d8bccaa",
+            "01a18faf-6900-7d7b-bc9e-5be8bfe5c734"
+          ]
+        },
+        {
+          "id": "01a18faf-6900-79b9-ad36-92eda2c79f18",
+          "slug": "negotiation-contracts",
+          "title": "Negotiation & Contracts",
+          "vi": {
+            "title": "Đàm phán & Hợp đồng",
+            "description": "Thương lượng và ký kết."
+          },
+          "meanings": [
+            "01a18faf-6900-7294-b0e7-fe920aef6ef2",
+            "01a18faf-6900-707b-83a5-84c7057fedfc"
+          ]
+        }
+      ]
+    }
+  ],
+  "words": [
+    {
+      "id": "01a18faf-6900-720b-9146-6bd056a47468",
+      "lemma": "ticket",
+      "typeId": "01a18faf-6900-7198-815a-4e8c1936e6b6",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7d40-8863-2676a234b6bb",
+        "ipa": "/ˈtɪkɪt/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-715e-ba6d-3121d482c283",
+        "cefrLevel": "A1",
+        "coreDefinition": "a pass that allows travel or admission",
+        "text": "vé",
+        "definition": "Giấy hoặc mã cho phép di chuyển hoặc vào một sự kiện."
+      },
+      "example": {
+        "id": "01a18faf-6900-7164-b7bf-fcb1266077c6",
+        "text": "Please keep your ticket until the end of the journey.",
+        "start": 17,
+        "end": 23,
+        "translation": "Hãy giữ vé đến hết chuyến đi."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7334-8f1a-316945399226",
+      "lemma": "luggage",
+      "typeId": "01a18faf-6900-789e-b600-9c6a1e9aefb2",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7827-8ad9-a267f3ad1c69",
+        "ipa": "/ˈlʌɡɪdʒ/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-727d-8d70-5f16ea0e82be",
+        "cefrLevel": "A2",
+        "coreDefinition": "bags and suitcases carried while travelling",
+        "text": "hành lý",
+        "definition": "Túi và vali mang theo khi đi xa."
+      },
+      "example": {
+        "id": "01a18faf-6900-73eb-9162-f23dcfb9e25b",
+        "text": "Our luggage is already on the bus.",
+        "start": 4,
+        "end": 11,
+        "translation": "Hành lý của chúng tôi đã ở trên xe buýt."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7ca4-8725-41c168870877",
+      "lemma": "arrive",
+      "typeId": "01a18faf-6900-7ff0-983b-282409eef2f9",
+      "partOfSpeech": "verb",
+      "pronunciation": {
+        "id": "01a18faf-6900-7df6-9833-d595c41a8990",
+        "ipa": "/əˈraɪv/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-77c0-a341-597c05982083",
+        "cefrLevel": "A1",
+        "coreDefinition": "to reach a destination",
+        "text": "đến nơi",
+        "definition": "Đến một địa điểm sau khi di chuyển."
+      },
+      "example": {
+        "id": "01a18faf-6900-7646-9d24-0b483953d490",
+        "text": "We arrive at the airport at nine.",
+        "start": 3,
+        "end": 9,
+        "translation": "Chúng tôi đến sân bay lúc chín giờ."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7cdb-b50a-f0aa09547e13",
+      "lemma": "menu",
+      "typeId": "01a18faf-6900-7bd3-bbdc-3d6de2a6b353",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-764a-8d20-ed6be80b1e6b",
+        "ipa": "/ˈmɛnjuː/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7490-883d-0751210cfdab",
+        "cefrLevel": "A1",
+        "coreDefinition": "a list of food and drinks available to order",
+        "text": "thực đơn",
+        "definition": "Danh sách món ăn và đồ uống có thể gọi."
+      },
+      "example": {
+        "id": "01a18faf-6900-77ca-8bb9-29cb6fd0c7ac",
+        "text": "The menu includes several vegetarian dishes.",
+        "start": 4,
+        "end": 8,
+        "translation": "Thực đơn có một số món chay."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7dd3-b2d4-5fe4dbe2dbe5",
+      "lemma": "order",
+      "typeId": "01a18faf-6900-76bc-9266-123774ca15e5",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-75b2-8f93-fb6676c9639c",
+        "ipa": "/ˈɔːrdɚ/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7096-a14e-3e28130e787b",
+        "cefrLevel": "A2",
+        "coreDefinition": "a request for food or drinks to be served",
+        "text": "đơn gọi món",
+        "definition": "Yêu cầu mua hoặc phục vụ món ăn, thức uống."
+      },
+      "example": {
+        "id": "01a18faf-6900-7aa6-9c73-6dd489ca2618",
+        "text": "Your order will be ready in ten minutes.",
+        "start": 5,
+        "end": 10,
+        "translation": "Đơn gọi món của bạn sẽ xong trong mười phút."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7522-a43d-4571f6ae2d29",
+      "lemma": "receipt",
+      "typeId": "01a18faf-6900-725a-aa12-0efb6436e496",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7c1c-96a3-847a81d8bf20",
+        "ipa": "/rɪˈsiːt/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7d7b-bc9e-5be8bfe5c734",
+        "cefrLevel": "A2",
+        "coreDefinition": "a record showing that a payment was made",
+        "text": "biên lai",
+        "definition": "Giấy hoặc bản điện tử xác nhận đã thanh toán."
+      },
+      "example": {
+        "id": "01a18faf-6900-76ba-974b-9a5cc5fef209",
+        "text": "Please keep the receipt after paying.",
+        "start": 16,
+        "end": 23,
+        "translation": "Hãy giữ biên lai sau khi thanh toán."
+      }
+    },
+    {
+      "id": "01a18faf-6900-783f-ae01-5605331e7a50",
+      "lemma": "meeting",
+      "typeId": "01a18faf-6900-701e-9d2d-23605d40c2c8",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7f0c-a908-cbf5efdbca02",
+        "ipa": "/ˈmiːtɪŋ/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-785b-8c38-519a7a11c16b",
+        "cefrLevel": "A2",
+        "coreDefinition": "a gathering of people to discuss a subject",
+        "text": "cuộc họp",
+        "definition": "Buổi gặp của một nhóm để trao đổi công việc."
+      },
+      "example": {
+        "id": "01a18faf-6900-7334-81bd-b99c1627676f",
+        "text": "Our meeting starts at ten in the morning.",
+        "start": 4,
+        "end": 11,
+        "translation": "Cuộc họp của chúng tôi bắt đầu lúc mười giờ sáng."
+      }
+    },
+    {
+      "id": "01a18faf-6900-76bc-965b-0bb1bb5f4795",
+      "lemma": "deadline",
+      "typeId": "01a18faf-6900-72c8-92ab-acbb63aa8677",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7de5-b6a7-64e8b96b3d5e",
+        "ipa": "/ˈdɛdlaɪn/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-70bf-83a3-c7aa0923f214",
+        "cefrLevel": "B1",
+        "coreDefinition": "the latest time by which a task must be finished",
+        "text": "hạn chót",
+        "definition": "Thời điểm cuối cùng phải hoàn thành một công việc."
+      },
+      "example": {
+        "id": "01a18faf-6900-7d7e-9cbe-58ddd4078e8e",
+        "text": "The deadline for this report is Friday.",
+        "start": 4,
+        "end": 12,
+        "translation": "Hạn chót của báo cáo này là thứ Sáu."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7e20-a45f-5c35d5336c06",
+      "lemma": "schedule",
+      "typeId": "01a18faf-6900-740b-8e23-d8fcea05d5e6",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-77d1-a775-4555c88bc9ae",
+        "ipa": "/ˈskɛdʒuːl/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7f9c-93d8-7878775bc0a1",
+        "cefrLevel": "A2",
+        "coreDefinition": "a plan showing when activities will happen",
+        "text": "lịch trình",
+        "definition": "Danh sách hoạt động và thời gian được sắp xếp trước."
+      },
+      "example": {
+        "id": "01a18faf-6900-72d9-9959-134bff51d1e3",
+        "text": "The schedule lists all the training sessions.",
+        "start": 4,
+        "end": 12,
+        "translation": "Lịch trình liệt kê tất cả buổi đào tạo."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7056-bd64-807c39f15a75",
+      "lemma": "confirm",
+      "typeId": "01a18faf-6900-7b81-ada2-cf9d4303c215",
+      "partOfSpeech": "verb",
+      "pronunciation": {
+        "id": "01a18faf-6900-7a91-b090-9a31829f90fb",
+        "ipa": "/kənˈfɝːm/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-768a-a353-9a25eb909720",
+        "cefrLevel": "B1",
+        "coreDefinition": "to establish that information or an arrangement is correct",
+        "text": "xác nhận",
+        "definition": "Khẳng định một thông tin hoặc thỏa thuận là chính xác."
+      },
+      "example": {
+        "id": "01a18faf-6900-7658-a7d2-32d44631a7d9",
+        "text": "Please confirm your reservation by email.",
+        "start": 7,
+        "end": 14,
+        "translation": "Vui lòng xác nhận đặt chỗ qua email."
+      }
+    },
+    {
+      "id": "01a18faf-6900-74ba-97eb-a6386dde32c9",
+      "lemma": "postpone",
+      "typeId": "01a18faf-6900-793c-931a-0d46ad55b1cd",
+      "partOfSpeech": "verb",
+      "pronunciation": {
+        "id": "01a18faf-6900-7a91-b1d8-cf628d39b3af",
+        "ipa": "/poʊstˈpoʊn/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-77a0-ac2a-964244d8eeef",
+        "cefrLevel": "B1",
+        "coreDefinition": "to arrange for something to happen at a later time",
+        "text": "hoãn",
+        "definition": "Dời một sự kiện sang thời điểm muộn hơn."
+      },
+      "example": {
+        "id": "01a18faf-6900-763c-a80e-112e267e0c24",
+        "text": "They postpone the interview until next Monday.",
+        "start": 5,
+        "end": 13,
+        "translation": "Họ hoãn buổi phỏng vấn đến thứ Hai tuần sau."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7ec4-a971-512ba2e3cf9f",
+      "lemma": "pollution",
+      "typeId": "01a18faf-6900-7d99-861e-7b93d5b6498d",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-73c6-a756-d8d7cbd6c348",
+        "ipa": "/pəˈluːʃən/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7b22-a928-ecec894c7a49",
+        "cefrLevel": "B1",
+        "coreDefinition": "the presence of harmful substances in the environment",
+        "text": "sự ô nhiễm",
+        "definition": "Tình trạng môi trường bị nhiễm chất có hại."
+      },
+      "example": {
+        "id": "01a18faf-6900-77e1-9516-56c09a229a35",
+        "text": "Air pollution affects public health.",
+        "start": 4,
+        "end": 13,
+        "translation": "Ô nhiễm không khí ảnh hưởng đến sức khỏe cộng đồng."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7608-93ad-dd855d6a9f87",
+      "lemma": "climate",
+      "typeId": "01a18faf-6900-7eeb-b34d-58bb708a931c",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7263-8db0-178200aa81c0",
+        "ipa": "/ˈklaɪmət/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-723a-9ecf-18472576592e",
+        "cefrLevel": "A2",
+        "coreDefinition": "the typical weather conditions of a region over a long period",
+        "text": "khí hậu",
+        "definition": "Đặc điểm thời tiết trung bình của một vùng trong thời gian dài."
+      },
+      "example": {
+        "id": "01a18faf-6900-72b0-967b-6804d630c565",
+        "text": "The climate in this region is getting warmer.",
+        "start": 4,
+        "end": 11,
+        "translation": "Khí hậu ở vùng này đang ấm lên."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7de8-b5bb-a53b89e298e8",
+      "lemma": "recycle",
+      "typeId": "01a18faf-6900-7557-9b12-a96043357a0b",
+      "partOfSpeech": "verb",
+      "pronunciation": {
+        "id": "01a18faf-6900-7295-a56e-7f2455b9a1a8",
+        "ipa": "/riːˈsaɪkəl/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7d37-a267-c04a5021e4e0",
+        "cefrLevel": "B1",
+        "coreDefinition": "to process used materials so they can be used again",
+        "text": "tái chế",
+        "definition": "Xử lý đồ đã dùng để tạo thành vật liệu có thể sử dụng lại."
+      },
+      "example": {
+        "id": "01a18faf-6900-7b39-82c4-3edf3809ff29",
+        "text": "We recycle paper and plastic at school.",
+        "start": 3,
+        "end": 10,
+        "translation": "Chúng tôi tái chế giấy và nhựa ở trường."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7cd4-9e34-c580e1d65fce",
+      "lemma": "research",
+      "typeId": "01a18faf-6900-7b1a-95b9-76dc453878f1",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7943-b9a7-9a111aa9a37c",
+        "ipa": "/rɪˈsɝːtʃ/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7b1c-ad4d-6ea834041137",
+        "cefrLevel": "B1",
+        "coreDefinition": "careful study intended to discover facts or information",
+        "text": "nghiên cứu",
+        "definition": "Hoạt động tìm hiểu có hệ thống để tạo ra kiến thức mới."
+      },
+      "example": {
+        "id": "01a18faf-6900-77cb-89d3-0dab54c92c79",
+        "text": "This research focuses on language learning.",
+        "start": 5,
+        "end": 13,
+        "translation": "Nghiên cứu này tập trung vào việc học ngôn ngữ."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7996-8ceb-8eddf48ba151",
+      "lemma": "evidence",
+      "typeId": "01a18faf-6900-7e08-b81f-203deb5681e4",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-786e-856c-f0f6433bc478",
+        "ipa": "/ˈɛvɪdəns/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-766f-89bc-4bc327a06128",
+        "cefrLevel": "B2",
+        "coreDefinition": "facts or information supporting a claim",
+        "text": "bằng chứng",
+        "definition": "Thông tin hoặc dữ kiện dùng để hỗ trợ một nhận định."
+      },
+      "example": {
+        "id": "01a18faf-6900-7fb7-90d6-52c962383a08",
+        "text": "The report presents evidence of rising temperatures.",
+        "start": 20,
+        "end": 28,
+        "translation": "Báo cáo đưa ra bằng chứng về nhiệt độ tăng."
+      }
+    },
+    {
+      "id": "01a18faf-6900-77a5-86df-285c05c9001a",
+      "lemma": "invoice",
+      "typeId": "01a18faf-6900-76e4-afc7-5b6b38f908e9",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-716d-8529-4652a3747e47",
+        "ipa": "/ˈɪnvɔɪs/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-78b8-8032-64b612eacea8",
+        "cefrLevel": "B1",
+        "coreDefinition": "a document stating the amount owed for goods or services",
+        "text": "hóa đơn yêu cầu thanh toán",
+        "definition": "Chứng từ liệt kê hàng hóa hoặc dịch vụ và số tiền phải trả."
+      },
+      "example": {
+        "id": "01a18faf-6900-76ae-86bd-912ca6fea3b2",
+        "text": "The supplier sent an invoice yesterday.",
+        "start": 21,
+        "end": 28,
+        "translation": "Nhà cung cấp đã gửi hóa đơn hôm qua."
+      }
+    },
+    {
+      "id": "01a18faf-6900-76a5-91a1-45051a8887a3",
+      "lemma": "budget",
+      "typeId": "01a18faf-6900-7d80-b1b4-0409e5b6c2a5",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-70c6-8e7c-4b1648be7a9e",
+        "ipa": "/ˈbʌdʒɪt/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-74d9-b1b5-fc347d8bccaa",
+        "cefrLevel": "B1",
+        "coreDefinition": "an amount of money planned for a particular purpose",
+        "text": "ngân sách",
+        "definition": "Số tiền dự kiến dành cho một mục đích."
+      },
+      "example": {
+        "id": "01a18faf-6900-7f40-bcde-56dd7ae5962b",
+        "text": "The project budget covers travel expenses.",
+        "start": 12,
+        "end": 18,
+        "translation": "Ngân sách dự án bao gồm chi phí đi lại."
+      }
+    },
+    {
+      "id": "01a18faf-6900-7da0-a1c8-25e363a5270a",
+      "lemma": "negotiate",
+      "typeId": "01a18faf-6900-73a0-b91a-418875288264",
+      "partOfSpeech": "verb",
+      "pronunciation": {
+        "id": "01a18faf-6900-700c-9927-07c861e481ec",
+        "ipa": "/nɪˈɡoʊʃieɪt/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-7294-b0e7-fe920aef6ef2",
+        "cefrLevel": "B2",
+        "coreDefinition": "to discuss in order to reach an agreement",
+        "text": "đàm phán",
+        "definition": "Thảo luận nhằm đạt được thỏa thuận chung."
+      },
+      "example": {
+        "id": "01a18faf-6900-7fc3-a901-4f2693be0ac7",
+        "text": "Both sides negotiate the final price.",
+        "start": 11,
+        "end": 20,
+        "translation": "Hai bên đàm phán mức giá cuối cùng."
+      }
+    },
+    {
+      "id": "01a18faf-6900-77eb-bad1-2b5aeaff049b",
+      "lemma": "contract",
+      "typeId": "01a18faf-6900-70e3-845b-9a190354df8f",
+      "partOfSpeech": "noun",
+      "pronunciation": {
+        "id": "01a18faf-6900-7cdf-a3db-668ed5ef822f",
+        "ipa": "/ˈkɑːntrækt/"
+      },
+      "meaning": {
+        "id": "01a18faf-6900-707b-83a5-84c7057fedfc",
+        "cefrLevel": "B1",
+        "coreDefinition": "a legally binding agreement between parties",
+        "text": "hợp đồng",
+        "definition": "Thỏa thuận có tính ràng buộc giữa các bên."
+      },
+      "example": {
+        "id": "01a18faf-6900-7062-ac01-8f75e235d1da",
+        "text": "They signed the contract this morning.",
+        "start": 16,
+        "end": 24,
+        "translation": "Họ đã ký hợp đồng sáng nay."
+      }
+    }
+  ]
+}

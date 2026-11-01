@@ -17,7 +17,7 @@ export class IdentityService {
   async getMe(userId: string) {
     const user = await this.db.query.appUsers.findFirst({
       where: eq(appUsers.id, userId),
-      columns: { id: true, proficiencyLevel: true, learningLevel: true },
+      columns: { id: true, proficiencyLevel: true },
       with: {
         settings: { columns: { userId: false } },
         learningScope: { columns: { collectionId: true } },
@@ -33,9 +33,8 @@ export class IdentityService {
   }
 
   async setLevels(userId: string, body: z.infer<typeof levelsSchema>) {
-    const learningLevel = body.learningLevel ?? body.proficiencyLevel;
-    await this.db.update(appUsers).set({ proficiencyLevel: body.proficiencyLevel, learningLevel }).where(eq(appUsers.id, userId));
-    return { proficiencyLevel: body.proficiencyLevel, learningLevel };
+    await this.db.update(appUsers).set({ proficiencyLevel: body.proficiencyLevel }).where(eq(appUsers.id, userId));
+    return { proficiencyLevel: body.proficiencyLevel };
   }
 
   async updateSettings(userId: string, body: z.infer<typeof settingsSchema>) {
@@ -57,8 +56,8 @@ export class IdentityService {
       .where(and(
         inArray(topics.id, ids),
         eq(topics.collectionId, collectionId),
-        eq(topics.status, CONTENT_STATUS.published),
-        eq(collections.status, CONTENT_STATUS.published),
+        eq(topics.status, CONTENT_STATUS.PUBLISHED),
+        eq(collections.status, CONTENT_STATUS.PUBLISHED),
       ));
     if (valid !== ids.length) throw new ApiError('VALIDATION_FAILED', 'Topics must be published and belong to the Collection');
 

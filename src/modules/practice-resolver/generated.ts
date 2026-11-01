@@ -13,8 +13,8 @@ import { findTaskProblem } from './validate-task';
 
 const AZURE_ASSESSMENT = { kind: 'azurePronunciation' } as const;
 
-const textPrompt = (text: string): Prompt => ({ type: PROMPT_TYPE.text, text });
-const audioPrompt = (url: string, locale: string): Prompt => ({ type: PROMPT_TYPE.audio, audio: { url, locale } });
+const textPrompt = (text: string): Prompt => ({ type: PROMPT_TYPE.TEXT, text });
+const audioPrompt = (url: string, locale: string): Prompt => ({ type: PROMPT_TYPE.AUDIO, audio: { url, locale } });
 
 export const pronunciationFor = (snapshot: MeaningSnapshot, accent: string) =>
   snapshot.pronunciations.find((p) => p.accentLocale === accent) ?? null;
@@ -46,6 +46,7 @@ function assemble(parts: Parts): ResolvedTask | null {
     template: parts.template,
     variant: parts.variant,
     prompt: parts.prompt,
+    maxRetries: POLICY.practice.maxRetries[parts.template],
     ...parts.body,
     ...(parts.evaluation && { evaluation: parts.evaluation }),
   } as ClientPayload;
@@ -86,13 +87,13 @@ export function buildSelectGloss(target: MeaningSnapshot, pool: DistractorView[]
   const wrong = pickDistractors(othersOf(target, pool).map((d) => d.meaningText), target.meaningText, rng);
   if (!wrong) return null;
   const { options, correctOptionId } = buildOptions(target.meaningText, wrong, rng);
-  const pronunciation = promptType === PROMPT_TYPE.audio ? playablePronunciation(target, ctx) : null;
-  if (promptType === PROMPT_TYPE.audio && !pronunciation) return null;
+  const pronunciation = promptType === PROMPT_TYPE.AUDIO ? playablePronunciation(target, ctx) : null;
+  if (promptType === PROMPT_TYPE.AUDIO && !pronunciation) return null;
 
   return assemble({
-    template: TEMPLATE.select,
-    variant: VARIANT.gloss,
-    intent: ASSESSMENT_INTENT.meaningRecognition,
+    template: TEMPLATE.SELECT,
+    variant: VARIANT.GLOSS,
+    intent: ASSESSMENT_INTENT.MEANING_RECOGNITION,
     prompt: pronunciation ? audioPrompt(pronunciation.audioUrl, pronunciation.accentLocale) : textPrompt(target.lemma),
     body: { question: copyFor(ctx.locale, pronunciation ? 'select.gloss.audio.question' : 'select.gloss.question'), options },
     evaluation: { correctOptionId },
@@ -108,9 +109,9 @@ export function buildSelectReverse(target: MeaningSnapshot, pool: DistractorView
   if (!wrong) return null;
   const { options, correctOptionId } = buildOptions(target.lemma, wrong, rng);
   return assemble({
-    template: TEMPLATE.select,
-    variant: VARIANT.reverseGloss,
-    intent: ASSESSMENT_INTENT.meaningRecognition,
+    template: TEMPLATE.SELECT,
+    variant: VARIANT.REVERSE_GLOSS,
+    intent: ASSESSMENT_INTENT.MEANING_RECOGNITION,
     prompt: textPrompt(target.meaningText),
     body: { question: copyFor(ctx.locale, 'select.reverseGloss.question'), options },
     evaluation: { correctOptionId },
@@ -123,9 +124,9 @@ export function buildSelectReverse(target: MeaningSnapshot, pool: DistractorView
 export function buildTypingRecall(target: MeaningSnapshot, ctx: ResolveContext) {
   const acceptedResponses = [target.lemma];
   return assemble({
-    template: TEMPLATE.typing,
-    variant: VARIANT.meaningRecall,
-    intent: ASSESSMENT_INTENT.meaningRecall,
+    template: TEMPLATE.TYPING,
+    variant: VARIANT.MEANING_RECALL,
+    intent: ASSESSMENT_INTENT.MEANING_RECALL,
     prompt: textPrompt(target.meaningText),
     body: { question: copyFor(ctx.locale, 'typing.clue.question') },
     evaluation: { acceptedResponses },
@@ -140,9 +141,9 @@ export function buildTranscription(target: MeaningSnapshot, ctx: ResolveContext)
   if (!pronunciation) return null;
   const acceptedResponses = [target.lemma];
   return assemble({
-    template: TEMPLATE.typing,
-    variant: VARIANT.transcription,
-    intent: ASSESSMENT_INTENT.transcription,
+    template: TEMPLATE.TYPING,
+    variant: VARIANT.TRANSCRIPTION,
+    intent: ASSESSMENT_INTENT.TRANSCRIPTION,
     prompt: audioPrompt(pronunciation.audioUrl, pronunciation.accentLocale),
     body: { question: copyFor(ctx.locale, 'typing.transcription.question') },
     evaluation: { acceptedResponses },
@@ -162,9 +163,9 @@ export function buildFlyReorder(target: MeaningSnapshot, ctx: ResolveContext, rn
   if (!scrambled) return null;
   const acceptedResponses = [target.lemma];
   return assemble({
-    template: TEMPLATE.flyReorder,
-    variant: VARIANT.spellingRecall,
-    intent: ASSESSMENT_INTENT.meaningRecall,
+    template: TEMPLATE.FLY_REORDER,
+    variant: VARIANT.SPELLING_RECALL,
+    intent: ASSESSMENT_INTENT.MEANING_RECALL,
     prompt: textPrompt(target.meaningText),
     body: {
       question: copyFor(ctx.locale, 'flyReorder.clue.question'),
@@ -180,12 +181,12 @@ export function buildFlyReorder(target: MeaningSnapshot, ctx: ResolveContext, rn
 export function buildRecording(target: MeaningSnapshot, promptType: PromptType, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
   if (!pronunciation) return null;
-  const playable = promptType === PROMPT_TYPE.audio ? playablePronunciation(target, ctx) : null;
-  if (promptType === PROMPT_TYPE.audio && !playable) return null;
+  const playable = promptType === PROMPT_TYPE.AUDIO ? playablePronunciation(target, ctx) : null;
+  if (promptType === PROMPT_TYPE.AUDIO && !playable) return null;
   return assemble({
-    template: TEMPLATE.recording,
-    variant: VARIANT.scriptedPronunciation,
-    intent: ASSESSMENT_INTENT.pronunciation,
+    template: TEMPLATE.RECORDING,
+    variant: VARIANT.SCRIPTED_PRONUNCIATION,
+    intent: ASSESSMENT_INTENT.PRONUNCIATION,
     prompt: playable ? audioPrompt(playable.audioUrl, playable.accentLocale) : textPrompt(target.lemma),
     body: { question: copyFor(ctx.locale, 'recording.question'), assessment: AZURE_ASSESSMENT },
     key: { referenceText: target.lemma, referenceLocale: pronunciation.accentLocale },
@@ -202,9 +203,9 @@ export function buildMatch(targets: MeaningSnapshot[], ctx: ResolveContext, rng:
   const right = shuffle(targets.map((t) => ({ id: rightIds.get(t.meaningId)!, text: t.meaningText })), rng);
   const correctPairs = targets.map((t, index) => ({ leftId: index + 1, rightId: rightIds.get(t.meaningId)! }));
   return assemble({
-    template: TEMPLATE.match,
-    variant: VARIANT.meaningPairs,
-    intent: ASSESSMENT_INTENT.pairing,
+    template: TEMPLATE.MATCH,
+    variant: VARIANT.MEANING_PAIRS,
+    intent: ASSESSMENT_INTENT.PAIRING,
     prompt: textPrompt(copyFor(ctx.locale, 'match.title')),
     body: { pairs: { left: shuffle(left, rng), right } },
     evaluation: { correctPairs },

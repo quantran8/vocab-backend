@@ -20,7 +20,7 @@ export class CatalogController {
     const locale = settings.uiLocale;
 
     const rows = await this.db.query.collections.findMany({
-      where: (c) => eq(c.status, CONTENT_STATUS.published),
+      where: (c) => eq(c.status, CONTENT_STATUS.PUBLISHED),
       orderBy: (c) => asc(c.slug),
       columns: { id: true, slug: true, title: true },
       with: {
@@ -29,7 +29,7 @@ export class CatalogController {
           columns: { title: true, description: true },
         },
         topics: {
-          where: (t) => eq(t.status, CONTENT_STATUS.published),
+          where: (t) => eq(t.status, CONTENT_STATUS.PUBLISHED),
           orderBy: (t) => asc(t.slug),
           columns: { id: true, slug: true, title: true },
           with: {

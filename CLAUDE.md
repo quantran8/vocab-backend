@@ -21,6 +21,8 @@ NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open 
 
 **Constants for repeated values.** Domain enums, error codes and event names live in `src/common/constants/`, trial numbers in `src/config/policy.ts`.
 
+**Domain consts:** keys are UPPER_SNAKE_CASE, stored values are lower_snake_case: `RANDOM_PRACTICE: 'random_practice'`. Never hardcode these values in `src`.
+
 ## Things that are easy to break
 
 - Ids: every table's `id` column uses `$defaultFn(newId)` (UUID v7, generated in the app). Call `newId()` when an id is needed before insert. DB columns have no default.
@@ -29,6 +31,7 @@ NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open 
 - JS `Date` keeps milliseconds only. Do not compare stored timestamps to microsecond values computed in SQL.
 - Drizzle drops `undefined` inside `and(...)` and treats `where(undefined)` as no filter, which widens it to every row. Never pass an optional id to `update`/`delete`.
 - `insert().values([])` throws: guard empty arrays.
-- Issued `session_tasks` and `meaning_publications` are immutable, enforced by triggers.
+- `learning_sessions.plan` and `meaning_publications` are immutable, enforced by triggers; retention may only set `plan` to NULL.
+- Never select `plan`, `raw_events` or `result` unless the request uses them.
 - Keep pure logic (evaluators, reducer, SRS, skills, interleaver) free of Nest and Drizzle.
 - Run seeds through the Nest build: `tsx`/esbuild does not emit decorator metadata.

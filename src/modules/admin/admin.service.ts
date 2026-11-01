@@ -95,7 +95,7 @@ export class AdminService {
   }
 
   async putItemLocale(practiceItemId: string, locale: string, body: ItemLocale) {
-    const approvedAt = body.editorialState === EDITORIAL_STATE.approved ? this.clock.now() : null;
+    const approvedAt = body.editorialState === EDITORIAL_STATE.APPROVED ? this.clock.now() : null;
     const data = { ...body, approvedAt };
     await this.db
       .insert(practiceItemLocalizations)
@@ -109,14 +109,14 @@ export class AdminService {
       SELECT i.status, i.supersedes_item_id AS "supersedesItemId",
              (SELECT count(*)::int FROM practice_item_targets t WHERE t.practice_item_id = i.id) AS targets,
              (SELECT count(*)::int FROM practice_item_localizations l
-              WHERE l.practice_item_id = i.id AND l.editorial_state = ${EDITORIAL_STATE.approved}) AS "approvedLocales"
+              WHERE l.practice_item_id = i.id AND l.editorial_state = ${EDITORIAL_STATE.APPROVED}) AS "approvedLocales"
       FROM practice_items i WHERE i.id = ${id}::uuid`);
     if (!item) throw new ApiError('NOT_FOUND', 'Practice item not found');
     if (item.targets === 0) throw new ApiError('TASK_DATA_INVALID', 'Item has no target');
     if (item.approvedLocales === 0) throw new ApiError('TASK_DATA_INVALID', 'Item has no approved locale');
 
     const now = this.clock.now();
-    const publish = { status: ITEM_STATUS.published, approvedAt: now };
+    const publish = { status: ITEM_STATUS.PUBLISHED, approvedAt: now };
     if (!item.supersedesItemId) {
       await this.db.update(practiceItems).set(publish).where(eq(practiceItems.id, id));
     } else {
@@ -125,10 +125,10 @@ export class AdminService {
         await tx.update(practiceItems).set(publish).where(eq(practiceItems.id, id));
         await tx
           .update(practiceItems)
-          .set({ status: ITEM_STATUS.retired })
-          .where(and(eq(practiceItems.id, supersedesItemId), eq(practiceItems.status, ITEM_STATUS.published)));
+          .set({ status: ITEM_STATUS.RETIRED })
+          .where(and(eq(practiceItems.id, supersedesItemId), eq(practiceItems.status, ITEM_STATUS.PUBLISHED)));
       });
     }
-    return { id, status: ITEM_STATUS.published };
+    return { id, status: ITEM_STATUS.PUBLISHED };
   }
 }

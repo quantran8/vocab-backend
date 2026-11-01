@@ -77,7 +77,7 @@ export class PublicationService {
     const localization = meaning.localizations[0];
     if (!meaning.cefrLevel || !(CEFR_LEVELS as readonly string[]).includes(meaning.cefrLevel)) throw reject('CEFR level missing');
     if (!localization?.meaningText.trim() || !localization.definitionText.trim()) throw reject('Localized meaning or definition missing');
-    if (localization.editorialState !== EDITORIAL_STATE.approved) throw reject('Localization is not approved');
+    if (localization.editorialState !== EDITORIAL_STATE.APPROVED) throw reject('Localization is not approved');
 
     const pronunciations = meaning.type.pronunciations;
     if (pronunciations.length === 0 || pronunciations.some((p) => !p.ipa?.trim())) throw reject('IPA missing');

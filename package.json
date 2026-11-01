@@ -8,14 +8,14 @@
   },
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
-    "start:dev": "nest start --watch",
+    "start": "node --env-file-if-exists=.env dist/main.js",
+    "start:dev": "nest start --watch --env-file .env",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "vitest run",
     "test:unit": "vitest run src/",
     "test:int": "vitest run test/",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "nest build && node dist/seed/seed.js",
+    "db:seed": "nest build && node --env-file-if-exists=.env dist/seed/seed.js",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

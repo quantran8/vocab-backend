@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock';
-import { DEFAULT_ACCENT, DIRECTNESS, Skill, SKILL, VALIDITY, WEEKLY_STATE } from '../../common/constants/domain';
+import { DEFAULT_ACCENT, DIRECTNESS, Skill, SKILL, SKILL_STATUS, VALIDITY, CHECKPOINT_STATE } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
+import { POLICY } from '../../config/policy';
 import { DB, Db, toDate } from '../../db/db';
 import { skillEvidence } from '../../db/schema';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
@@ -43,10 +44,10 @@ const stateOf = (index: EvidenceIndex, skill: Skill, id: string): SkillState =>
 
 function meaningView(row: MeaningRow, index: EvidenceIndex) {
   const pronunciation = row.snapshot.pronunciations.find((p) => p.accentLocale === DEFAULT_ACCENT);
-  const reading = stateOf(index, SKILL.reading, row.meaningId);
-  const writing = stateOf(index, SKILL.writing, row.meaningId);
-  const listening = pronunciation ? stateOf(index, SKILL.listening, pronunciation.id) : undefined;
-  const speaking = pronunciation ? stateOf(index, SKILL.speaking, pronunciation.id) : undefined;
+  const reading = stateOf(index, SKILL.READING, row.meaningId);
+  const writing = stateOf(index, SKILL.WRITING, row.meaningId);
+  const listening = pronunciation ? stateOf(index, SKILL.LISTENING, pronunciation.id) : undefined;
+  const speaking = pronunciation ? stateOf(index, SKILL.SPEAKING, pronunciation.id) : undefined;
   return {
     meaning: { partOfSpeech: row.snapshot.partOfSpeech, text: row.snapshot.meaningText, ipa: pronunciation?.ipa },
     learnedAt: row.learnedAt,
@@ -67,7 +68,7 @@ function wordView(rows: MeaningRow[], index: EvidenceIndex) {
     fullyVerified: isWordFullyVerified({
       learnedMeaningCount: learned.length,
       readingWriting: learned.flatMap((m) => [m.skills.reading.status, m.skills.writing.status]),
-      listeningSpeaking: learned.flatMap((m) => [m.skills.listening?.status ?? 'notVerified', m.skills.speaking?.status ?? 'notVerified'] as const),
+      listeningSpeaking: learned.flatMap((m) => [m.skills.listening?.status ?? SKILL_STATUS.NOT_VERIFIED, m.skills.speaking?.status ?? SKILL_STATUS.NOT_VERIFIED] as const),
     }),
   };
 }
@@ -79,7 +80,8 @@ export class ProgressService {
   // Single statement: the home screen never needs more than one round trip.
   async learnHome(userId: string) {
     const now = this.clock.now();
-    const { rows: [row] } = await this.db.execute<{ dueCount: number; weeklyAvailable: number; learnedTotal: number }>(sql`
+    const required = POLICY.checkpoint.sessionsPerChallenge;
+    const { rows: [row] } = await this.db.execute<{ dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; learnedTotal: number }>(sql`
       SELECT
         (SELECT count(*)::int
          FROM user_meaning_progress ump
@@ -91,10 +93,18 @@ export class ProgressService {
              SELECT 1 FROM topic_meanings tm
              JOIN user_active_topics uat ON uat.topic_id = tm.topic_id AND uat.user_id = ump.user_id
              WHERE tm.meaning_id = ump.meaning_id)) AS "dueCount",
-        (SELECT count(*)::int FROM weekly_challenges
-         WHERE user_id = ${userId}::uuid AND state = ${WEEKLY_STATE.available}) AS "weeklyAvailable",
+        (SELECT count(*)::int FROM checkpoint_challenges
+         WHERE user_id = ${userId}::uuid AND state = ${CHECKPOINT_STATE.AVAILABLE}) AS "checkpointAvailable",
+        -- Same pending set as CheckpointService.generateFor.
+        (SELECT LEAST(count(DISTINCT p.learned_session_id), ${required}::int)::int
+         FROM user_meaning_progress p
+         WHERE p.user_id = ${userId}::uuid AND p.learned_session_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM checkpoint_challenge_meanings m
+             JOIN checkpoint_challenges c ON c.id = m.challenge_id
+             WHERE c.user_id = p.user_id AND m.meaning_id = p.meaning_id)) AS "checkpointSessionsDone",
         (SELECT count(*)::int FROM user_meaning_progress WHERE user_id = ${userId}::uuid) AS "learnedTotal"`);
-    return row;
+    return { ...row, checkpointSessionsRequired: required };
   }
 
   async words(userId: string, limit: number, offset: number) {
@@ -155,7 +165,7 @@ export class ProgressService {
         pronunciationId: skillEvidence.pronunciationId,
       })
       .from(skillEvidence)
-      .where(and(eq(skillEvidence.userId, userId), eq(skillEvidence.directness, DIRECTNESS.direct), eq(skillEvidence.validity, VALIDITY.valid)))
+      .where(and(eq(skillEvidence.userId, userId), eq(skillEvidence.directness, DIRECTNESS.DIRECT), eq(skillEvidence.validity, VALIDITY.VALID)))
       .orderBy(asc(skillEvidence.committedAt), asc(skillEvidence.id));
     return rows as EvidenceQueryRow[];
   }

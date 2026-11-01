@@ -1,0 +1,1621 @@
+{
+  "authoringFormat": "vocabflow.curated.authoring.v1",
+  "items": [
+    {
+      "id": "01a18faf-6900-738b-ac35-47f6e813e3d8",
+      "key": "clozeSelect:singleBlank:ticket:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "A1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Please show your ",
+            "after": " to the conductor before boarding the train."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "contract"
+            },
+            {
+              "id": 2,
+              "text": "ticket"
+            },
+            {
+              "id": 3,
+              "text": "invoice"
+            },
+            {
+              "id": 4,
+              "text": "menu"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "Cần giấy vé để được kiểm tra trước khi lên tàu.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-715e-ba6d-3121d482c283",
+          "pronunciationId": null,
+          "lemmaForQA": "ticket"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7d56-8416-43dd1d39a90e",
+      "key": "clozeSelect:singleBlank:luggage:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The airline allows one piece of checked ",
+            "after": " per passenger."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "luggage"
+            },
+            {
+              "id": 2,
+              "text": "evidence"
+            },
+            {
+              "id": 3,
+              "text": "research"
+            },
+            {
+              "id": 4,
+              "text": "pollution"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Checked luggage” là hành lý ký gửi.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-727d-8d70-5f16ea0e82be",
+          "pronunciationId": null,
+          "lemmaForQA": "luggage"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-71ef-a967-8c16f2bde667",
+      "key": "clozeSelect:singleBlank:menu:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "A1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Could we see the ",
+            "after": " before placing our order?"
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "deadline"
+            },
+            {
+              "id": 2,
+              "text": "menu"
+            },
+            {
+              "id": 3,
+              "text": "invoice"
+            },
+            {
+              "id": 4,
+              "text": "budget"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "Nhà hàng đưa thực đơn trước khi khách gọi món.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7490-883d-0751210cfdab",
+          "pronunciationId": null,
+          "lemmaForQA": "menu"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-774c-9d43-3bdba8b50816",
+      "key": "clozeSelect:singleBlank:receipt:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Please keep your ",
+            "after": " as proof of payment."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "climate"
+            },
+            {
+              "id": 2,
+              "text": "schedule"
+            },
+            {
+              "id": 3,
+              "text": "receipt"
+            },
+            {
+              "id": 4,
+              "text": "contract"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "Biên lai giúp xác nhận giao dịch đã thanh toán.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7d7b-bc9e-5be8bfe5c734",
+          "pronunciationId": null,
+          "lemmaForQA": "receipt"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7b58-9040-f12ef44a58c7",
+      "key": "clozeSelect:singleBlank:meeting:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The team will hold a ",
+            "after": " to review next month's targets."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "meeting"
+            },
+            {
+              "id": 2,
+              "text": "menu"
+            },
+            {
+              "id": 3,
+              "text": "ticket"
+            },
+            {
+              "id": 4,
+              "text": "receipt"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Hold a meeting” là tổ chức một cuộc họp.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-785b-8c38-519a7a11c16b",
+          "pronunciationId": null,
+          "lemmaForQA": "meeting"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7594-b0e1-d2a35dc3f73a",
+      "key": "clozeSelect:singleBlank:postpone:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Due to the storm, the organizers decided to ",
+            "after": " the conference until next week."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "recycle"
+            },
+            {
+              "id": 2,
+              "text": "negotiate"
+            },
+            {
+              "id": 3,
+              "text": "postpone"
+            },
+            {
+              "id": 4,
+              "text": "arrive"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Postpone ... until next week” nghĩa là hoãn sang tuần tới.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-77a0-ac2a-964244d8eeef",
+          "pronunciationId": null,
+          "lemmaForQA": "postpone"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7169-ba05-6275f7acfd0b",
+      "key": "clozeSelect:singleBlank:pollution:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The factory installed filters to reduce air ",
+            "after": "."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "pollution"
+            },
+            {
+              "id": 2,
+              "text": "research"
+            },
+            {
+              "id": 3,
+              "text": "luggage"
+            },
+            {
+              "id": 4,
+              "text": "evidence"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Air pollution” là ô nhiễm không khí.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7b22-a928-ecec894c7a49",
+          "pronunciationId": null,
+          "lemmaForQA": "pollution"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7b3d-a76a-5adc45ee4d73",
+      "key": "clozeSelect:singleBlank:recycle:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Many households ",
+            "after": " plastic bottles instead of throwing them away."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "arrive"
+            },
+            {
+              "id": 2,
+              "text": "postpone"
+            },
+            {
+              "id": 3,
+              "text": "recycle"
+            },
+            {
+              "id": 4,
+              "text": "confirm"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "Tái chế chai nhựa thay vì vứt bỏ.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7d37-a267-c04a5021e4e0",
+          "pronunciationId": null,
+          "lemmaForQA": "recycle"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7fec-b5bf-18d75b83a9f2",
+      "key": "clozeSelect:singleBlank:research:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The university conducted ",
+            "after": " on how students learn new languages."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "receipt"
+            },
+            {
+              "id": 2,
+              "text": "luggage"
+            },
+            {
+              "id": 3,
+              "text": "research"
+            },
+            {
+              "id": 4,
+              "text": "climate"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Conduct research” là tiến hành nghiên cứu.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7b1c-ad4d-6ea834041137",
+          "pronunciationId": null,
+          "lemmaForQA": "research"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7784-9ea2-7ab9278ea17e",
+      "key": "clozeSelect:singleBlank:evidence:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The report provides ",
+            "after": " that the policy reduced emissions."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "menu"
+            },
+            {
+              "id": 2,
+              "text": "evidence"
+            },
+            {
+              "id": 3,
+              "text": "budget"
+            },
+            {
+              "id": 4,
+              "text": "ticket"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Provide evidence” là đưa ra bằng chứng.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-766f-89bc-4bc327a06128",
+          "pronunciationId": null,
+          "lemmaForQA": "evidence"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-745f-8963-20fa8e7cf169",
+      "key": "clozeSelect:singleBlank:invoice:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Please send the ",
+            "after": " to accounting after the goods are delivered."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "menu"
+            },
+            {
+              "id": 2,
+              "text": "invoice"
+            },
+            {
+              "id": 3,
+              "text": "climate"
+            },
+            {
+              "id": 4,
+              "text": "meeting"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "Bộ phận kế toán cần hóa đơn để xử lý thanh toán.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-78b8-8032-64b612eacea8",
+          "pronunciationId": null,
+          "lemmaForQA": "invoice"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7f96-8fda-6e55f3f8e1da",
+      "key": "clozeSelect:singleBlank:negotiate:v1",
+      "template": "cloze_select",
+      "variant": "single_blank",
+      "contextCefrLevel": "B2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The two companies will ",
+            "after": " the contract terms before signing."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "negotiate"
+            },
+            {
+              "id": 2,
+              "text": "recycle"
+            },
+            {
+              "id": 3,
+              "text": "postpone"
+            },
+            {
+              "id": 4,
+              "text": "arrive"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Chọn từ phù hợp để điền vào chỗ trống."
+      },
+      "contextualExplain": "“Negotiate contract terms” là đàm phán điều khoản hợp đồng.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7294-b0e7-fe920aef6ef2",
+          "pronunciationId": null,
+          "lemmaForQA": "negotiate"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7be1-9295-dd01b818029a",
+      "key": "clozeSelect:contextMeaning:budget:v1",
+      "template": "cloze_select",
+      "variant": "context_meaning",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The project manager compared the expected expenses with the approved ",
+            "after": "."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "schedule"
+            },
+            {
+              "id": 2,
+              "text": "budget"
+            },
+            {
+              "id": 3,
+              "text": "invoice"
+            },
+            {
+              "id": 4,
+              "text": "deadline"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Dựa vào ngữ cảnh để chọn từ thích hợp."
+      },
+      "contextualExplain": "Ngân sách là giới hạn chi tiêu được duyệt cho dự án.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-74d9-b1b5-fc347d8bccaa",
+          "pronunciationId": null,
+          "lemmaForQA": "budget"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-754b-bb6b-9432e5f9c712",
+      "key": "clozeSelect:contextMeaning:climate:v1",
+      "template": "cloze_select",
+      "variant": "context_meaning",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Unlike daily weather, the ",
+            "after": " of a region is measured across many years."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "luggage"
+            },
+            {
+              "id": 2,
+              "text": "climate"
+            },
+            {
+              "id": 3,
+              "text": "pollution"
+            },
+            {
+              "id": 4,
+              "text": "research"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Dựa vào ngữ cảnh để chọn từ thích hợp."
+      },
+      "contextualExplain": "Khí hậu là xu hướng thời tiết trong một khoảng thời gian dài.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-723a-9ecf-18472576592e",
+          "pronunciationId": null,
+          "lemmaForQA": "climate"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7833-bc12-a6ffea296a98",
+      "key": "clozeSelect:contextMeaning:evidence:v1",
+      "template": "cloze_select",
+      "variant": "context_meaning",
+      "contextCefrLevel": "B2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "The scientists would not accept the claim without reliable ",
+            "after": " from independent studies."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "receipt"
+            },
+            {
+              "id": 2,
+              "text": "research"
+            },
+            {
+              "id": 3,
+              "text": "evidence"
+            },
+            {
+              "id": 4,
+              "text": "schedule"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Dựa vào ngữ cảnh để chọn từ thích hợp."
+      },
+      "contextualExplain": "Bằng chứng có thể kiểm chứng giúp hỗ trợ một nhận định khoa học.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-766f-89bc-4bc327a06128",
+          "pronunciationId": null,
+          "lemmaForQA": "evidence"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7d62-81b9-b480be717007",
+      "key": "clozeSelect:contextMeaning:negotiate:v1",
+      "template": "cloze_select",
+      "variant": "context_meaning",
+      "contextCefrLevel": "B2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {},
+        "body": {
+          "sentenceParts": {
+            "before": "Before signing, both companies met privately to ",
+            "after": " the price and payment terms."
+          },
+          "options": [
+            {
+              "id": 1,
+              "text": "recycle"
+            },
+            {
+              "id": 2,
+              "text": "arrive"
+            },
+            {
+              "id": 3,
+              "text": "confirm"
+            },
+            {
+              "id": 4,
+              "text": "negotiate"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 4
+      },
+      "localizedContent": {
+        "question": "Dựa vào ngữ cảnh để chọn từ thích hợp."
+      },
+      "contextualExplain": "Đàm phán bao gồm thảo luận để đạt điều khoản thống nhất.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7294-b0e7-fe920aef6ef2",
+          "pronunciationId": null,
+          "lemmaForQA": "negotiate"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7b12-bb61-6475df1bb0fc",
+      "key": "select:meaningClash:order:v1",
+      "template": "select",
+      "variant": "meaning_clash",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "authoredContext",
+            "text": "The waiter wrote down our order and returned to the kitchen.",
+            "focusWord": "order"
+          }
+        },
+        "body": {
+          "optionIds": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Trong ngữ cảnh này, từ được đánh dấu có nghĩa là gì?",
+        "options": [
+          {
+            "id": 1,
+            "text": "mệnh lệnh"
+          },
+          {
+            "id": 2,
+            "text": "thứ tự"
+          },
+          {
+            "id": 3,
+            "text": "đơn gọi món"
+          },
+          {
+            "id": 4,
+            "text": "quy tắc"
+          }
+        ]
+      },
+      "contextualExplain": "Trong nhà hàng, order là món hoặc đồ uống khách yêu cầu phục vụ.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7096-a14e-3e28130e787b",
+          "pronunciationId": null,
+          "lemmaForQA": "order"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7a57-a4d0-4aefe2e1a1af",
+      "key": "select:meaningClash:invoice:v1",
+      "template": "select",
+      "variant": "meaning_clash",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "authoredContext",
+            "text": "The seller issued an invoice, and the buyer still had thirty days to pay.",
+            "focusWord": "invoice"
+          }
+        },
+        "body": {
+          "optionIds": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Trong ngữ cảnh này, từ được đánh dấu có nghĩa là gì?",
+        "options": [
+          {
+            "id": 1,
+            "text": "biên lai đã thanh toán"
+          },
+          {
+            "id": 2,
+            "text": "hóa đơn yêu cầu thanh toán"
+          },
+          {
+            "id": 3,
+            "text": "phiếu đặt chỗ"
+          },
+          {
+            "id": 4,
+            "text": "bản hợp đồng"
+          }
+        ]
+      },
+      "contextualExplain": "Invoice yêu cầu thanh toán; receipt mới xác nhận tiền đã được trả.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-78b8-8032-64b612eacea8",
+          "pronunciationId": null,
+          "lemmaForQA": "invoice"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7aa6-bcea-317bf4ce44d0",
+      "key": "select:meaningClash:receipt:v1",
+      "template": "select",
+      "variant": "meaning_clash",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "authoredContext",
+            "text": "After the card payment went through, the cashier printed a receipt.",
+            "focusWord": "receipt"
+          }
+        },
+        "body": {
+          "optionIds": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 4
+      },
+      "localizedContent": {
+        "question": "Trong ngữ cảnh này, từ được đánh dấu có nghĩa là gì?",
+        "options": [
+          {
+            "id": 1,
+            "text": "hóa đơn còn phải thanh toán"
+          },
+          {
+            "id": 2,
+            "text": "lời nhắc trả tiền"
+          },
+          {
+            "id": 3,
+            "text": "đơn gọi món"
+          },
+          {
+            "id": 4,
+            "text": "biên lai"
+          }
+        ]
+      },
+      "contextualExplain": "Receipt là bằng chứng giao dịch đã thanh toán.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7d7b-bc9e-5be8bfe5c734",
+          "pronunciationId": null,
+          "lemmaForQA": "receipt"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7273-a9ad-17444ec8af03",
+      "key": "select:meaningClash:contract:v1",
+      "template": "select",
+      "variant": "meaning_clash",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "authoredContext",
+            "text": "Both companies signed a contract that listed their legal obligations.",
+            "focusWord": "contract"
+          }
+        },
+        "body": {
+          "optionIds": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Trong ngữ cảnh này, từ được đánh dấu có nghĩa là gì?",
+        "options": [
+          {
+            "id": 1,
+            "text": "lời hứa miệng"
+          },
+          {
+            "id": 2,
+            "text": "bản báo cáo"
+          },
+          {
+            "id": 3,
+            "text": "hợp đồng"
+          },
+          {
+            "id": 4,
+            "text": "thực đơn"
+          }
+        ]
+      },
+      "contextualExplain": "Contract ở đây là thỏa thuận có tính ràng buộc.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-707b-83a5-84c7057fedfc",
+          "pronunciationId": null,
+          "lemmaForQA": "contract"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7e73-88e8-ca9105bb925b",
+      "key": "select:phoneticChoice:receipt:v1",
+      "template": "select",
+      "variant": "phonetic_choice",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedIPA",
+            "accentLocale": "en-US"
+          }
+        },
+        "body": {
+          "options": [
+            {
+              "id": 1,
+              "text": "recipe"
+            },
+            {
+              "id": 2,
+              "text": "receipt"
+            },
+            {
+              "id": 3,
+              "text": "repeat"
+            },
+            {
+              "id": 4,
+              "text": "receive"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Dựa vào phiên âm IPA, hãy chọn từ tương ứng."
+      },
+      "contextualExplain": "Bản demo chỉ dùng IPA dạng chữ; không cấp điểm Listening vì chưa có audio.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-7c1c-96a3-847a81d8bf20",
+          "lemmaForQA": "receipt"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7f0d-b3ad-727af10960a9",
+      "key": "select:phoneticChoice:climate:v1",
+      "template": "select",
+      "variant": "phonetic_choice",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedIPA",
+            "accentLocale": "en-US"
+          }
+        },
+        "body": {
+          "options": [
+            {
+              "id": 1,
+              "text": "client"
+            },
+            {
+              "id": 2,
+              "text": "climb"
+            },
+            {
+              "id": 3,
+              "text": "climate"
+            },
+            {
+              "id": 4,
+              "text": "claim"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 3
+      },
+      "localizedContent": {
+        "question": "Dựa vào phiên âm IPA, hãy chọn từ tương ứng."
+      },
+      "contextualExplain": "Bản demo chỉ dùng IPA dạng chữ; không cấp điểm Listening vì chưa có audio.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-7263-8db0-178200aa81c0",
+          "lemmaForQA": "climate"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-727a-8955-3a958a51a19f",
+      "key": "select:phoneticChoice:budget:v1",
+      "template": "select",
+      "variant": "phonetic_choice",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedIPA",
+            "accentLocale": "en-US"
+          }
+        },
+        "body": {
+          "options": [
+            {
+              "id": 1,
+              "text": "bucket"
+            },
+            {
+              "id": 2,
+              "text": "badge"
+            },
+            {
+              "id": 3,
+              "text": "baggage"
+            },
+            {
+              "id": 4,
+              "text": "budget"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 4
+      },
+      "localizedContent": {
+        "question": "Dựa vào phiên âm IPA, hãy chọn từ tương ứng."
+      },
+      "contextualExplain": "Bản demo chỉ dùng IPA dạng chữ; không cấp điểm Listening vì chưa có audio.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-70c6-8e7c-4b1648be7a9e",
+          "lemmaForQA": "budget"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-756c-854b-890ae86dc87f",
+      "key": "select:phoneticChoice:ticket:v1",
+      "template": "select",
+      "variant": "phonetic_choice",
+      "contextCefrLevel": "A1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedIPA",
+            "accentLocale": "en-US"
+          }
+        },
+        "body": {
+          "options": [
+            {
+              "id": 1,
+              "text": "ticket"
+            },
+            {
+              "id": 2,
+              "text": "ticking"
+            },
+            {
+              "id": 3,
+              "text": "thicket"
+            },
+            {
+              "id": 4,
+              "text": "tackle"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Dựa vào phiên âm IPA, hãy chọn từ tương ứng."
+      },
+      "contextualExplain": "Bản demo chỉ dùng IPA dạng chữ; không cấp điểm Listening vì chưa có audio.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-7d40-8863-2676a234b6bb",
+          "lemmaForQA": "ticket"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7d8e-babe-b578a38c33cf",
+      "key": "select:stressChoice:meeting:v1",
+      "template": "select",
+      "variant": "stress_choice",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedWordText"
+          }
+        },
+        "body": {
+          "syllables": [
+            "miː",
+            "tɪŋ"
+          ],
+          "options": [
+            {
+              "id": 1,
+              "text": "Syllable 1"
+            },
+            {
+              "id": 2,
+              "text": "Syllable 2"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 1
+      },
+      "localizedContent": {
+        "question": "Trọng âm chính của từ nằm ở âm tiết nào?"
+      },
+      "contextualExplain": "Đáp án trọng âm đã biên soạn theo IPA en-US; câu hỏi chữ không tính Listening.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-7f0c-a908-cbf5efdbca02",
+          "lemmaForQA": "meeting"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7262-bdb7-7a91b131afd6",
+      "key": "select:stressChoice:pollution:v1",
+      "template": "select",
+      "variant": "stress_choice",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedWordText"
+          }
+        },
+        "body": {
+          "syllables": [
+            "pə",
+            "luː",
+            "ʃən"
+          ],
+          "options": [
+            {
+              "id": 1,
+              "text": "Syllable 1"
+            },
+            {
+              "id": 2,
+              "text": "Syllable 2"
+            },
+            {
+              "id": 3,
+              "text": "Syllable 3"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Trọng âm chính của từ nằm ở âm tiết nào?"
+      },
+      "contextualExplain": "Đáp án trọng âm đã biên soạn theo IPA en-US; câu hỏi chữ không tính Listening.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-73c6-a756-d8d7cbd6c348",
+          "lemmaForQA": "pollution"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7813-8c15-52b816c67869",
+      "key": "select:stressChoice:postpone:v1",
+      "template": "select",
+      "variant": "stress_choice",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedWordText"
+          }
+        },
+        "body": {
+          "syllables": [
+            "poʊst",
+            "poʊn"
+          ],
+          "options": [
+            {
+              "id": 1,
+              "text": "Syllable 1"
+            },
+            {
+              "id": 2,
+              "text": "Syllable 2"
+            }
+          ]
+        }
+      },
+      "sourceEvaluation": {
+        "correctOptionId": 2
+      },
+      "localizedContent": {
+        "question": "Trọng âm chính của từ nằm ở âm tiết nào?"
+      },
+      "contextualExplain": "Đáp án trọng âm đã biên soạn theo IPA en-US; câu hỏi chữ không tính Listening.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": null,
+          "pronunciationId": "01a18faf-6900-7a91-b1d8-cf628d39b3af",
+          "lemmaForQA": "postpone"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7408-b202-cdb96b17ea75",
+      "key": "surgery:fixSpelling:ticket:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "A1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "tickit"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 4,
+        "replacement": "e"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là ticket.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-715e-ba6d-3121d482c283",
+          "pronunciationId": null,
+          "lemmaForQA": "ticket"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-717c-9fc8-d1ff2d3b951e",
+      "key": "surgery:fixSpelling:luggage:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "luggaje"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 5,
+        "replacement": "g"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là luggage.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-727d-8d70-5f16ea0e82be",
+          "pronunciationId": null,
+          "lemmaForQA": "luggage"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7236-95c3-f101fc63bb52",
+      "key": "surgery:fixSpelling:meeting:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "A2",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "meating"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 2,
+        "replacement": "e"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là meeting.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-785b-8c38-519a7a11c16b",
+          "pronunciationId": null,
+          "lemmaForQA": "meeting"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-75f4-94b0-3edd4fdb7b34",
+      "key": "surgery:fixSpelling:invoice:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "invoise"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 5,
+        "replacement": "c"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là invoice.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-78b8-8032-64b612eacea8",
+          "pronunciationId": null,
+          "lemmaForQA": "invoice"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7c94-93f8-53abb6f84915",
+      "key": "surgery:fixSpelling:pollution:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "pollutian"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 7,
+        "replacement": "o"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là pollution.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-7b22-a928-ecec894c7a49",
+          "pronunciationId": null,
+          "lemmaForQA": "pollution"
+        }
+      ]
+    },
+    {
+      "id": "01a18faf-6900-7b4e-b17d-f754186e6930",
+      "key": "surgery:fixSpelling:budget:v1",
+      "template": "surgery",
+      "variant": "fix_spelling",
+      "contextCefrLevel": "B1",
+      "status": "published",
+      "sourceContent": {
+        "seedFormat": "vocabflow.curated.authoring.v1",
+        "promptVariants": {
+          "text": {
+            "kind": "publishedMeaningCue"
+          }
+        },
+        "body": {
+          "word": "budjet"
+        }
+      },
+      "sourceEvaluation": {
+        "wrongGraphemeIndex": 3,
+        "replacement": "g"
+      },
+      "localizedContent": {
+        "question": "Tìm và sửa chữ cái sai trong từ tiếng Anh."
+      },
+      "contextualExplain": "Từ chính xác là budget.",
+      "targets": [
+        {
+          "ordinal": 0,
+          "meaningId": "01a18faf-6900-74d9-b1b5-fc347d8bccaa",
+          "pronunciationId": null,
+          "lemmaForQA": "budget"
+        }
+      ]
+    }
+  ]
+}

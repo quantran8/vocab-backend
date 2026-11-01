@@ -3,9 +3,14 @@ import { AssessmentIntent, PROMPT_TYPE, Template, Variant } from '../../common/c
 import { AnswerKey, ClientBody } from '../practice-evaluator/evaluate';
 
 export const promptSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal(PROMPT_TYPE.text), text: z.string().trim().min(1) }),
   z.strictObject({
-    type: z.literal(PROMPT_TYPE.audio),
+    type: z.literal(PROMPT_TYPE.TEXT),
+    text: z.string().trim().min(1),
+    // The word the question points at, as string offsets into text. Same convention as an example's targetLocator.
+    highlight: z.strictObject({ start: z.number().int().nonnegative(), end: z.number().int().positive() }).optional(),
+  }),
+  z.strictObject({
+    type: z.literal(PROMPT_TYPE.AUDIO),
     audio: z.strictObject({ url: z.url(), locale: z.string().min(2) }),
   }),
 ]);
@@ -57,7 +62,7 @@ export interface ServerEvaluation extends AnswerKey {
   referenceLocale?: string;
 }
 
-export type ClientPayload = ClientBody & Record<string, unknown> & { prompt: Prompt; template: Template; variant?: Variant };
+export type ClientPayload = ClientBody & Record<string, unknown> & { prompt?: Prompt; template: Template; variant?: Variant };
 
 export interface ResolvedTask {
   template: Template;

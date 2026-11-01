@@ -6,6 +6,7 @@ const envSchema = z.object({
   DB_POOL_SIZE: z.coerce.number().int().positive().default(10),
   PORT: z.coerce.number().int().positive().default(3000),
   SUPABASE_URL: z.url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
   JWT_AUDIENCE: z.string().default('authenticated'),
   AZURE_SPEECH_KEY: z.string().optional(),
   AZURE_SPEECH_REGION: z.string().optional(),
@@ -22,6 +23,7 @@ export class AppConfig {
   readonly port = this.env.PORT;
   readonly jwtIssuer = `${this.env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1`;
   readonly jwksUrl = `${this.jwtIssuer}/.well-known/jwks.json`;
+  readonly supabaseAnonKey = this.env.SUPABASE_ANON_KEY;
   readonly jwtAudience = this.env.JWT_AUDIENCE;
   readonly azureSpeechKey = this.env.AZURE_SPEECH_KEY;
   readonly azureSpeechRegion = this.env.AZURE_SPEECH_REGION;

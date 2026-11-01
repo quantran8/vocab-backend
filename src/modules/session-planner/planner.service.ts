@@ -8,11 +8,12 @@ import { newId } from '../../common/ids';
 import { AppConfig } from '../../config/app-config';
 import { POLICY } from '../../config/policy';
 import { DB, Db } from '../../db/db';
-import { learningSessions, sessionLearnSteps, sessionTasks, sessionTaskTargets } from '../../db/schema';
+import { learningSessions } from '../../db/schema';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
 import { Rng, shuffle } from './interleave';
 import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from './plan-builder';
 import { PlannerRepository } from './planner.repository';
+import { SessionPlan } from './session-plan';
 
 export const planRequestSchema = z.strictObject({
   mode: z.enum(SESSION_MODES),
@@ -94,68 +95,60 @@ export class PlannerService {
     const settings = learner.settings!;
     const locale = settings.explanationLocale;
 
-    if (mode === SESSION_MODE.daily) {
+    if (mode === SESSION_MODE.DAILY) {
       const [reviewTargets, newTargets] = await Promise.all([
         this.repository.dueTargets(userId, locale, now, reviewCap),
-        this.repository.newTargets(userId, locale, learner.learningLevel, settings.timeZone, settings.dailyNewWordGoal, now),
+        this.repository.newTargets(userId, locale, learner.proficiencyLevel, settings.dailyNewWordGoal),
       ]);
       return { reviewTargets, newTargets };
     }
-    if (mode === SESSION_MODE.randomPractice) {
+    if (mode === SESSION_MODE.RANDOM_PRACTICE) {
       const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier);
       return { reviewTargets: shuffle(pool, this.rng).slice(0, practiceTaskCap), newTargets: [] };
     }
-    if (mode === SESSION_MODE.weakWordsPractice) {
+    if (mode === SESSION_MODE.WEAK_WORDS_PRACTICE) {
       const since = addHours(now, -POLICY.weak.lookbackDays * HOURS_PER_DAY);
       const reviewTargets = await this.repository.weakTargets(userId, locale, since, POLICY.weak.minAttempts, practiceTaskCap);
       return { reviewTargets, newTargets: [] };
     }
     const challenge = await this.repository.oldestChallenge(userId, challengeId);
-    if (!challenge) throw new ApiError('NOT_FOUND', 'No available weekly challenge');
+    if (!challenge) throw new ApiError('NOT_FOUND', 'No available checkpoint challenge');
     return { reviewTargets: await this.repository.challengeTargets(challenge.id, locale), newTargets: [], challengeId: challenge.id };
   }
 
   private async persist(userId: string, sessionId: string, { mode }: PlanRequest, steps: PlannedStep[], issuedAt: Date, expiresAt: Date, scope: { challengeId?: string; [key: string]: unknown }) {
-    const tasks = steps.filter((s): s is PlannedTask => s.kind === 'task');
-    const learnSteps = steps.filter((s): s is PlannedLearn => s.kind === 'learn');
-    const targetRows = tasks.flatMap(({ id, task }) => task.targets.map((target, ordinal) => ({ sessionId, taskId: id, ordinal, ...target })));
-    await this.db.transaction(async (tx) => {
-      await tx.insert(learningSessions).values({
-        id: sessionId,
-        userId,
-        mode,
-        planVersion: PLAN_VERSION,
-        issuedAt,
-        expiresAt,
-        scopeSnapshot: scope,
-        policyVersions: { policy: POLICY.version, scheduler: SCHEDULER_VERSION, evaluator: EVALUATOR_VERSION },
-      });
-      if (tasks.length > 0) {
-        await tx.insert(sessionTasks).values(
-          tasks.map(({ id, ordinal, phase, task }) => ({
-            id,
-            sessionId,
-            ordinal,
-            phase,
-            template: task.template,
-            variant: task.variant,
-            curatedItemId: task.curatedItemId,
-            clientPayload: { id, ...task.clientPayload },
-            serverEvaluation: task.serverEvaluation,
-            evaluatorVersion: EVALUATOR_VERSION,
-          })),
-        );
-      }
-      if (targetRows.length > 0) await tx.insert(sessionTaskTargets).values(targetRows);
-      if (learnSteps.length > 0) {
-        await tx.insert(sessionLearnSteps).values(
-          learnSteps.map(({ id, ordinal, meaningId, card, firstRecallTaskId }) => ({
-            id, sessionId, meaningId, ordinal, clientCard: card, firstRecallTaskId,
-          })),
-        );
-      }
+    await this.db.insert(learningSessions).values({
+      id: sessionId,
+      userId,
+      mode,
+      planVersion: PLAN_VERSION,
+      issuedAt,
+      expiresAt,
+      scopeSnapshot: scope,
+      policyVersions: { policy: POLICY.version, scheduler: SCHEDULER_VERSION, evaluator: EVALUATOR_VERSION },
+      plan: toSessionPlan(steps),
     });
   }
+}
+
+function toSessionPlan(steps: PlannedStep[]): SessionPlan {
+  return {
+    tasks: steps.filter((s): s is PlannedTask => s.kind === 'task').map(({ id, ordinal, phase, task }) => ({
+      id,
+      ordinal,
+      phase,
+      template: task.template,
+      variant: task.variant ?? null,
+      curatedItemId: task.curatedItemId ?? null,
+      clientPayload: { id, ...task.clientPayload },
+      serverEvaluation: task.serverEvaluation,
+      evaluatorVersion: EVALUATOR_VERSION,
+      targets: task.targets.map((target, targetOrdinal) => ({ ordinal: targetOrdinal, ...target })),
+    })),
+    learnSteps: steps.filter((s): s is PlannedLearn => s.kind === 'learn').map(({ id, ordinal, meaningId, card, firstRecallTaskId }) => ({
+      id, meaningId, ordinal, clientCard: card, firstRecallTaskId,
+    })),
+  };
 }
 
 function toClientStep(step: PlannedStep) {

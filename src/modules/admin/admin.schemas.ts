@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CEFR_LEVELS, EDITORIAL_STATE, LEARNING_LANGUAGE, TEMPLATES } from '../../common/constants/domain';
+import { CEFR_LEVELS, EDITORIAL_STATE, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS } from '../../common/constants/domain';
 
 const locale = z.string().min(2).max(32);
 const editorial = z.enum(Object.values(EDITORIAL_STATE));
@@ -10,7 +10,7 @@ export const createWordSchema = z.strictObject({
   homographKey: z.string().optional(),
   types: z.array(
     z.strictObject({
-      partOfSpeech: z.string().min(1).max(32),
+      partOfSpeech: z.enum(PARTS_OF_SPEECH),
       pronunciations: z.array(
         z.strictObject({ accentLocale: locale, ipa: z.string().optional(), audioAssetKey: z.string().optional() }),
       ).default([]),
@@ -29,14 +29,14 @@ export type CreateWord = z.infer<typeof createWordSchema>;
 export const meaningLocaleSchema = z.strictObject({
   meaningText: z.string().trim().min(1),
   definitionText: z.string().trim().min(1),
-  editorialState: editorial.default(EDITORIAL_STATE.draft),
+  editorialState: editorial.default(EDITORIAL_STATE.DRAFT),
   exampleTranslations: z.array(z.strictObject({ exampleId: z.uuid(), translationText: z.string().trim().min(1) })).default([]),
 });
 export type MeaningLocale = z.infer<typeof meaningLocaleSchema>;
 
 export const createItemSchema = z.strictObject({
   template: z.enum(TEMPLATES),
-  variant: z.string().min(1),
+  variant: z.enum(VARIANTS),
   contextCefrLevel: z.enum(CEFR_LEVELS).optional(),
   sourceContent: z.record(z.string(), z.unknown()),
   sourceEvaluation: z.record(z.string(), z.unknown()),
@@ -51,6 +51,6 @@ export type CreateItem = z.infer<typeof createItemSchema>;
 export const itemLocaleSchema = z.strictObject({
   localizedContent: z.record(z.string(), z.unknown()).default({}),
   contextualExplain: z.string().optional(),
-  editorialState: editorial.default(EDITORIAL_STATE.draft),
+  editorialState: editorial.default(EDITORIAL_STATE.DRAFT),
 });
 export type ItemLocale = z.infer<typeof itemLocaleSchema>;

@@ -23,7 +23,7 @@ describe('AzureRestSpeechProvider', () => {
   it('sends the reference text in the assessment header and reads the score', async () => {
     fetchMock.mockResolvedValue(respond(200, { RecognitionStatus: 'Success', NBest: [{ PronunciationAssessment: { AccuracyScore: 87.5 } }] }));
     const result = await provider.assess(REQUEST);
-    expect(result).toMatchObject({ validity: VALIDITY.valid, accuracyScore: 87.5 });
+    expect(result).toMatchObject({ validity: VALIDITY.VALID, accuracyScore: 87.5 });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain('southeastasia.stt.speech.microsoft.com');
@@ -45,7 +45,7 @@ describe('AzureRestSpeechProvider', () => {
     ['rejected audio', respond(400)],
   ])('treats %s as invalid, never failed', async (_, response) => {
     fetchMock.mockResolvedValue(response);
-    expect(await provider.assess(REQUEST)).toMatchObject({ validity: VALIDITY.invalid, accuracyScore: null });
+    expect(await provider.assess(REQUEST)).toMatchObject({ validity: VALIDITY.INVALID, accuracyScore: null });
   });
 
   it('C61 maps outages and timeouts to a retryable error', async () => {

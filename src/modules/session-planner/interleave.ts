@@ -25,15 +25,31 @@ function roundOrder(count: number, previousLast: number | undefined, rng: Rng) {
 
 const pickRecall = (rng: Rng) =>
   rng() < POLICY.newLearning.recallTypingWeight
-    ? { template: TEMPLATE.typing, variant: VARIANT.meaningRecall }
-    : { template: TEMPLATE.flyReorder, variant: VARIANT.spellingRecall };
+    ? { template: TEMPLATE.TYPING, variant: VARIANT.MEANING_RECALL }
+    : { template: TEMPLATE.FLY_REORDER, variant: VARIANT.SPELLING_RECALL };
+
+// Even batches of at most introBatchSize, so no batch is left with a lone trailing Meaning.
+function batchSizes(count: number) {
+  const batches = Math.ceil(count / POLICY.newLearning.introBatchSize);
+  return Array.from({ length: batches }, (_, i) => Math.floor((count + i) / batches));
+}
+
+/** Per batch of 2-3 Meanings: their learn cards back to back, then the trial cycle interleaved. */
+export function planNewMeanings(count: number, rng: Rng): PlanSlot[] {
+  const slots: PlanSlot[] = [];
+  let offset = 0;
+  for (const size of batchSizes(count)) {
+    slots.push(...planBatch(size, offset, rng));
+    offset += size;
+  }
+  return slots;
+}
 
 /** Trial cycle per Meaning: gloss -> reverseGloss -> typing|flyReorder -> recording -> gloss, interleaved. */
-export function planNewMeanings(count: number, rng: Rng): PlanSlot[] {
-  if (count === 0) return [];
+function planBatch(count: number, offset: number, rng: Rng): PlanSlot[] {
   const slots: PlanSlot[] = [];
   const task = (meaningIndex: number, template: Template, variant: Variant, isFirstRecall = false): TaskSlot => ({
-    kind: 'task', meaningIndex, template, variant, isFirstRecall,
+    kind: 'task', meaningIndex: meaningIndex + offset, template, variant, isFirstRecall,
   });
 
   let last: number | undefined;
@@ -43,14 +59,15 @@ export function planNewMeanings(count: number, rng: Rng): PlanSlot[] {
     last = order.at(-1);
   };
 
-  round((i) => slots.push({ kind: 'learn', meaningIndex: i }, task(i, TEMPLATE.select, VARIANT.gloss)));
-  round((i) => slots.push(task(i, TEMPLATE.select, VARIANT.reverseGloss)));
+  for (let i = 0; i < count; i += 1) slots.push({ kind: 'learn', meaningIndex: i + offset });
+  round((i) => slots.push(task(i, TEMPLATE.SELECT, VARIANT.GLOSS)));
+  round((i) => slots.push(task(i, TEMPLATE.SELECT, VARIANT.REVERSE_GLOSS)));
   round((i) => {
     const recall = pickRecall(rng);
     slots.push(task(i, recall.template, recall.variant, true));
   });
-  round((i) => slots.push(task(i, TEMPLATE.recording, VARIANT.scriptedPronunciation)));
-  round((i) => slots.push(task(i, TEMPLATE.select, VARIANT.gloss)));
+  round((i) => slots.push(task(i, TEMPLATE.RECORDING, VARIANT.SCRIPTED_PRONUNCIATION)));
+  round((i) => slots.push(task(i, TEMPLATE.SELECT, VARIANT.GLOSS)));
   return slots;
 }
 
