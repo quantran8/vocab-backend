@@ -152,6 +152,8 @@ Từ mới được chia thành nhóm 2-3 Meaning (tối đa `introBatchSize` = 
 
 Task ôn tập (due review) đứng trước phần từ mới.
 
+Từ user tự thêm (mục 11) luôn được xếp trước các từ từ topic đã chọn.
+
 ## 6. Cấu trúc chung của Task
 
 ```jsonc
@@ -393,3 +395,236 @@ Với `retryable: true`, retry có backoff. Riêng commit retry nguyên body.
 8. `deliveryMode` cho mọi task có audio prompt.
 9. Chỉ commit khi hoàn tất toàn bộ session, retry nguyên body khi lỗi mạng.
 10. Lưu `sessionId` và tiến độ cục bộ nếu muốn tiếp tục dở dang trong 72 giờ.
+
+## 11. Custom word: user tự thêm từ
+
+User nhập một từ bất kỳ để đưa vào lộ trình học. Backend tìm trong toàn bộ kho từ trước. Có sẵn thì gắn vào lộ trình; chưa có thì AI tạo bản nháp, user xem trước, xác nhận thì từ vào kho chung và vào lộ trình của họ.
+
+Điều client cần nhớ:
+
+- Nội dung được tạo và dịch theo `explanationLocale` của user. Client không gửi locale.
+- **Sửa nội dung chỉ có hiệu lực với chính user đó.** Người khác vẫn học bản gốc. Không sửa được từ gốc, IPA và CEFR.
+- **Nghĩa tạo từ `context` chỉ thuộc riêng user đó**, cho tới khi admin duyệt phần nội dung AI. Sau khi duyệt, mọi người tra thấy nghĩa này. Bản sửa của user vẫn luôn là của riêng họ.
+- Từ custom chạy qua đúng flow hiện có: sau khi thêm, nó tự xuất hiện trong `POST /sessions/plan`. Không có màn học riêng và không cần đổi renderer.
+- Backend không yêu cầu scope để thêm từ.
+
+### 11.1 Flow
+
+```
+User nhập từ
+    │
+    ▼
+POST /custom-words/lookup { text }
+    │
+    ├─ result = "existing" ──► hiện các nghĩa, user chọn
+    │       ├─ status = "available" ──────────► POST /custom-words { meaningId }
+    │       ├─ status = "translation_draft" ──► POST /custom-words { draftId }
+    │       ├─ status = "unavailable" ────────► hiện mờ, không cho chọn
+    │       └─ "Không có nghĩa tôi cần" ──────► lookup lại với { text, context }
+    │
+    ├─ result = "draft" ─────────────► hiện tối đa 3 nghĩa, user chọn và sửa
+    │                                  ──► POST /custom-words { draftId, senseIndex, edits? }
+    │
+    ├─ result = "new_meaning_draft" ─► như "draft", nhưng nghĩa chỉ thuộc riêng user này
+    │
+    └─ result = "invalid" ───────────► báo không phải từ hợp lệ
+```
+
+Lưu ý: nhập dạng biến thể như "ran" có thể trả về `existing` với `lemma` là "run". Hiện `lemma` trong response, không hiện text user gõ.
+
+### 11.2 `POST /v1/custom-words/lookup`
+
+Body:
+
+| Field | Kiểu | Ràng buộc |
+|---|---|---|
+| `text` | string | Bắt buộc, 1 đến 64 ký tự. Chỉ chữ cái, dấu cách, `-`, `'`; phải bắt đầu bằng chữ cái |
+| `context` | string | Tuỳ chọn, tối đa 200 ký tự. Mô tả nghĩa cần học; chỉ có tác dụng khi từ đã tồn tại. Nghĩa tạo ra chỉ thuộc riêng user này |
+
+Trả `200`. Khi phải gọi AI, request có thể mất vài chục giây: đặt timeout client ít nhất **65 giây** và hiện trạng thái đang tải.
+
+`result = "existing"`:
+
+```json
+{
+  "result": "existing",
+  "wordId": "01a1...",
+  "lemma": "bank",
+  "meanings": [
+    {
+      "meaningId": "01a1...",
+      "status": "available",
+      "partOfSpeech": "noun",
+      "inRoadmap": false,
+      "meaningText": "bờ sông",
+      "definitionText": "Dải đất ven sông.",
+      "examples": [
+        { "text": "We sat on the bank.", "translation": "Chúng tôi ngồi trên bờ sông.", "targetLocator": { "start": 14, "end": 18 } }
+      ]
+    },
+    {
+      "meaningId": "01a2...",
+      "status": "translation_draft",
+      "partOfSpeech": "verb",
+      "inRoadmap": false,
+      "draftId": "01a3...",
+      "meaningText": "nghiêng",
+      "definitionText": "Nghiêng sang một bên khi rẽ.",
+      "examples": [
+        { "text": "The plane began to bank.", "translation": "Máy bay bắt đầu nghiêng.", "targetLocator": { "start": 19, "end": 23 } }
+      ]
+    },
+    { "meaningId": "01a4...", "status": "unavailable", "partOfSpeech": "noun", "inRoadmap": false }
+  ]
+}
+```
+
+| `status` | Ý nghĩa | Cách thêm |
+|---|---|---|
+| `available` | Đã có bằng ngôn ngữ của user | `{ meaningId }` |
+| `translation_draft` | Có sẵn nhưng chưa có ngôn ngữ của user; AI vừa dịch để xem trước | `{ draftId }` từ chính phần tử đó |
+| `unavailable` | Admin đã gỡ hoặc đang biên tập. Không có `meaningText`, `definitionText`, `examples` | Không thêm được |
+
+Nếu `inRoadmap = true`, hiện "Đã có trong lộ trình" thay cho nút thêm.
+
+Với `available` và `translation_draft`, user sửa được trước khi thêm: gửi kèm `edits` khi gọi `POST /custom-words` (mục 11.3).
+
+`result = "draft"` hoặc `"new_meaning_draft"`:
+
+```json
+{
+  "result": "draft",
+  "draftId": "01a5...",
+  "lemma": "serendipity",
+  "senses": [
+    {
+      "partOfSpeech": "noun",
+      "ipa": "/ˌserənˈdɪpəti/",
+      "cefrLevel": "C1",
+      "meaningText": "sự tình cờ may mắn",
+      "definitionText": "Việc tìm thấy điều tốt đẹp một cách tình cờ.",
+      "examples": [
+        {
+          "text": "Meeting her was pure serendipity.",
+          "translation": "Gặp cô ấy hoàn toàn là một sự tình cờ may mắn.",
+          "targetLocator": { "start": 21, "end": 32 }
+        }
+      ]
+    }
+  ]
+}
+```
+
+`targetLocator` là vị trí từ cần highlight trong `text` (`start` tính từ 0, `end` không bao gồm). Bản nháp chưa có audio; audio được tạo khi xác nhận.
+
+`result = "invalid"`: chỉ có `{ "result": "invalid" }`.
+
+### 11.3 Thêm vào lộ trình: `POST /v1/custom-words`
+
+Gửi đúng một trong hai dạng:
+
+```json
+{ "meaningId": "01a1...", "edits": { "meaningText": "bờ sông, bờ hồ" } }
+```
+
+```json
+{ "draftId": "01a5...", "senseIndex": 0, "edits": { "meaningText": "may mắn tình cờ" } }
+```
+
+- `senseIndex` mặc định `0`, là vị trí trong `senses`. Bỏ qua với `translation_draft`.
+- `edits` tuỳ chọn. Chỉ gửi khi user thật sự sửa; schema ở mục 11.5.
+- Không gửi lại nội dung nháp. Backend đọc từ bản đã lưu và từ chối field lạ bằng `400`.
+
+Trả `201`:
+
+```json
+{ "meaningId": "01a1...", "added": true }
+```
+
+`added = false` nghĩa là từ đã có trong lộ trình, vẫn coi là thành công. Gọi lại an toàn, không tạo trùng. Nếu tạo audio thất bại, từ vẫn được thêm; backend tự bổ sung sau, và khi đó learn step dùng text như trường hợp không có audio.
+
+### 11.4 Danh sách và xoá
+
+`GET /v1/custom-words` trả toàn bộ lộ trình riêng, mới nhất trước, không phân trang (tối đa 500 từ):
+
+```json
+{
+  "words": [
+    {
+      "meaningId": "01a1...",
+      "wordId": "01a0...",
+      "lemma": "serendipity",
+      "partOfSpeech": "noun",
+      "meaningText": "may mắn tình cờ",
+      "definitionText": "Việc tìm thấy điều tốt đẹp một cách tình cờ.",
+      "examples": [
+        { "text": "Meeting her was pure serendipity.", "translation": "Gặp cô ấy hoàn toàn là một sự tình cờ may mắn.", "targetLocator": { "start": 21, "end": 32 } }
+      ],
+      "audioUrl": "https://...mp3",
+      "overridden": true,
+      "translationPending": false,
+      "recalled": false
+    }
+  ]
+}
+```
+
+| Field | Xử lý trên UI |
+|---|---|
+| `meaningText`, `definitionText`, `examples` | Đã áp bản sửa của user. `null` khi `translationPending` hoặc `recalled` |
+| `audioUrl` | Có thể `null`: ẩn nút phát |
+| `overridden` | `true`: hiện nút "Khôi phục bản gốc" |
+| `translationPending` | `true` sau khi user đổi `explanationLocale`: hiện "Đang dịch". Từ tạm không vào session, backend tự dịch dần, có thể mất tới vài chục phút |
+| `recalled` | `true`: admin đã gỡ. Hiện "Không còn khả dụng", chỉ cho xoá |
+
+`DELETE /v1/custom-words/{meaningId}` trả `200 { meaningId, removed: true }`, hoặc `404` nếu từ không có trong lộ trình. Từ không còn được lên lịch ôn, bản sửa riêng bị xoá. Lịch sử học được giữ nguyên, và từ vẫn có thể xuất hiện trong mode `random`.
+
+### 11.5 Sửa nội dung riêng
+
+`PUT /v1/custom-words/{meaningId}/override` trả `200 { meaningId, overridden: true }`. Cùng schema với `edits`. Backend **gộp theo field**: field không gửi giữ nguyên bản sửa trước, nên sửa nghĩa không làm mất ví dụ đã sửa. `POST /custom-words` kèm `edits` cũng gộp như vậy.
+
+```json
+{
+  "meaningText": "may mắn tình cờ",
+  "definitionText": "Định nghĩa theo cách của tôi.",
+  "examples": [
+    { "text": "What a serendipity!", "translation": "Thật may mắn!", "targetLocator": { "start": 7, "end": 18 } }
+  ]
+}
+```
+
+- Cả ba field đều tuỳ chọn, nhưng phải có ít nhất một. Field chưa từng sửa dùng theo bản gốc. Muốn bỏ một field đã sửa thì không có cách riêng: `DELETE .../override` khôi phục cả ba.
+- `meaningText`, `definitionText`, `text`, `translation`: 1 đến 500 ký tự.
+- `examples`: 1 đến 3 phần tử, thay toàn bộ danh sách ví dụ. Khi user chỉ sửa một ví dụ, gửi cả danh sách lấy từ `GET /custom-words`.
+- `targetLocator` chỉ cần nằm trong `text`, **không bắt buộc khớp đúng từ gốc**. Câu dùng dạng biến thể ("ran" với từ "run") vẫn hợp lệ: nếu client không tự tìm được vị trí, cho user chọn đoạn cần highlight trong câu, rồi gửi `start`, `end` của đoạn đó.
+- `404` nếu từ không có trong lộ trình.
+
+`DELETE /v1/custom-words/{meaningId}/override` trả `200 { meaningId, overridden: false }`. Bản sửa áp dụng cho session tạo sau đó; session đang chạy giữ nội dung cũ. Bản sửa gắn với ngôn ngữ hiện tại, nên đổi `explanationLocale` thì user sẽ thấy bản gốc của ngôn ngữ mới.
+
+### 11.6 Lỗi
+
+Theo định dạng ở mục 9.
+
+| HTTP | `code` | Khi nào | Client xử lý |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | Text sai định dạng, field lạ, `targetLocator` sai | Sửa lỗi nhập |
+| 409 | `WORD_ALREADY_EXISTS` | Bản nháp đã cũ vì từ vừa được thêm từ nguồn khác | Tự gọi lại lookup |
+| 422 | `CUSTOM_WORD_INVALID` | `draftId` không tồn tại, thuộc ngôn ngữ khác, hoặc sai `senseIndex` | Tự gọi lại lookup |
+| 422 | `CUSTOM_WORD_UNAVAILABLE` | Nghĩa đã bị gỡ hoặc chưa có ở ngôn ngữ này | Gọi lại lookup để cập nhật trạng thái |
+| 429 | `CUSTOM_WORD_LIMIT_REACHED` | Hết 30 lần tạo bằng AI trong ngày (UTC), lộ trình đủ 500 từ, hoặc từ đã đủ 8 nghĩa | Hiện thông báo chung. Không tự retry |
+| 503 | `LEXICAL_PROVIDER_UNAVAILABLE` | AI lỗi hoặc chưa cấu hình; `retryable: true` | Cho user thử lại |
+
+Từ đã có sẵn hoặc bản nháp đã lưu không tính vào hạn mức 30 lần.
+
+Các số trên là giá trị thử nghiệm và có thể đổi. Không hardcode ở client.
+
+### 11.7 Checklist
+
+1. Màn thêm từ: ô nhập, kiểm tra độ dài và ký tự ở client, trạng thái tải dài cho lookup.
+2. Xử lý đủ 4 giá trị `result` và 3 giá trị `status`, kèm `inRoadmap`.
+3. Nút "Không có nghĩa tôi cần" để lookup lại với `context`. Nói rõ nghĩa này chỉ dành cho riêng user.
+4. Xem trước bản nháp: chọn nghĩa, sửa, highlight theo `targetLocator`. Nói rõ phần sửa chỉ áp dụng cho riêng user.
+5. Nhãn cho biết nội dung do AI tạo.
+6. Màn "Từ của tôi": danh sách, xoá, sửa, khôi phục bản gốc, các trạng thái `translationPending` và `recalled`.
+7. `409` và `422 CUSTOM_WORD_INVALID`: tự lookup lại, không báo lỗi cho user.
+8. Sau khi thêm từ, làm mới `GET /me/learn-home`.

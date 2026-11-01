@@ -16,6 +16,10 @@ import { addHours } from '../../src/common/constants/time';
 import { createHttpAdapter } from '../../src/common/http/http-adapter';
 import { DB, Db, QueryStats } from '../../src/db/db';
 import { AdminService } from '../../src/modules/admin/admin.service';
+import { AudioStorage } from '../../src/modules/custom-words/audio-storage';
+import { CustomWordsService } from '../../src/modules/custom-words/custom-words.service';
+import { GeneratedWord, GenerateRequest, LexicalProvider, SourceMeaning, TranslatedMeaning } from '../../src/modules/custom-words/lexical.provider';
+import { TtsProvider } from '../../src/modules/custom-words/tts.provider';
 import { PublicationService } from '../../src/modules/admin/publication.service';
 import { PlannerService } from '../../src/modules/session-planner/planner.service';
 import { SpeechProvider, SpeechResult } from '../../src/modules/speech/speech.provider';
@@ -64,6 +68,59 @@ export class FakeSpeech extends SpeechProvider {
   }
 }
 
+const sense = (lemma: string, locale: string, overrides: Partial<GeneratedWord['senses'][number]> = {}): GeneratedWord['senses'][number] => ({
+  partOfSpeech: 'noun', ipa: `/${lemma}/`, cefrLevel: 'B1', meaningText: `${locale} gloss of ${lemma}`, definitionText: `${locale} definition of ${lemma}`,
+  examples: [{ text: `Use ${lemma} here.`, translation: `${locale} sentence`, target: lemma }], ...overrides,
+});
+
+export class FakeLexical extends LexicalProvider {
+  readonly model = 'fake-model';
+  generated: GenerateRequest[] = [];
+  translated: SourceMeaning[][] = [];
+  lemmas = new Map<string, string>();
+  invalid = new Set<string>();
+  duplicateOf: number | null = null;
+  ipa?: string;
+  error?: Error;
+
+  async generate(request: GenerateRequest): Promise<GeneratedWord> {
+    this.generated.push(request);
+    if (this.error) throw this.error;
+    const lemma = this.lemmas.get(request.text) ?? request.text;
+    if (this.invalid.has(request.text)) return { isValidWord: false, lemma, duplicateOfIndex: null, senses: [] };
+    if (this.duplicateOf !== null) return { isValidWord: true, lemma, duplicateOfIndex: this.duplicateOf, senses: [] };
+    const senses = request.context
+      ? [sense(lemma, request.locale, { partOfSpeech: 'verb', meaningText: `${request.locale} ${request.context}`, ...(this.ipa && { ipa: this.ipa }) })]
+      : [sense(lemma, request.locale), sense(lemma, request.locale, { partOfSpeech: 'verb', meaningText: `${request.locale} verb of ${lemma}` })];
+    return { isValidWord: true, lemma, duplicateOfIndex: null, senses };
+  }
+
+  async translate(sources: SourceMeaning[], locale: string): Promise<TranslatedMeaning[]> {
+    this.translated.push(sources);
+    if (this.error) throw this.error;
+    return sources.map((s) => ({
+      meaningText: `${locale} gloss of ${s.lemma}`, definitionText: `${locale} definition of ${s.lemma}`, exampleTranslations: s.examples.map(() => `${locale} sentence`),
+    }));
+  }
+}
+
+export class FakeTts extends TtsProvider {
+  readonly voice = 'fake-voice';
+  calls: string[] = [];
+  error?: Error;
+  async synthesize(text: string) {
+    this.calls.push(text);
+    if (this.error) throw this.error;
+    return Buffer.from('mp3');
+  }
+}
+
+export class FakeAudioStorage extends AudioStorage {
+  async upload(key: string) {
+    return `https://cdn.example.invalid/${key}`;
+  }
+}
+
 export const seedWord = (i: number, overrides: Partial<SeedWord> = {}): SeedWord => {
   const lemma = `word${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + (Math.floor(i / 26) % 26))}`;
   return {
@@ -80,6 +137,9 @@ export interface Harness {
   first: <T extends PgTable>(table: T, where?: SQL) => Promise<T['$inferSelect']>;
   clock: TestClock;
   speech: FakeSpeech;
+  lexical: FakeLexical;
+  tts: FakeTts;
+  customWords: CustomWordsService;
   planner: PlannerService;
   http: () => ReturnType<typeof request>;
   token: (subject: string, role?: string) => Promise<string>;
@@ -116,9 +176,14 @@ export async function createHarness(): Promise<Harness> {
 
   const clock = new TestClock();
   const speech = new FakeSpeech();
+  const lexical = new FakeLexical();
+  const tts = new FakeTts();
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(Clock).useValue(clock)
     .overrideProvider(SpeechProvider).useValue(speech)
+    .overrideProvider(LexicalProvider).useValue(lexical)
+    .overrideProvider(TtsProvider).useValue(tts)
+    .overrideProvider(AudioStorage).useValue(new FakeAudioStorage())
     .compile();
   const app = module.createNestApplication<NestFastifyApplication>(createHttpAdapter());
   await app.init();
@@ -128,7 +193,8 @@ export async function createHarness(): Promise<Harness> {
   const stats = app.get(QueryStats);
 
   return {
-    app, db, clock, speech,
+    app, db, clock, speech, lexical, tts,
+    customWords: app.get(CustomWordsService),
     count: async (table, where) => (await db.select({ n: countRows() }).from(table).where(where))[0].n,
     first: async (table, where) => {
       const [row] = await db.select().from(table as PgTable).where(where).limit(1);
@@ -146,6 +212,10 @@ export async function createHarness(): Promise<Harness> {
     reset: async () => {
       clock.current = START;
       app.get(UserIdCache).clear();
+      Object.assign(lexical, { generated: [], translated: [], duplicateOf: null, ipa: undefined, error: undefined });
+      lexical.lemmas.clear();
+      lexical.invalid.clear();
+      Object.assign(tts, { calls: [], error: undefined });
       const { rows } = await db.execute<{ tablename: string }>(sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
       await db.execute(sql.raw(`TRUNCATE ${rows.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`));
     },

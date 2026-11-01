@@ -1334,3 +1334,14 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 - Azure Pronunciation Assessment: https://learn.microsoft.com/azure/ai-services/speech-service/how-to-pronunciation-assessment
 
 **Disclaimer:** DDL v0.4 này là bản cập nhật để review và triển khai thử trên **database trống**; chưa chứng minh migration an toàn từ production schema có dữ liệu. Mọi API mẫu là hợp đồng đề xuất; nhất là idempotency, liveness của speech staging và skill verification vẫn cần integration tests trước khi release.
+
+## Phụ lục: Custom word
+
+Quyết định và ngoại lệ so với §2.5, §10 nằm trong `docs/DECISIONS.md`.
+
+- `POST /v1/custom-words/lookup { text, context? }`: tìm trong toàn bộ `words` trước. Kết quả `existing`, `draft`, `new_meaning_draft` hoặc `invalid`. `context` dùng khi từ đã có nhưng thiếu nghĩa cần học; nghĩa tạo ra chỉ thuộc riêng user đó.
+- `POST /v1/custom-words { meaningId | draftId, senseIndex?, edits? }`: gắn vào lộ trình riêng. Nội dung pool lấy từ `lexical_drafts`; `edits` chỉ áp dụng cho chính user.
+- `GET /v1/custom-words`, `DELETE /v1/custom-words/:meaningId`.
+- `PUT|DELETE /v1/custom-words/:meaningId/override`: bản sửa riêng.
+- `GET /admin/ai-meanings?scope=all|shared|private`: nội dung AI chờ duyệt, gồm cả nghĩa riêng; không bao giờ chứa bản sửa của user.
+- `POST /admin/ai-meanings/:id/approve`: đưa nghĩa vào pool chung ở trạng thái đã duyệt, không cần tạo lại. Gỡ bằng `recall`.

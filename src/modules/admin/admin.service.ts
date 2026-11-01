@@ -1,16 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock';
-import { EDITORIAL_STATE, ITEM_STATUS, Template, TEMPLATE_VARIANTS, Variant } from '../../common/constants/domain';
+import { AI_MEANING_SCOPE, AiMeaningScope, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, Template, TEMPLATE_VARIANTS, Variant } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { newId } from '../../common/ids';
-import { DB, Db } from '../../db/db';
+import { DB, Db, toDate } from '../../db/db';
 import {
   exampleLocalizations, meaningExamples, meaningLocalizations, meanings, practiceItemLocalizations, practiceItems,
   practiceItemTargets, pronunciations, words, wordTypes,
 } from '../../db/schema';
 import { curatedContentSchema } from '../practice-resolver/curated';
 import { CreateItem, CreateWord, ItemLocale, MeaningLocale } from './admin.schemas';
+
+const WORD_UNIQUE_INDEX = 'words_language_lemma_key';
+type PgFailure = { cause?: { constraint?: string } };
 
 @Injectable()
 export class AdminService {
@@ -35,13 +38,62 @@ export class AdminService {
     );
 
     await this.db.transaction(async (tx) => {
-      await tx.insert(words).values({ id: wordId, language: body.language, lemma: body.lemma, homographKey: body.homographKey });
+      await tx.insert(words).values({ id: wordId, language: body.language, lemma: body.lemma, homographKey: body.homographKey })
+        .catch((error: unknown) => {
+          if ((error as PgFailure).cause?.constraint === WORD_UNIQUE_INDEX) throw new ApiError('WORD_ALREADY_EXISTS', `${body.lemma} already exists`);
+          throw error;
+        });
       await tx.insert(wordTypes).values(types.map(({ id, partOfSpeech }) => ({ id, wordId, partOfSpeech })));
       if (pronunciationRows.length > 0) await tx.insert(pronunciations).values(pronunciationRows);
       await tx.insert(meanings).values(typeMeanings.map(({ id, typeId, cefrLevel, coreDefinition }) => ({ id, typeId, cefrLevel, coreDefinition })));
       if (exampleRows.length > 0) await tx.insert(meaningExamples).values(exampleRows);
     });
     return { wordId, types };
+  }
+
+  // Stored AI text only: a learner's edits live in user_meaning_overrides and never appear here.
+  async aiMeanings(scope: AiMeaningScope, limit: number, offset: number) {
+    const inScope = { [AI_MEANING_SCOPE.ALL]: sql`true`, [AI_MEANING_SCOPE.SHARED]: sql`m.owner_user_id IS NULL`, [AI_MEANING_SCOPE.PRIVATE]: sql`m.owner_user_id IS NOT NULL` }[scope];
+    const { rows } = await this.db.execute<{
+      meaningId: string; wordId: string; lemma: string; partOfSpeech: string; cefrLevel: string | null; ipa: string | null; isPrivate: boolean;
+      createdByUserId: string | null; createdAt: string; localizations: { locale: string; meaningText: string; definitionText: string; origin: string }[]; liveLocales: string[];
+    }>(sql`
+      SELECT m.id AS "meaningId", w.id AS "wordId", w.lemma, wt.part_of_speech AS "partOfSpeech", m.cefr_level AS "cefrLevel",
+        pr.ipa, m.owner_user_id IS NOT NULL AS "isPrivate", m.created_by_user_id AS "createdByUserId", m.created_at AS "createdAt",
+        (SELECT jsonb_agg(jsonb_build_object('locale', ml.locale, 'meaningText', ml.meaning_text, 'definitionText', ml.definition_text, 'origin', ml.origin) ORDER BY ml.locale)
+         FROM meaning_localizations ml WHERE ml.meaning_id = m.id) AS localizations,
+        COALESCE((SELECT array_agg(a.locale ORDER BY a.locale) FROM active_meaning_publications a
+                  WHERE a.meaning_id = m.id AND a.recalled_at IS NULL), '{}') AS "liveLocales"
+      FROM meanings m
+      JOIN word_types wt ON wt.id = m.type_id
+      JOIN words w ON w.id = wt.word_id
+      LEFT JOIN pronunciations pr ON pr.type_id = wt.id AND pr.accent_locale = ${DEFAULT_ACCENT}
+      WHERE ${inScope} AND EXISTS (
+        SELECT 1 FROM meaning_localizations ml WHERE ml.meaning_id = m.id AND ml.origin = ${MEANING_ORIGIN.AI_GENERATED})
+      ORDER BY m.created_at DESC, m.id
+      LIMIT ${limit} OFFSET ${offset}`);
+    return { meanings: rows.map((r) => ({ ...r, createdAt: toDate(r.createdAt) })) };
+  }
+
+  /** One statement, so a meaning is never half shared. Publications stay as they are: their text is what was reviewed. */
+  async approveAiMeaning(meaningId: string, reviewerId: string) {
+    const { rows } = await this.db.execute<{ id: string }>(sql`
+      WITH approved AS (
+        UPDATE meanings m
+        SET owner_user_id = NULL, origin = ${MEANING_ORIGIN.CURATED}, reviewed_by_user_id = ${reviewerId}::uuid, reviewed_at = ${this.clock.now()}::timestamptz
+        WHERE m.id = ${meaningId}::uuid
+          AND EXISTS (SELECT 1 FROM meaning_localizations ml WHERE ml.meaning_id = m.id AND ml.origin = ${MEANING_ORIGIN.AI_GENERATED})
+          AND EXISTS (SELECT 1 FROM active_meaning_publications a WHERE a.meaning_id = m.id)
+          AND NOT EXISTS (SELECT 1 FROM active_meaning_publications a WHERE a.meaning_id = m.id AND a.recalled_at IS NOT NULL)
+        RETURNING m.id
+      ), localized AS (
+        UPDATE meaning_localizations SET origin = ${MEANING_ORIGIN.CURATED} WHERE meaning_id IN (SELECT id FROM approved)
+      ), drafts AS (
+        UPDATE lexical_drafts SET owner_user_id = NULL WHERE meaning_id IN (SELECT id FROM approved)
+      )
+      SELECT id FROM approved`);
+    if (rows.length === 0) throw new ApiError('NOT_FOUND', 'No AI meaning awaiting review');
+    return { meaningId, approved: true };
   }
 
   async putMeaningLocale(meaningId: string, locale: string, body: MeaningLocale) {
@@ -58,7 +110,8 @@ export class AdminService {
       await tx
         .insert(meaningLocalizations)
         .values({ meaningId, locale, ...text, updatedAt })
-        .onConflictDoUpdate({ target: [meaningLocalizations.meaningId, meaningLocalizations.locale], set: { ...text, updatedAt } });
+        // An editor's write replaces any AI translation, so the row counts as reviewed from here on.
+        .onConflictDoUpdate({ target: [meaningLocalizations.meaningId, meaningLocalizations.locale], set: { ...text, origin: MEANING_ORIGIN.CURATED, updatedAt } });
       if (exampleIds.length === 0) return;
       await tx.delete(exampleLocalizations).where(and(eq(exampleLocalizations.locale, locale), inArray(exampleLocalizations.exampleId, exampleIds)));
       await tx.insert(exampleLocalizations).values(exampleTranslations.map((t) => ({ ...t, locale })));

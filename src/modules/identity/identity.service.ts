@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, getTableColumns, inArray } from 'drizzle-orm';
+import { and, count, eq, getTableColumns, inArray, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { Clock } from '../../common/clock';
 import { CONTENT_STATUS } from '../../common/constants/domain';
@@ -21,7 +21,8 @@ export class IdentityService {
       with: {
         settings: { columns: { userId: false } },
         learningScope: { columns: { collectionId: true } },
-        activeTopics: { columns: { topicId: true } },
+        // The personal topic is not a catalog choice; clients echo this list back to setScope.
+        activeTopics: { columns: { topicId: true }, where: (t) => notInArray(t.topicId, this.personalTopics(userId)) },
       },
     });
     if (!user) throw new ApiError('NOT_FOUND', 'User not found');
@@ -67,9 +68,14 @@ export class IdentityService {
         .insert(userLearningScope)
         .values({ userId, collectionId, updatedAt })
         .onConflictDoUpdate({ target: userLearningScope.userId, set: { collectionId, updatedAt } });
-      await tx.delete(userActiveTopics).where(eq(userActiveTopics.userId, userId));
+      // Changing the catalog scope must not drop the words the learner added.
+      await tx.delete(userActiveTopics).where(and(eq(userActiveTopics.userId, userId), notInArray(userActiveTopics.topicId, this.personalTopics(userId))));
       await tx.insert(userActiveTopics).values(ids.map((topicId) => ({ userId, topicId })));
     });
     return { collectionId, topicIds: ids };
+  }
+
+  private personalTopics(userId: string) {
+    return this.db.select({ id: topics.id }).from(topics).where(eq(topics.ownerUserId, userId));
   }
 }

@@ -4,7 +4,7 @@ import { Clock } from '../../common/clock';
 import { CEFR_LEVELS, EDITORIAL_STATE } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { newId } from '../../common/ids';
-import { DB, Db } from '../../db/db';
+import { DB, Db, Executor } from '../../db/db';
 import { activeMeaningPublications } from '../../db/schema';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
 
@@ -14,13 +14,13 @@ const reject = (message: string) => new ApiError('PUBLICATION_INVALID', message)
 export class PublicationService {
   constructor(@Inject(DB) private readonly db: Db, private readonly clock: Clock) {}
 
-  async publish(meaningId: string, locale: string) {
-    const snapshot = await this.buildSnapshot(meaningId, locale);
+  async publish(meaningId: string, locale: string, executor: Executor = this.db) {
+    const snapshot = await this.buildSnapshot(meaningId, locale, executor);
     const now = this.clock.now();
     const publicationId = newId();
 
     // Revision and pointer move in one statement so concurrent publishes cannot share a revision.
-    const { rows: [row] } = await this.db.execute<{ revision: number }>(sql`
+    const { rows: [row] } = await executor.execute<{ revision: number }>(sql`
       WITH next AS (
         SELECT COALESCE(max(revision), 0) + 1 AS revision
         FROM meaning_publications WHERE meaning_id = ${meaningId}::uuid AND locale = ${locale}
@@ -53,8 +53,8 @@ export class PublicationService {
     return { meaningId, locale, recalled: true };
   }
 
-  private async buildSnapshot(meaningId: string, locale: string): Promise<MeaningSnapshot> {
-    const meaning = await this.db.query.meanings.findFirst({
+  private async buildSnapshot(meaningId: string, locale: string, executor: Executor): Promise<MeaningSnapshot> {
+    const meaning = await executor.query.meanings.findFirst({
       where: (m) => eq(m.id, meaningId),
       columns: { id: true, cefrLevel: true },
       with: {
@@ -106,7 +106,7 @@ export class PublicationService {
   }
 }
 
-function hasValidHighlight(text: string, locator: unknown) {
+export function hasValidHighlight(text: string, locator: unknown) {
   const { start, end } = (locator ?? {}) as { start?: unknown; end?: unknown };
   return Number.isInteger(start) && Number.isInteger(end) && (start as number) >= 0 && (start as number) < (end as number) && (end as number) <= text.length;
 }

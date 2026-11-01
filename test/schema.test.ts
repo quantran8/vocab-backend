@@ -75,7 +75,7 @@ describe('schema parity with the spec SQL (C62)', () => {
     );
     const catalog = new Map(rows.map((r) => [`${r.table_name}.${r.column_name}`, r]));
     const UDT = { PgUUID: 'uuid', PgText: 'text', PgVarchar: 'varchar', PgChar: 'bpchar', PgInteger: 'int4', PgSmallInt: 'int2',
-      PgBoolean: 'bool', PgJsonb: 'jsonb', PgNumeric: 'numeric', PgNumericNumber: 'numeric', PgTimestamp: 'timestamptz' } as Record<string, string>;
+      PgBoolean: 'bool', PgJsonb: 'jsonb', PgNumeric: 'numeric', PgNumericNumber: 'numeric', PgTimestamp: 'timestamptz', PgDateString: 'date' } as Record<string, string>;
     const declared = tables.flatMap((t) => t.columns.map((c) => ({
       key: `${t.name}.${c.name}`, udt: UDT[c.columnType], nullable: c.notNull ? 'NO' : 'YES',
     })));

@@ -33,5 +33,7 @@ NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open 
 - `insert().values([])` throws: guard empty arrays.
 - `learning_sessions.plan` and `meaning_publications` are immutable, enforced by triggers; retention may only set `plan` to NULL.
 - Never select `plan`, `raw_events` or `result` unless the request uses them.
+- `words` is unique on language + `lower(btrim(lemma))` + `homograph_key`; never insert a word without searching that key first. A pool write takes content from `lexical_drafts`, never from the request.
+- Non-negotiable: what a learner writes stays in their own pool and never changes shared content. An edit goes to `user_meaning_overrides`; a meaning generated from their `context` has `meanings.owner_user_id` set, and only an admin approving its stored AI text may share it. Edits are never approved or shown to reviewers. Any query that lists a word's meanings must filter `owner_user_id IS NULL OR = user`.
 - Keep pure logic (evaluators, reducer, SRS, skills, interleaver) free of Nest and Drizzle.
 - Run seeds through the Nest build: `tsx`/esbuild does not emit decorator metadata.

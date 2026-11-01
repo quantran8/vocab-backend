@@ -2,13 +2,14 @@
 // CHECK constraints, partial indexes, triggers and foreign keys live in the SQL migrations.
 import { relations } from 'drizzle-orm';
 import {
-  boolean, char, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
+  boolean, char, date, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
 } from 'drizzle-orm/pg-core';
 import {
-  CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, SESSION_STATUS, CHECKPOINT_STATE,
-  type CefrLevel, type ContentStatus, type Directness, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState,
+  CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE,
+  type LexicalDraftKind, type MeaningOrigin, type CefrLevel, type ContentStatus, type Directness, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
+import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
 import type { SessionPlan } from '../modules/session-planner/session-plan';
 
 const id = () => uuid('id').primaryKey().$defaultFn(newId);
@@ -46,6 +47,7 @@ export const topics = pgTable('topics', {
   slug: text('slug').notNull(),
   title: text('title').notNull(),
   status: varchar('status', { length: 16 }).$type<ContentStatus>().notNull().default(CONTENT_STATUS.DRAFT),
+  ownerUserId: uuid('owner_user_id'),
 }, (t) => [unique('topics_collection_id_slug_key').on(t.collectionId, t.slug)]);
 
 export const collectionLocalizations = pgTable('collection_localizations', {
@@ -86,7 +88,10 @@ export const wordTypes = pgTable('word_types', {
   id: id(),
   wordId: uuid('word_id').notNull(),
   partOfSpeech: varchar('part_of_speech', { length: 32 }).$type<PartOfSpeech>().notNull(),
-}, (t) => [unique('word_types_id_word_id_key').on(t.id, t.wordId)]);
+}, (t) => [
+  unique('word_types_id_word_id_key').on(t.id, t.wordId),
+  unique('word_types_word_id_part_of_speech_key').on(t.wordId, t.partOfSpeech),
+]);
 
 export const pronunciations = pgTable('pronunciations', {
   id: id(),
@@ -102,8 +107,15 @@ export const meanings = pgTable('meanings', {
   typeId: uuid('type_id').notNull(),
   cefrLevel: varchar('cefr_level', { length: 2 }).$type<CefrLevel>(),
   coreDefinition: text('core_definition'),
+  origin: varchar('origin', { length: 16 }).$type<MeaningOrigin>().notNull().default(MEANING_ORIGIN.CURATED),
+  createdByUserId: uuid('created_by_user_id'),
+  ownerUserId: uuid('owner_user_id'),
+  reviewedByUserId: uuid('reviewed_by_user_id'),
+  reviewedAt: ts('reviewed_at'),
+  lexicalDraftId: uuid('lexical_draft_id'),
+  draftSenseIndex: smallint('draft_sense_index'),
   createdAt: createdAt(),
-});
+}, (t) => [unique('meanings_lexical_draft_id_draft_sense_index_key').on(t.lexicalDraftId, t.draftSenseIndex)]);
 
 export const meaningExamples = pgTable('meaning_examples', {
   id: id(),
@@ -118,6 +130,7 @@ export const meaningLocalizations = pgTable('meaning_localizations', {
   meaningText: text('meaning_text').notNull(),
   definitionText: text('definition_text').notNull(),
   editorialState: varchar('editorial_state', { length: 16 }).$type<EditorialState>().notNull().default(EDITORIAL_STATE.DRAFT),
+  origin: varchar('origin', { length: 16 }).$type<MeaningOrigin>().notNull().default(MEANING_ORIGIN.CURATED),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.meaningId, t.locale] })]);
 
@@ -155,6 +168,35 @@ export const activeMeaningPublications = pgTable('active_meaning_publications', 
   publicationId: uuid('publication_id').notNull(),
   recalledAt: ts('recalled_at'),
 }, (t) => [primaryKey({ columns: [t.meaningId, t.locale] })]);
+
+// Custom words: drafts are AI output and the only source of what enters the shared pool.
+export const lexicalDrafts = pgTable('lexical_drafts', {
+  id: id(),
+  kind: varchar('kind', { length: 16 }).$type<LexicalDraftKind>().notNull(),
+  language: varchar('language', { length: 16 }).notNull(),
+  normalizedText: text('normalized_text').notNull(),
+  locale: varchar('locale', { length: 32 }).notNull(),
+  contextKey: text('context_key').notNull().default(''),
+  meaningId: uuid('meaning_id'),
+  ownerUserId: uuid('owner_user_id'),
+  payload: jsonb('payload').notNull(),
+  model: text('model').notNull(),
+  createdAt: createdAt(),
+}, (t) => [unique('lexical_drafts_language_normalized_text_locale_context_key_key').on(t.language, t.normalizedText, t.locale, t.contextKey)]);
+
+export const userMeaningOverrides = pgTable('user_meaning_overrides', {
+  userId: uuid('user_id').notNull(),
+  meaningId: uuid('meaning_id').notNull(),
+  locale: varchar('locale', { length: 32 }).notNull(),
+  content: jsonb('content').notNull().$type<MeaningOverride>(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.meaningId, t.locale] })]);
+
+export const customWordUsage = pgTable('custom_word_usage', {
+  userId: uuid('user_id').notNull(),
+  day: date('day').notNull(),
+  lookups: integer('lookups').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.userId, t.day] })]);
 
 // C. Curated practice: each row is one immutable content revision
 export const practiceItems = pgTable('practice_items', {

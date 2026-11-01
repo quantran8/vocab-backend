@@ -161,6 +161,27 @@ export type CheckpointState = (typeof CHECKPOINT_STATE)[keyof typeof CHECKPOINT_
 
 export const ADMIN_ROLES = ['editor', 'admin'] as const;
 
+export const MEANING_ORIGIN = { CURATED: 'curated', AI_GENERATED: 'ai_generated' } as const;
+export type MeaningOrigin = (typeof MEANING_ORIGIN)[keyof typeof MEANING_ORIGIN];
+
+export const LEXICAL_DRAFT_KIND = { WORD: 'word', MEANING: 'meaning', TRANSLATION: 'translation' } as const;
+export type LexicalDraftKind = (typeof LEXICAL_DRAFT_KIND)[keyof typeof LEXICAL_DRAFT_KIND];
+
+export const CUSTOM_WORD_LOOKUP_RESULT = {
+  EXISTING: 'existing',
+  DRAFT: 'draft',
+  NEW_MEANING_DRAFT: 'new_meaning_draft',
+  INVALID: 'invalid',
+} as const;
+
+export const CUSTOM_MEANING_STATUS = { AVAILABLE: 'available', TRANSLATION_DRAFT: 'translation_draft', UNAVAILABLE: 'unavailable' } as const;
+export type CustomMeaningStatus = (typeof CUSTOM_MEANING_STATUS)[keyof typeof CUSTOM_MEANING_STATUS];
+
+export const AI_MEANING_SCOPE = { ALL: 'all', SHARED: 'shared', PRIVATE: 'private' } as const;
+export type AiMeaningScope = (typeof AI_MEANING_SCOPE)[keyof typeof AI_MEANING_SCOPE];
+
+export const PERSONAL_COLLECTION_SLUG = 'personal';
+
 export const PLAN_VERSION = 'plan-v0.4';
 export const EVALUATOR_VERSION = 'eval-v0.4';
 export const SCHEDULER_VERSION = 'srs-trial-v0.4';

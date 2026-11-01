@@ -9,6 +9,7 @@ import { AppConfig } from '../../config/app-config';
 import { POLICY } from '../../config/policy';
 import { DB, Db } from '../../db/db';
 import { learningSessions } from '../../db/schema';
+import { applyOverride } from '../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
 import { Rng, shuffle } from './interleave';
 import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from './plan-builder';
@@ -45,18 +46,23 @@ export class PlannerService {
     const settings = learner.settings!;
     const locale = settings.explanationLocale;
 
-    const { reviewTargets, newTargets, challengeId } = await this.selectTargets(userId, request, learner, now);
-    if (reviewTargets.length + newTargets.length === 0) return { sessionId: null, mode: request.mode, steps: [] };
+    const selected = await this.selectTargets(userId, request, learner, now);
+    const { challengeId } = selected;
+    if (selected.reviewTargets.length + selected.newTargets.length === 0) return { sessionId: null, mode: request.mode, steps: [] };
 
-    const targets = [...reviewTargets, ...newTargets];
-    const [pool, curated] = await Promise.all([
+    const targets = [...selected.reviewTargets, ...selected.newTargets];
+    const [pool, curated, overrides] = await Promise.all([
       this.repository.distractorPool(locale, distractorPoolSize),
       this.repository.curatedItems(
         targets.map((t) => t.meaningId),
         targets.flatMap((t) => t.pronunciations.map((p) => p.id)),
         locale,
       ),
+      this.repository.overrides(userId, targets.map((t) => t.meaningId), locale),
     ]);
+    const edits = new Map(overrides.map((o) => [o.meaningId, o.content]));
+    const reviewTargets = selected.reviewTargets.map((t) => applyOverride(t, edits.get(t.meaningId)));
+    const newTargets = selected.newTargets.map((t) => applyOverride(t, edits.get(t.meaningId)));
 
     const steps = buildPlan({
       mode: request.mode,

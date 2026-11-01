@@ -4,6 +4,7 @@ export const ERROR = {
   SESSION_NOT_OWNED: { status: 403, retryable: false },
   NOT_FOUND: { status: 404, retryable: false },
   EMAIL_ALREADY_REGISTERED: { status: 409, retryable: false },
+  WORD_ALREADY_EXISTS: { status: 409, retryable: false },
   SESSION_PAYLOAD_CONFLICT: { status: 409, retryable: false },
   SESSION_STALE: { status: 409, retryable: false },
   SESSION_EXPIRED: { status: 410, retryable: false },
@@ -12,9 +13,14 @@ export const ERROR = {
   VALIDATION_FAILED: { status: 400, retryable: false },
   PUBLICATION_INVALID: { status: 422, retryable: false },
   CONTENT_UNAVAILABLE: { status: 422, retryable: false },
+  CUSTOM_WORD_INVALID: { status: 422, retryable: false },
+  CUSTOM_WORD_UNAVAILABLE: { status: 422, retryable: false },
   PAYLOAD_TOO_LARGE: { status: 413, retryable: false },
+  CUSTOM_WORD_LIMIT_REACHED: { status: 429, retryable: false },
   SPEECH_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   AUTH_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
+  LEXICAL_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
+  TTS_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;

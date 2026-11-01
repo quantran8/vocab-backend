@@ -36,8 +36,10 @@ CREATE TABLE topics (
     title TEXT NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'draft'
        CHECK (status IN ('draft','published','archived')),
+    owner_user_id UUID REFERENCES app_user(id), -- set only on a learner's personal roadmap topic
     UNIQUE (collection_id, slug)
 );
+CREATE UNIQUE INDEX topics_owner_user_id_key ON topics(owner_user_id) WHERE owner_user_id IS NOT NULL;
 CREATE TABLE collection_localizations (
     collection_id UUID NOT NULL REFERENCES collections(id),
     locale VARCHAR(32) NOT NULL,
@@ -71,12 +73,15 @@ CREATE TABLE words (
     homograph_key TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- A lemma exists once per language, whatever its case; homograph_key separates true homographs.
+CREATE UNIQUE INDEX words_language_lemma_key ON words(language, lower(btrim(lemma)), homograph_key) NULLS NOT DISTINCT;
 CREATE TABLE word_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     word_id UUID NOT NULL REFERENCES words(id),
     part_of_speech VARCHAR(32) NOT NULL CHECK (part_of_speech IN
        ('noun','verb','adjective','adverb','pronoun','preposition','conjunction','interjection','phrasal_verb')),
-    UNIQUE (id, word_id)
+    UNIQUE (id, word_id),
+    UNIQUE (word_id, part_of_speech)
 );
 CREATE TABLE pronunciations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,8 +98,18 @@ CREATE TABLE meanings (
     type_id UUID NOT NULL REFERENCES word_types(id),
     cefr_level VARCHAR(2) CHECK (cefr_level IN ('A1','A2','B1','B2','C1','C2')),
     core_definition TEXT, -- nullable in draft; publish requires a usable definition
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    origin VARCHAR(16) NOT NULL DEFAULT 'curated' CHECK (origin IN ('curated','ai_generated')),
+    created_by_user_id UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    owner_user_id UUID REFERENCES app_user(id), -- set on a private meaning; NULL means the shared pool
+    reviewed_by_user_id UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
+    lexical_draft_id UUID, -- FK added after lexical_drafts
+    draft_sense_index SMALLINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (lexical_draft_id, draft_sense_index)
 );
+CREATE INDEX idx_meanings_ai_generated ON meanings(created_at DESC) WHERE origin = 'ai_generated';
+CREATE INDEX idx_meanings_owner ON meanings(owner_user_id) WHERE owner_user_id IS NOT NULL;
 CREATE TABLE meaning_examples (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meaning_id UUID NOT NULL REFERENCES meanings(id),
@@ -109,6 +124,7 @@ CREATE TABLE meaning_localizations (
     definition_text TEXT NOT NULL,
     editorial_state VARCHAR(16) NOT NULL DEFAULT 'draft'
        CHECK (editorial_state IN ('draft','approved')),
+    origin VARCHAR(16) NOT NULL DEFAULT 'curated' CHECK (origin IN ('curated','ai_generated')),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (meaning_id, locale)
 );
@@ -117,6 +133,38 @@ CREATE TABLE example_localizations (
     locale VARCHAR(32) NOT NULL,
     translation_text TEXT NOT NULL,
     PRIMARY KEY (example_id, locale)
+);
+-- Custom words: AI output, shared across users; the pool is written only from these rows.
+CREATE TABLE lexical_drafts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kind VARCHAR(16) NOT NULL CHECK (kind IN ('word','meaning','translation')),
+    language VARCHAR(16) NOT NULL,
+    normalized_text TEXT NOT NULL,
+    locale VARCHAR(32) NOT NULL,
+    context_key TEXT NOT NULL DEFAULT '',
+    meaning_id UUID REFERENCES meanings(id),
+    owner_user_id UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    payload JSONB NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+    model TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (language, normalized_text, locale, context_key)
+);
+CREATE INDEX idx_lexical_drafts_meaning ON lexical_drafts(meaning_id, locale) WHERE meaning_id IS NOT NULL;
+ALTER TABLE meanings ADD FOREIGN KEY (lexical_draft_id) REFERENCES lexical_drafts(id);
+-- A learner's private edit; the shared publication is never changed by it.
+CREATE TABLE user_meaning_overrides (
+    user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    meaning_id UUID NOT NULL REFERENCES meanings(id),
+    locale VARCHAR(32) NOT NULL,
+    content JSONB NOT NULL CHECK (jsonb_typeof(content) = 'object'),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, meaning_id, locale)
+);
+CREATE TABLE custom_word_usage (
+    user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    day DATE NOT NULL,
+    lookups INTEGER NOT NULL DEFAULT 0 CHECK (lookups >= 0),
+    PRIMARY KEY (user_id, day)
 );
 CREATE TABLE topic_meanings (
     topic_id UUID NOT NULL REFERENCES topics(id),

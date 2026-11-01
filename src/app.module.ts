@@ -12,6 +12,14 @@ import { AuthController } from './modules/auth/auth.controller';
 import { AuthProvider } from './modules/auth/auth.provider';
 import { AuthService } from './modules/auth/auth.service';
 import { CatalogController } from './modules/catalog/catalog.controller';
+import { AnthropicLexicalProvider } from './modules/custom-words/anthropic-lexical.provider';
+import { AudioStorage, SupabaseAudioStorage } from './modules/custom-words/audio-storage';
+import { CustomWordsController } from './modules/custom-words/custom-words.controller';
+import { CustomWordsRepository } from './modules/custom-words/custom-words.repository';
+import { CustomWordsService } from './modules/custom-words/custom-words.service';
+import { CustomWordsWorker } from './modules/custom-words/custom-words.worker';
+import { LexicalProvider } from './modules/custom-words/lexical.provider';
+import { ElevenLabsTtsProvider, TtsProvider } from './modules/custom-words/tts.provider';
 import { IdentityController } from './modules/identity/identity.controller';
 import { IdentityService } from './modules/identity/identity.service';
 import { MaintenanceService } from './modules/maintenance/maintenance.service';
@@ -32,15 +40,19 @@ import { CheckpointService } from './modules/checkpoint/checkpoint.service';
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, AdminController,
+    SessionCommitController, SpeechController, CheckpointController, CustomWordsController, AdminController,
   ],
   providers: [
     UserIdCache,
     { provide: APP_GUARD, useClass: SupabaseJwtGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
     { provide: SpeechProvider, useClass: AzureRestSpeechProvider },
+    { provide: LexicalProvider, useClass: AnthropicLexicalProvider },
+    { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
+    { provide: AudioStorage, useClass: SupabaseAudioStorage },
     AuthProvider, AuthService, IdentityService, ProgressService, PlannerRepository, PlannerService, CommitService,
     SpeechService, CheckpointService, MaintenanceService, AdminService, PublicationService,
+    CustomWordsRepository, CustomWordsService, CustomWordsWorker,
   ],
 })
 export class AppModule {}

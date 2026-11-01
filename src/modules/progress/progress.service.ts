@@ -6,6 +6,7 @@ import { ApiError } from '../../common/http/api-error';
 import { POLICY } from '../../config/policy';
 import { DB, Db, toDate } from '../../db/db';
 import { skillEvidence } from '../../db/schema';
+import { applyOverride, MeaningOverride } from '../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
 import { deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillState } from '../skill-verification/skill-evidence';
 
@@ -17,11 +18,12 @@ interface MeaningRow {
   nextReviewAt: Date | null;
 }
 
-type RawMeaningRow = Omit<MeaningRow, 'learnedAt' | 'nextReviewAt'> & { learnedAt: string | null; nextReviewAt: string | null };
+type RawMeaningRow = Omit<MeaningRow, 'learnedAt' | 'nextReviewAt'> & { learnedAt: string | null; nextReviewAt: string | null; override: MeaningOverride | null };
 
 const parseMeaningRows = (rows: RawMeaningRow[]): MeaningRow[] =>
-  rows.map((r) => ({
+  rows.map(({ override, ...r }) => ({
     ...r,
+    snapshot: applyOverride(r.snapshot, override ?? undefined),
     learnedAt: r.learnedAt ? toDate(r.learnedAt) : null,
     nextReviewAt: r.nextReviewAt ? toDate(r.nextReviewAt) : null,
   }));
@@ -121,13 +123,14 @@ export class ProgressService {
           FROM learned GROUP BY word_id
           ORDER BY last_learned DESC, word_id LIMIT ${limit} OFFSET ${offset}
         )
-        SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", p.snapshot,
+        SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", p.snapshot, o.content AS override,
                l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt"
         FROM learned l
         JOIN page ON page.word_id = l.word_id
         JOIN user_settings s ON s.user_id = ${userId}::uuid
         JOIN active_meaning_publications a ON a.meaning_id = l.meaning_id AND a.locale = s.explanation_locale
         JOIN meaning_publications p ON p.id = a.publication_id
+        LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = l.meaning_id AND o.locale = s.explanation_locale
         ORDER BY page.last_learned DESC, l.word_id, l.learned_at`),
       this.evidence(userId),
     ]);
@@ -138,7 +141,7 @@ export class ProgressService {
   async word(userId: string, wordId: string) {
     const [rows, evidence] = await Promise.all([
       this.db.execute<RawMeaningRow>(sql`
-        SELECT wt.word_id AS "wordId", m.id AS "meaningId", p.snapshot,
+        SELECT wt.word_id AS "wordId", m.id AS "meaningId", p.snapshot, o.content AS override,
                ump.learned_at AS "learnedAt", ump.next_review_at AS "nextReviewAt"
         FROM word_types wt
         JOIN meanings m ON m.type_id = wt.id
@@ -146,7 +149,9 @@ export class ProgressService {
         JOIN active_meaning_publications a ON a.meaning_id = m.id AND a.locale = s.explanation_locale
         JOIN meaning_publications p ON p.id = a.publication_id
         LEFT JOIN user_meaning_progress ump ON ump.meaning_id = m.id AND ump.user_id = s.user_id
+        LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = m.id AND o.locale = s.explanation_locale
         WHERE wt.word_id = ${wordId}::uuid AND (a.recalled_at IS NULL OR ump.user_id IS NOT NULL)
+          AND (m.owner_user_id IS NULL OR m.owner_user_id = s.user_id)
         ORDER BY m.id`),
       this.evidence(userId),
     ]);

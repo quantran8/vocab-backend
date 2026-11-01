@@ -10,6 +10,13 @@ const envSchema = z.object({
   JWT_AUDIENCE: z.string().default('authenticated'),
   AZURE_SPEECH_KEY: z.string().optional(),
   AZURE_SPEECH_REGION: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_AUDIO_BUCKET: z.string().default('pronunciation-audio'),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  LEXICAL_AI_MODEL: z.string().default('claude-opus-5-5'),
+  ELEVENLABS_API_KEY: z.string().optional(),
+  ELEVENLABS_VOICE_ID: z.string().optional(),
+  ELEVENLABS_MODEL_ID: z.string().optional(),
   ALLOW_PLACEHOLDER_AUDIO: z.stringbool().default(false),
   ENABLE_CRON: z.stringbool().default(true),
 });
@@ -27,6 +34,14 @@ export class AppConfig {
   readonly jwtAudience = this.env.JWT_AUDIENCE;
   readonly azureSpeechKey = this.env.AZURE_SPEECH_KEY;
   readonly azureSpeechRegion = this.env.AZURE_SPEECH_REGION;
+  readonly supabaseUrl = this.env.SUPABASE_URL.replace(/\/$/, '');
+  readonly supabaseServiceRoleKey = this.env.SUPABASE_SERVICE_ROLE_KEY;
+  readonly supabaseAudioBucket = this.env.SUPABASE_AUDIO_BUCKET;
+  readonly anthropicApiKey = this.env.ANTHROPIC_API_KEY;
+  readonly lexicalAiModel = this.env.LEXICAL_AI_MODEL;
+  readonly elevenLabsApiKey = this.env.ELEVENLABS_API_KEY;
+  readonly elevenLabsVoiceId = this.env.ELEVENLABS_VOICE_ID;
+  readonly elevenLabsModelId = this.env.ELEVENLABS_MODEL_ID;
   readonly allowPlaceholderAudio = this.env.ALLOW_PLACEHOLDER_AUDIO;
   readonly enableCron = this.env.ENABLE_CRON;
 }
