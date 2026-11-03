@@ -1,0 +1,243 @@
+# Delete old container images from OCIR.
+#
+# Nothing on the Oracle side expires an image: OCIR has no lifecycle policy, so
+# every push accumulates until someone removes it. Two things pile up.
+#
+#   1. One tagged manifest per deploy, carrying both :<sha> and :<version>,
+#      kept as a rollback target. Rolling back means pointing BACKEND_IMAGE in
+#      the VM's .env at either of those tags and restarting — no rebuild, no
+#      runner — which is why a handful are worth keeping.
+#   2. Untagged manifests. Pushing :latest or :buildcache again does not replace
+#      the previous manifest, it only moves the tag; the old one stays behind
+#      with no name and shows up in the Console as "<repo>:unknown@sha256:...".
+#      Nothing can pull those. They are pure residue.
+#
+# Deliberately NOT part of deploy.yml. A failure here — an expired key, a
+# throttled API — must never mark a rollout as failed, and the cleanup does not
+# need to be timely enough to justify that risk.
+name: Prune OCIR images
+
+on:
+  schedule:
+    # Sundays, 18:00 UTC (01:00 Monday in Asia/Ho_Chi_Minh). Off the usual
+    # deploy hours so a prune never races a push of the tags it is counting.
+    - cron: '0 18 * * 0'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'How many :<sha> images to keep'
+        type: string
+        default: '5'
+      dry_run:
+        description: 'List what would be deleted without deleting it'
+        type: boolean
+        default: true
+
+# Authenticating to the Artifacts API needs an API signing key, not the
+# OCIR_TOKEN the build uses. That token is a Docker credential: it authenticates
+# `docker login` against the registry v2 endpoint, which does not expose manifest
+# deletion at all. Deleting goes through the OCI control plane, which is signed
+# with an RSA key pair — hence a separate set of secrets. See DEPLOYMENT.md.
+env:
+  KEEP: ${{ inputs.keep || '5' }}
+  # The scheduled run is the one that actually keeps the registry in check, so
+  # it always applies; `inputs.dry_run` is empty outside a manual dispatch and
+  # would otherwise read as a permanent no-op.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+  OCIR_REPOSITORY: ${{ vars.OCIR_REPOSITORY }}
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure the OCI CLI
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+        run: |
+          missing=""
+          for key in OCI_CLI_USER OCI_CLI_TENANCY OCI_CLI_FINGERPRINT \
+                     OCI_CLI_KEY_CONTENT OCI_CLI_REGION OCI_COMPARTMENT_ID \
+                     OCIR_REPOSITORY; do
+            if [ -z "${!key}" ]; then missing="$missing $key"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Registry pruning is not configured. Unset:$missing" >&2
+            echo "All but OCI_CLI_REGION and OCIR_REPOSITORY are Secrets." >&2
+            echo "See DEPLOYMENT.md (registry pruning)." >&2
+            exit 1
+          fi
+
+          # Same trailing-newline hazard as the SSH key in deploy.yml: a PEM
+          # copied through a browser loses its final newline and the CLI then
+          # reports an unrelated-looking signing error.
+          install -m 700 -d ~/.oci
+          printf '%s\n' "$OCI_CLI_KEY_CONTENT" | tr -d '\r' > ~/.oci/api_key.pem
+          chmod 600 ~/.oci/api_key.pem
+
+          cat > ~/.oci/config <<CFG
+          [DEFAULT]
+          user=${OCI_CLI_USER}
+          tenancy=${OCI_CLI_TENANCY}
+          fingerprint=${OCI_CLI_FINGERPRINT}
+          key_file=${HOME}/.oci/api_key.pem
+          region=${OCI_CLI_REGION}
+          CFG
+          chmod 600 ~/.oci/config
+
+          pip install --quiet oci-cli
+          oci --version
+
+      - name: List images
+        env:
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+        run: |
+          # --all pages through the whole repository; the default page size
+          # would silently truncate once the backlog is larger than one page,
+          # leaving the oldest images — the ones most worth deleting — unseen.
+          oci artifacts container image list \
+            --compartment-id "$OCI_COMPARTMENT_ID" \
+            --repository-name "$OCIR_REPOSITORY" \
+            --lifecycle-state AVAILABLE \
+            --all > images.json
+
+          echo "total images: $(jq '.data.items | length' images.json)"
+
+          # The tag list is NOT reliably present on a list response, so ask the
+          # API which images have versions instead of inferring it from the
+          # payload shape. This is the authoritative answer and the one the
+          # delete decision is built on.
+          oci artifacts container image list \
+            --compartment-id "$OCI_COMPARTMENT_ID" \
+            --repository-name "$OCIR_REPOSITORY" \
+            --lifecycle-state AVAILABLE \
+            --is-versioned true \
+            --all > tagged.json
+
+          echo "tagged images: $(jq '.data.items | length' tagged.json)"
+
+          # Printed so a surprising result is diagnosable from the log alone
+          # rather than by guessing at the schema.
+          echo "--- one raw item, for reference ---"
+          jq '.data.items[0]' images.json
+
+      - name: Decide what to delete
+        run: |
+          # OCIR lists one row per TAG, not per image: a build tagged :<sha> and
+          # :<version> appears twice, sharing one digest. Rows are therefore
+          # grouped by digest so "keep 5" means five builds, not five tag rows —
+          # ungrouped it would have kept two and a half.
+          #
+          # Which rows are tagged comes from the API (--is-versioned), not from
+          # the payload's shape: a list response carries no tag array, and
+          # reading one off it classified every image as untagged, which would
+          # have queued :latest, :buildcache and every rollback target for
+          # deletion.
+          #
+          # Three cases per digest:
+          #   - no tags at all       -> delete. Nothing can pull it.
+          #   - latest or buildcache -> pinned, never deleted.
+          #   - anything else        -> rollback history, newest $KEEP kept.
+          #
+          # :latest shares its digest with a real build, so that digest stays in
+          # the ranking and the count still means five builds; the pinned set is
+          # subtracted from the deletions at the end. :buildcache is the
+          # exception — it is a cache manifest with its own digest and no build
+          # behind it, so it is excluded from the ranking entirely. Counted in,
+          # it would eat a slot and leave only four builds kept.
+          jq -s --argjson keep "$KEEP" '
+            ([.[1].data.items[].id]) as $tagged_ids
+            | .[0].data.items
+            | map({
+                id,
+                created: ."time-created",
+                name: ."display-name",
+                # Fall back to the id when a digest is absent, so a row is never
+                # silently merged with an unrelated one.
+                key: (.digest // .id),
+                tagged: (.id | IN($tagged_ids[]))
+              })
+            | group_by(.key)
+            | map({
+                key: .[0].key,
+                ids: map(.id),
+                created: (map(.created) | max),
+                names: (map(.name) | sort),
+                tagged: (map(.tagged) | any)
+              })
+            | (map(select(.tagged | not))) as $untagged
+            | (map(select(
+                .tagged and (.names | any(test(":(latest|buildcache)$")))
+              ))) as $pinned
+            | ($pinned | map(.key)) as $pinned_keys
+            | (
+                map(select(
+                  .tagged and (.names | any(test(":buildcache$")) | not)
+                ))
+                | sort_by(.created) | reverse
+              ) as $history
+            | {
+                untagged: $untagged,
+                pinned: $pinned,
+                keep: $history[:$keep],
+                drop: ($history[$keep:] | map(select(.key | IN($pinned_keys[]) | not)))
+              }
+          ' images.json tagged.json > plan.json
+
+          show() { jq -r "$1"'[] | "  \(.created)  \(.names | join(", "))"' plan.json; }
+
+          echo "keeping ${{ env.KEEP }} most recent builds:"; show '.keep'
+          echo
+          echo "keeping (moving tags):"; show '.pinned'
+          echo
+          echo "deleting $(jq '.drop | length' plan.json) superseded builds:"; show '.drop'
+          echo
+          echo "deleting $(jq '.untagged | length' plan.json) untagged manifests"
+
+          # A digest can span several rows; every row of a doomed digest goes.
+          jq -r '(.drop + .untagged)[].ids[]' plan.json > to-delete.txt
+          echo "total manifests to delete: $(wc -l < to-delete.txt)"
+
+          # Refuse to act on an answer that says nothing is tagged. Any
+          # repository in use has at least a :latest, so zero means the tag
+          # lookup failed rather than that the registry is genuinely all
+          # residue — and deleting on that answer takes the rollback targets
+          # with the junk.
+          if [ "$(jq '.keep | length' plan.json)" -eq 0 ] \
+             && [ "$(jq '.pinned | length' plan.json)" -eq 0 ] \
+             && [ "$(jq '.untagged | length' plan.json)" -gt 0 ]; then
+            echo "::error::Every image looks untagged, including :latest. Refusing to delete." >&2
+            echo "The tag lookup returned nothing — inspect tagged.json before re-running." >&2
+            exit 1
+          fi
+
+      - name: Delete
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN — nothing deleted. Re-run with dry_run unchecked to apply."
+            exit 0
+          fi
+
+          # A failed delete must not abandon the rest of the backlog: one image
+          # can be mid-transition (or already gone from a concurrent run) while
+          # the remaining hundred are perfectly deletable. Count failures and
+          # fail at the end instead.
+          failed=0
+          while read -r id; do
+            [ -n "$id" ] || continue
+            if oci artifacts container image delete --image-id "$id" --force; then
+              echo "deleted $id"
+            else
+              echo "::warning::could not delete $id"
+              failed=$((failed + 1))
+            fi
+          done < to-delete.txt
+
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed image(s) could not be deleted." >&2
+            exit 1
+          fi

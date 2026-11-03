@@ -35,12 +35,14 @@ import { AzureRestSpeechProvider, SpeechProvider } from './modules/speech/speech
 import { SpeechService } from './modules/speech/speech.service';
 import { CheckpointController } from './modules/checkpoint/checkpoint.controller';
 import { CheckpointService } from './modules/checkpoint/checkpoint.service';
+import { HealthController } from './modules/health/health.controller';
 
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, CatalogController, ProgressController, SessionPlannerController,
     SessionCommitController, SpeechController, CheckpointController, CustomWordsController, AdminController,
+    HealthController,
   ],
   providers: [
     UserIdCache,

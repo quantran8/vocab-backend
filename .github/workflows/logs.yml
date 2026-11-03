@@ -1,0 +1,54 @@
+# Tail backend logs from the OCI instance on demand, reusing the deploy's SSH secrets.
+name: Fetch backend logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: 'How many log lines to tail'
+        type: string
+        default: '300'
+      grep:
+        description: 'Only lines matching this (empty = all)'
+        type: string
+        default: ''
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open SSH session to the instance
+        env:
+          SSH_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat >> ~/.ssh/config <<CFG
+          Host oci
+            HostName ${{ secrets.OCI_HOST }}
+            User ${{ secrets.OCI_SSH_USER }}
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          CFG
+
+      - name: Tail backend logs
+        env:
+          LINES: ${{ inputs.lines }}
+          PATTERN: ${{ inputs.grep }}
+        run: |
+          ssh oci "cd '${{ secrets.APP_DIR }}' && \
+            docker compose logs --tail '$LINES' --no-color backend" > logs.txt 2>&1 || true
+          if [ -n "$PATTERN" ]; then
+            echo "=== lines matching '$PATTERN' ==="
+            grep -iE -- "$PATTERN" logs.txt || echo "(no match)"
+            echo
+          fi
+          echo "=== last $LINES lines ==="
+          cat logs.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs
+          path: logs.txt

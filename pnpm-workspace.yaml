@@ -1,15 +1,8 @@
 allowBuilds:
   '@embedded-postgres/darwin-arm64': true
-  embedded-postgres: true
+  '@scarf/scarf': false
   '@swc/core': true
   esbuild: true
-  # Optional peer of drizzle-orm; unused here.
-  '@prisma/engines': false
-  prisma: false
-onlyBuiltDependencies:
-  - esbuild
-  - '@swc/core'
-  - '@embedded-postgres/darwin-arm64'
-  - embedded-postgres
 overrides:
   '@nestjs/platform-express': '-'
+autoInstallPeers: false

@@ -1,0 +1,259 @@
+# Build the image natively for the VM's arch, push it to OCIR and roll it out on the
+# OCI instance shared with money-space. Setup checklist: DEPLOYMENT.md.
+name: Deploy backend to OCI
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      skip_migrations:
+        description: 'Skip drizzle migrations before restarting'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-oci-vocab
+  cancel-in-progress: false
+
+# Variables, not secrets: GitHub redacts secret values in job outputs, which empties the image reference.
+env:
+  OCIR_REGISTRY: ${{ vars.OCIR_REGISTRY }}
+  OCIR_NAMESPACE: ${{ vars.OCIR_NAMESPACE }}
+  OCIR_REPOSITORY: ${{ vars.OCIR_REPOSITORY }}
+  # money-space's APP_DIR: its Caddy imports routes/*.caddy from here.
+  EDGE_DIR: ${{ vars.EDGE_DIR || '/opt/money-space' }}
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/develop'
+    # Native runner: arm64 under QEMU crashes Node layers and takes 10+ minutes.
+    runs-on: ${{ vars.BUILD_PLATFORM == 'linux/amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Check runner matches the target platform
+        run: |
+          want='${{ vars.BUILD_PLATFORM || 'linux/arm64' }}'
+          case "$(uname -m)" in
+            aarch64|arm64) have=linux/arm64 ;;
+            x86_64)        have=linux/amd64 ;;
+            *)             have="linux/$(uname -m)" ;;
+          esac
+          if [ "$want" != "$have" ]; then
+            echo "::error::Runner is $have but BUILD_PLATFORM is $want — the build would be emulated under QEMU."
+            exit 1
+          fi
+
+      - name: Check registry coordinates
+        run: |
+          if [ -z "${OCIR_REGISTRY}" ] || [ -z "${OCIR_NAMESPACE}" ] || [ -z "${OCIR_REPOSITORY}" ]; then
+            echo "::error::Set OCIR_REGISTRY, OCIR_NAMESPACE and OCIR_REPOSITORY as Actions VARIABLES (not secrets)."
+            exit 1
+          fi
+          echo "image: ${OCIR_REGISTRY}/${OCIR_NAMESPACE}/${OCIR_REPOSITORY}:${GITHUB_SHA}"
+
+      - name: Log in to OCIR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.OCIR_REGISTRY }}
+          username: ${{ secrets.OCIR_USERNAME }}
+          password: ${{ secrets.OCIR_TOKEN }}
+
+      - name: Compute the version
+        id: version
+        run: |
+          version="v$(TZ=Asia/Ho_Chi_Minh date +%Y.%m.%d)-${GITHUB_RUN_NUMBER}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "::notice::Building $version ($(git rev-parse --short HEAD))"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ vars.BUILD_PLATFORM || 'linux/arm64' }}
+          push: true
+          tags: |
+            ${{ env.OCIR_REGISTRY }}/${{ env.OCIR_NAMESPACE }}/${{ env.OCIR_REPOSITORY }}:${{ github.sha }}
+            ${{ env.OCIR_REGISTRY }}/${{ env.OCIR_NAMESPACE }}/${{ env.OCIR_REPOSITORY }}:${{ steps.version.outputs.version }}
+            ${{ env.OCIR_REGISTRY }}/${{ env.OCIR_NAMESPACE }}/${{ env.OCIR_REPOSITORY }}:latest
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+            APP_COMMIT=${{ github.sha }}
+            APP_BUILT_AT=${{ steps.version.outputs.built_at }}
+          cache-from: type=registry,ref=${{ env.OCIR_REGISTRY }}/${{ env.OCIR_NAMESPACE }}/${{ env.OCIR_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ env.OCIR_REGISTRY }}/${{ env.OCIR_NAMESPACE }}/${{ env.OCIR_REPOSITORY }}:buildcache,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: ${{ secrets.APP_DIR }}
+      APP_PORT: ${{ vars.APP_PORT || '3001' }}
+      BACKEND_IMAGE: ${{ vars.OCIR_REGISTRY }}/${{ vars.OCIR_NAMESPACE }}/${{ vars.OCIR_REPOSITORY }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open SSH session to the instance
+        env:
+          SSH_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          # Browser copies drop the key's trailing newline, which OpenSSH rejects as "error in libcrypto".
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "::error::OCI_SSH_PRIVATE_KEY is not a usable private key (same key as money-space)."
+            exit 1
+          fi
+          cat >> ~/.ssh/config <<CFG
+          Host oci
+            HostName ${{ secrets.OCI_HOST }}
+            User ${{ secrets.OCI_SSH_USER }}
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          CFG
+
+      - name: Prepare the host
+        run: |
+          if [ -z "$APP_DIR" ]; then echo "::error::APP_DIR secret is unset." >&2; exit 1; fi
+          # The deploy user has no sudo, so APP_DIR must be somewhere it owns, e.g. its home.
+          ssh oci "mkdir -p '$APP_DIR' && \
+            (docker network inspect edge > /dev/null 2>&1 || docker network create edge)"
+
+      - name: Upload compose file
+        run: scp deploy/docker-compose.prod.yml oci:"$APP_DIR/docker-compose.yml"
+
+      - name: Write .env on the instance
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_AUDIO_BUCKET: ${{ vars.SUPABASE_AUDIO_BUCKET }}
+          JWT_AUDIENCE: ${{ vars.JWT_AUDIENCE }}
+          DB_POOL_SIZE: ${{ vars.DB_POOL_SIZE }}
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ vars.AZURE_SPEECH_REGION }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LEXICAL_AI_MODEL: ${{ vars.LEXICAL_AI_MODEL }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL_ID: ${{ vars.ELEVENLABS_MODEL_ID }}
+          ENABLE_CRON: ${{ vars.ENABLE_CRON }}
+        run: |
+          if [ -z "$BACKEND_IMAGE" ]; then echo "::error::BACKEND_IMAGE is empty." >&2; exit 1; fi
+          {
+            for key in DATABASE_URL DIRECT_URL SUPABASE_URL SUPABASE_ANON_KEY \
+                       SUPABASE_SERVICE_ROLE_KEY SUPABASE_AUDIO_BUCKET JWT_AUDIENCE DB_POOL_SIZE \
+                       AZURE_SPEECH_KEY AZURE_SPEECH_REGION \
+                       ANTHROPIC_API_KEY LEXICAL_AI_MODEL \
+                       ELEVENLABS_API_KEY ELEVENLABS_VOICE_ID ELEVENLABS_MODEL_ID \
+                       ENABLE_CRON BACKEND_IMAGE APP_PORT; do
+              # Unset must be absent, not KEY="": optional providers switch on by presence, and "" beats zod defaults.
+              if [ -z "${!key}" ]; then continue; fi
+              # Compose reads env_file with dotenv rules: escape backslash first, then quote.
+              value=${!key}
+              value=${value//\\/\\\\}
+              value=${value//\"/\\\"}
+              printf '%s="%s"\n' "$key" "$value"
+            done
+          } | ssh oci "umask 077 && cat > '$APP_DIR/.env'"
+
+      - name: Log the instance in to OCIR
+        run: |
+          printf '%s' '${{ secrets.OCIR_TOKEN }}' | ssh oci \
+            "docker login ${{ env.OCIR_REGISTRY }} \
+               --username '${{ secrets.OCIR_USERNAME }}' --password-stdin"
+
+      - name: Pull the image
+        run: ssh oci "cd '$APP_DIR' && docker compose pull"
+
+      # Before the restart, so new code never runs against the old schema. The migrator is idempotent.
+      - name: Run database migrations
+        if: ${{ !inputs.skip_migrations }}
+        run: |
+          ssh oci "cd '$APP_DIR' && \
+            docker compose run --rm --no-deps backend node dist/db/migrate.js"
+
+      - name: Restart
+        run: ssh oci "cd '$APP_DIR' && docker compose up -d --remove-orphans"
+
+      - name: Verify health
+        env:
+          EXPECTED_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for i in $(seq 1 20); do
+            if body=$(ssh oci "curl -fsS localhost:$APP_PORT/health"); then
+              echo "$body"
+              # A pull that did not take still answers healthy, from the previous image.
+              live=$(printf '%s' "$body" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+              if [ -n "$EXPECTED_VERSION" ] && [ "$live" != "$EXPECTED_VERSION" ]; then
+                echo "::error::Deployed $EXPECTED_VERSION but /health reports '$live'." >&2
+                exit 1
+              fi
+              echo "::notice::Live version: $live"
+              exit 0
+            fi
+            echo "waiting for backend ($i/20)..."; sleep 6
+          done
+          echo "backend never became healthy" >&2
+          ssh oci "cd '$APP_DIR' && docker compose ps && docker compose logs --tail 80 backend" >&2
+          exit 1
+
+      # Served at https://<DOMAIN_NAME>/service/vocab/; DOMAIN_NAME is money-space's domain.
+      - name: Publish the Caddy route
+        if: vars.DOMAIN_NAME != ''
+        run: |
+          scp deploy/vocab.caddy oci:"$EDGE_DIR/routes/vocab.caddy.new"
+
+          # A broken snippet would crash-loop the shared Caddy on its next restart and take money-space
+          # down too, so keep the previous one unless the reload accepts the new one.
+          ssh oci "set -e
+            cid=\$(docker ps -q --filter label=com.docker.compose.service=caddy \
+                              --filter label=com.docker.compose.project.working_dir=$EDGE_DIR)
+            if [ -z \"\$cid\" ]; then
+              echo '::error::No running Caddy from $EDGE_DIR. Deploy money-space with DOMAIN_NAME set first.' >&2
+              exit 1
+            fi
+            if ! docker exec \"\$cid\" test -d /etc/caddy/routes; then
+              echo '::error::Caddy does not mount routes/. Redeploy money-space with the shared-edge change.' >&2
+              exit 1
+            fi
+            docker network connect edge \"\$cid\" 2>/dev/null || true
+            cd '$EDGE_DIR/routes'
+            [ -f vocab.caddy ] && cp vocab.caddy vocab.caddy.prev
+            mv vocab.caddy.new vocab.caddy
+            if ! docker exec \"\$cid\" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+              if [ -f vocab.caddy.prev ]; then mv vocab.caddy.prev vocab.caddy; else rm -f vocab.caddy; fi
+              echo '::error::Caddy rejected the vocab route; previous config restored.' >&2
+              exit 1
+            fi
+            rm -f vocab.caddy.prev"
+
+      - name: Verify HTTPS
+        if: vars.DOMAIN_NAME != ''
+        env:
+          URL: https://${{ vars.DOMAIN_NAME }}/service/vocab/health
+        run: |
+          for i in $(seq 1 10); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$URL" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              curl -sS --max-time 10 "$URL"; echo
+              exit 0
+            fi
+            echo "waiting for $URL ($i/10, last status $code)..."; sleep 6
+          done
+          echo "::error::$URL did not answer 200." >&2
+          exit 1
+
+      - name: Prune old images
+        if: always()
+        run: ssh oci 'docker image prune -af --filter "until=168h"'

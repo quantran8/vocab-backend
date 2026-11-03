@@ -19,6 +19,8 @@ const envSchema = z.object({
   ELEVENLABS_MODEL_ID: z.string().optional(),
   ALLOW_PLACEHOLDER_AUDIO: z.stringbool().default(false),
   ENABLE_CRON: z.stringbool().default(true),
+  APP_VERSION: z.string().default('dev'),
+  APP_COMMIT: z.string().default('unknown'),
 });
 
 @Injectable()
@@ -44,4 +46,6 @@ export class AppConfig {
   readonly elevenLabsModelId = this.env.ELEVENLABS_MODEL_ID;
   readonly allowPlaceholderAudio = this.env.ALLOW_PLACEHOLDER_AUDIO;
   readonly enableCron = this.env.ENABLE_CRON;
+  readonly appVersion = this.env.APP_VERSION;
+  readonly appCommit = this.env.APP_COMMIT;
 }

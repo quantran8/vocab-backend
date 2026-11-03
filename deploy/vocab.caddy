@@ -1,0 +1,10 @@
+# Imported inside money-space's site block from its routes/ directory: https://<money-space domain>/service/vocab/...
+redir /service/vocab /service/vocab/ 308
+
+# handle_path strips the prefix, so the app keeps serving /v1, /health and /docs at its root.
+handle_path /service/vocab/* {
+	reverse_proxy vocab-backend:3000 {
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Prefix /service/vocab
+	}
+}
