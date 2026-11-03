@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql, SQL } from 'drizzle-orm';
 import { Clock } from '../../common/clock';
 import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS, VALIDITY, CHECKPOINT_STATE } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
+import { AppConfig } from '../../config/app-config';
 import { POLICY } from '../../config/policy';
 import { DB, Db, toDate } from '../../db/db';
 import { skillEvidence } from '../../db/schema';
+import { resolveAudioUrl } from '../practice-resolver/asset-url';
 import { applyOverride, MeaningOverride } from '../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../practice-resolver/task.types';
 import { deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillState } from '../skill-verification/skill-evidence';
@@ -44,14 +46,47 @@ const indexEvidence = (rows: EvidenceQueryRow[]) =>
 const stateOf = (index: EvidenceIndex, skill: Skill, id: string): SkillState =>
   deriveSkillStatus(index.get(scopeKey(skill, id)) ?? []);
 
-function meaningView(row: MeaningRow, index: EvidenceIndex) {
-  const pronunciation = row.snapshot.pronunciations.find((p) => p.accentLocale === DEFAULT_ACCENT);
+const DIACRITICS: Record<string, string> = {
+  a: 'àáảãạăằắẳẵặâầấẩẫậ', e: 'èéẻẽẹêềếểễệ', i: 'ìíỉĩị', o: 'òóỏõọôồốổỗộơờớởỡợ', u: 'ùúủũụưừứửữự', y: 'ỳýỷỹỵ', d: 'đ',
+};
+const FOLD_PAIRS = Object.entries(DIACRITICS).flatMap(([base, marked]) =>
+  [...marked, ...marked.toUpperCase()].map((char) => [char, base] as const));
+const FOLD_FROM = FOLD_PAIRS.map(([char]) => char).join('');
+const FOLD_TO = FOLD_PAIRS.map(([, base]) => base).join('');
+const FOLD_MAP = new Map(FOLD_PAIRS);
+
+const foldedColumn = (column: SQL) => sql`translate(lower(${column}), ${FOLD_FROM}, ${FOLD_TO})`;
+
+/** Case- and diacritic-insensitive LIKE pattern; the query's own wildcards match literally. */
+const searchPattern = (query: string) => {
+  const folded = [...query.normalize('NFC').toLowerCase()].map((char) => FOLD_MAP.get(char) ?? char).join('');
+  return `%${folded.replace(/[\\%_]/g, '\\$&')}%`;
+};
+
+const defaultPronunciation = (snapshot: MeaningSnapshot) => snapshot.pronunciations.find((p) => p.accentLocale === DEFAULT_ACCENT);
+
+function senseView(snapshot: MeaningSnapshot, allowPlaceholderAudio: boolean) {
+  const pronunciation = defaultPronunciation(snapshot);
+  const audioUrl = resolveAudioUrl(pronunciation?.audioUrl, allowPlaceholderAudio);
+  return {
+    partOfSpeech: snapshot.partOfSpeech,
+    text: snapshot.meaningText,
+    ipa: pronunciation?.ipa,
+    definition: snapshot.definitionText,
+    ...(pronunciation && audioUrl && { audio: { url: audioUrl, locale: pronunciation.accentLocale } }),
+    examples: snapshot.examples.map(({ text, translation }) => ({ text, translation })),
+  };
+}
+
+function meaningView(row: MeaningRow, index: EvidenceIndex, allowPlaceholderAudio: boolean) {
+  const pronunciation = defaultPronunciation(row.snapshot);
   const reading = stateOf(index, SKILL.READING, row.meaningId);
   const writing = stateOf(index, SKILL.WRITING, row.meaningId);
   const listening = pronunciation ? stateOf(index, SKILL.LISTENING, pronunciation.id) : undefined;
   const speaking = pronunciation ? stateOf(index, SKILL.SPEAKING, pronunciation.id) : undefined;
   return {
-    meaning: { partOfSpeech: row.snapshot.partOfSpeech, text: row.snapshot.meaningText, ipa: pronunciation?.ipa },
+    meaningId: row.meaningId,
+    meaning: senseView(row.snapshot, allowPlaceholderAudio),
     learnedAt: row.learnedAt,
     nextReviewAt: row.nextReviewAt,
     skills: { reading, writing, listening, speaking },
@@ -59,8 +94,8 @@ function meaningView(row: MeaningRow, index: EvidenceIndex) {
   };
 }
 
-function wordView(rows: MeaningRow[], index: EvidenceIndex) {
-  const meanings = rows.map((row) => meaningView(row, index));
+function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudio: boolean) {
+  const meanings = rows.map((row) => meaningView(row, index, allowPlaceholderAudio));
   const learned = meanings.filter((m) => m.learnedAt);
   return {
     wordId: rows[0].wordId,
@@ -75,9 +110,21 @@ function wordView(rows: MeaningRow[], index: EvidenceIndex) {
   };
 }
 
+/** The library row: content and review dates only, so listing never reads skill evidence. */
+const wordSummary = (rows: MeaningRow[], allowPlaceholderAudio: boolean) => ({
+  wordId: rows[0].wordId,
+  lemma: rows[0].snapshot.lemma,
+  meanings: rows.map((row) => ({
+    meaningId: row.meaningId,
+    meaning: senseView(row.snapshot, allowPlaceholderAudio),
+    learnedAt: row.learnedAt,
+    nextReviewAt: row.nextReviewAt,
+  })),
+});
+
 @Injectable()
 export class ProgressService {
-  constructor(@Inject(DB) private readonly db: Db, private readonly clock: Clock) {}
+  constructor(@Inject(DB) private readonly db: Db, private readonly clock: Clock, private readonly config: AppConfig) {}
 
   // Single statement: the home screen never needs more than one round trip.
   async learnHome(userId: string) {
@@ -109,38 +156,67 @@ export class ProgressService {
     return { ...row, checkpointSessionsRequired: required };
   }
 
-  async words(userId: string, limit: number, offset: number) {
-    const [rows, evidence] = await Promise.all([
-      this.db.execute<RawMeaningRow>(sql`
-        WITH learned AS (
-          SELECT ump.meaning_id, ump.learned_at, ump.next_review_at, wt.word_id
-          FROM user_meaning_progress ump
-          JOIN meanings m ON m.id = ump.meaning_id
-          JOIN word_types wt ON wt.id = m.type_id
-          WHERE ump.user_id = ${userId}::uuid
-        ), page AS (
-          SELECT word_id, max(learned_at) AS last_learned
-          FROM learned GROUP BY word_id
-          ORDER BY last_learned DESC, word_id LIMIT ${limit} OFFSET ${offset}
-        )
-        SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", p.snapshot, o.content AS override,
-               l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt"
-        FROM learned l
-        JOIN page ON page.word_id = l.word_id
-        JOIN user_settings s ON s.user_id = ${userId}::uuid
-        JOIN active_meaning_publications a ON a.meaning_id = l.meaning_id AND a.locale = s.explanation_locale
+  async words(userId: string, limit: number, offset: number, query?: string) {
+    const matches = query
+      ? sql`bool_or(${foldedColumn(sql`snapshot->>'lemma'`)} LIKE ${searchPattern(query)}
+          OR ${foldedColumn(sql`COALESCE(override->>'meaningText', snapshot->>'meaningText')`)} LIKE ${searchPattern(query)})`
+      : sql`true`;
+    // The publication join sits inside `learned` so a page is always full while more words remain.
+    const rows = await this.db.execute<RawMeaningRow>(sql`
+      WITH learned AS (
+        SELECT ump.meaning_id, ump.learned_at, ump.next_review_at, wt.word_id, p.snapshot, o.content AS override
+        FROM user_meaning_progress ump
+        JOIN meanings m ON m.id = ump.meaning_id
+        JOIN word_types wt ON wt.id = m.type_id
+        JOIN user_settings s ON s.user_id = ump.user_id
+        JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale
         JOIN meaning_publications p ON p.id = a.publication_id
-        LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = l.meaning_id AND o.locale = s.explanation_locale
-        ORDER BY page.last_learned DESC, l.word_id, l.learned_at`),
-      this.evidence(userId),
-    ]);
-    const index = indexEvidence(evidence);
-    return { words: [...Map.groupBy(parseMeaningRows(rows.rows), (r) => r.wordId).values()].map((group) => wordView(group, index)) };
+        LEFT JOIN user_meaning_overrides o ON o.user_id = ump.user_id AND o.meaning_id = ump.meaning_id AND o.locale = s.explanation_locale
+        WHERE ump.user_id = ${userId}::uuid
+      ), page AS (
+        SELECT word_id, max(learned_at) AS last_learned
+        FROM learned GROUP BY word_id HAVING ${matches}
+        ORDER BY last_learned DESC, word_id LIMIT ${limit} OFFSET ${offset}
+      )
+      SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", l.snapshot, l.override,
+             l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt"
+      FROM learned l
+      JOIN page ON page.word_id = l.word_id
+      ORDER BY page.last_learned DESC, l.word_id, l.learned_at`);
+    const groups = Map.groupBy(parseMeaningRows(rows.rows), (r) => r.wordId).values();
+    return { words: [...groups].map((group) => wordSummary(group, this.config.allowPlaceholderAudio)) };
+  }
+
+  /** Mirrors deriveSkillStatus's needsPractice (latest valid direct evidence failed) in one statement. */
+  async wordStats(userId: string) {
+    const { rows: [row] } = await this.db.execute<{ learnedWords: number; needPracticeWords: number }>(sql`
+      WITH learned AS (
+        SELECT wt.word_id, ump.meaning_id,
+          (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e
+           WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) AS pronunciation_id
+        FROM user_meaning_progress ump
+        JOIN meanings m ON m.id = ump.meaning_id
+        JOIN word_types wt ON wt.id = m.type_id
+        JOIN user_settings s ON s.user_id = ump.user_id
+        JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale
+        JOIN meaning_publications p ON p.id = a.publication_id
+        WHERE ump.user_id = ${userId}::uuid
+      ), latest AS (
+        SELECT DISTINCT ON (skill, COALESCE(meaning_id, pronunciation_id)) meaning_id, pronunciation_id, passed
+        FROM skill_evidence
+        WHERE user_id = ${userId}::uuid AND reasons = '[]'::jsonb AND validity = ${VALIDITY.VALID}
+        ORDER BY skill, COALESCE(meaning_id, pronunciation_id), committed_at DESC, id DESC
+      )
+      SELECT count(DISTINCT l.word_id)::int AS "learnedWords",
+        count(DISTINCT l.word_id) FILTER (WHERE EXISTS (
+          SELECT 1 FROM latest e
+          WHERE e.passed = false AND (e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id)))::int AS "needPracticeWords"
+      FROM learned l`);
+    return row;
   }
 
   async word(userId: string, wordId: string) {
-    const [rows, evidence] = await Promise.all([
-      this.db.execute<RawMeaningRow>(sql`
+    const rows = await this.db.execute<RawMeaningRow>(sql`
         SELECT wt.word_id AS "wordId", m.id AS "meaningId", p.snapshot, o.content AS override,
                ump.learned_at AS "learnedAt", ump.next_review_at AS "nextReviewAt"
         FROM word_types wt
@@ -152,14 +228,16 @@ export class ProgressService {
         LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = m.id AND o.locale = s.explanation_locale
         WHERE wt.word_id = ${wordId}::uuid AND (a.recalled_at IS NULL OR ump.user_id IS NOT NULL)
           AND (m.owner_user_id IS NULL OR m.owner_user_id = s.user_id)
-        ORDER BY m.id`),
-      this.evidence(userId),
-    ]);
+        ORDER BY m.id`);
     if (rows.rows.length === 0) throw new ApiError('NOT_FOUND', 'Word not found');
-    return wordView(parseMeaningRows(rows.rows), indexEvidence(evidence));
+    const meanings = parseMeaningRows(rows.rows);
+    const evidence = await this.evidence(userId, meanings);
+    return wordView(meanings, indexEvidence(evidence), this.config.allowPlaceholderAudio);
   }
 
-  private async evidence(userId: string) {
+  private async evidence(userId: string, meanings: MeaningRow[]) {
+    const meaningIds = meanings.map((m) => m.meaningId);
+    const pronunciationIds = meanings.flatMap((m) => m.snapshot.pronunciations.map((p) => p.id));
     const rows = await this.db
       .select({
         sessionId: skillEvidence.sessionId,
@@ -170,7 +248,12 @@ export class ProgressService {
         pronunciationId: skillEvidence.pronunciationId,
       })
       .from(skillEvidence)
-      .where(and(eq(skillEvidence.userId, userId), sql`${skillEvidence.reasons} = '[]'::jsonb`, eq(skillEvidence.validity, VALIDITY.VALID)))
+      .where(and(
+        eq(skillEvidence.userId, userId),
+        sql`${skillEvidence.reasons} = '[]'::jsonb`,
+        eq(skillEvidence.validity, VALIDITY.VALID),
+        or(inArray(skillEvidence.meaningId, meaningIds), pronunciationIds.length > 0 ? inArray(skillEvidence.pronunciationId, pronunciationIds) : undefined),
+      ))
       .orderBy(asc(skillEvidence.committedAt), asc(skillEvidence.id));
     return rows as EvidenceQueryRow[];
   }

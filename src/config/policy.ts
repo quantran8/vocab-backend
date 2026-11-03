@@ -14,6 +14,8 @@ export const POLICY = {
     distractorPoolSize: 200,
     commitTimeoutMs: 15_000,
   },
+  // Supabase allows access tokens to live up to a week.
+  account: { deletedIdentityRetentionHours: 7 * HOURS_PER_DAY },
   review: { semanticWeight: 2, skillWeight: 1, skillBonusChance: 0.3, audioChance: 0.5, matchChance: 0.3, candidateMultiplier: 3 },
   newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
   practice: {

@@ -477,6 +477,20 @@ describe('custom words', () => {
       expect(JSON.stringify((await api('get', '/v1/me/words').expect(200)).body)).not.toContain(edits.meaningText);
     });
 
+    it('returns the definition and examples on progress views', async () => {
+      await onboard();
+      const { meaningId } = await addWord('serendipity');
+      const definitionText = 'định nghĩa riêng của tôi';
+      await api('put', `/v1/custom-words/${meaningId}/override`).send({ definitionText }).expect(200);
+      await api('put', '/v1/me/settings').send({ dailyNewWordGoal: 1 }).expect(200);
+      const p = await plan();
+      await api('post', `/v1/sessions/${p.sessionId}/commit`).send(answers(p)).expect(200);
+      const { words } = (await api('get', '/v1/me/words').expect(200)).body;
+      const { meaning } = words[0].meanings[0];
+      expect(meaning.definition).toBe(definitionText);
+      expect(meaning.examples[0]).toEqual({ text: expect.any(String), translation: expect.any(String) });
+    });
+
     it('rejects edits outside the roadmap, empty edits and invalid highlights', async () => {
       const seeded = await onboard();
       const { meaningId } = await addWord('serendipity');
@@ -610,7 +624,7 @@ describe('custom words', () => {
       await onboard();
       const { meaningId } = await addWord('serendipity');
       await recall(meaningId);
-      expect((await list())[0]).toMatchObject({ recalled: true, meaningText: null, audioUrl: null });
+      expect((await list())[0]).toMatchObject({ recalled: true, meaningText: null, ipa: null, audioUrl: null });
 
       expect((await lookup('serendipity', other)).meanings[0].status).toBe(CUSTOM_MEANING_STATUS.UNAVAILABLE);
       await add({ meaningId }, other).expect(422);
@@ -697,6 +711,7 @@ describe('custom words', () => {
       await expect(h.customWords.repairNextAudio()).resolves.toBe(true);
       expect(await h.count(meaningPublications, eq(meaningPublications.meaningId, meaningId))).toBe(2);
       expect((await list())[0].audioUrl).toContain('https://');
+      expect((await list())[0].ipa).toEqual(expect.any(String));
       await expect(h.customWords.repairNextAudio()).resolves.toBe(false);
     });
   });

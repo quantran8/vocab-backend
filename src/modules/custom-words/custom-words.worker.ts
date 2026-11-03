@@ -27,7 +27,9 @@ export class CustomWordsWorker {
     try {
       await job();
     } catch (error) {
-      this.logger.warn((error as Error).message);
+      // Drizzle's message is only the SQL; the Postgres or connection error is in cause.
+      const { message, cause } = error as Error;
+      this.logger.warn(cause ? `${message}\ncause: ${String(cause)}` : message);
     } finally {
       this.running = false;
     }

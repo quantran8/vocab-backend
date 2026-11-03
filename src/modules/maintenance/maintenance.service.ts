@@ -7,7 +7,7 @@ import { addHours } from '../../common/constants/time';
 import { AppConfig } from '../../config/app-config';
 import { POLICY } from '../../config/policy';
 import { DB, Db } from '../../db/db';
-import { learningSessions, speechAssessmentReceipts } from '../../db/schema';
+import { deletedIdentities, learningSessions, speechAssessmentReceipts } from '../../db/schema';
 
 @Injectable()
 export class MaintenanceService {
@@ -51,6 +51,7 @@ export class MaintenanceService {
           or(expiredBeforeCutoff, and(eq(learningSessions.status, SESSION_STATUS.COMMITTED), lte(learningSessions.committedAt, cutoff))),
         ));
     });
+    await this.db.delete(deletedIdentities).where(lte(deletedIdentities.deletedAt, addHours(now, -POLICY.account.deletedIdentityRetentionHours)));
     return rowCount ?? 0;
   }
 }

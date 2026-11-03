@@ -20,6 +20,7 @@ import { CustomWordsService } from './modules/custom-words/custom-words.service'
 import { CustomWordsWorker } from './modules/custom-words/custom-words.worker';
 import { LexicalProvider } from './modules/custom-words/lexical.provider';
 import { ElevenLabsTtsProvider, TtsProvider } from './modules/custom-words/tts.provider';
+import { AccountDeletionService } from './modules/identity/account-deletion.service';
 import { IdentityController } from './modules/identity/identity.controller';
 import { IdentityService } from './modules/identity/identity.service';
 import { MaintenanceService } from './modules/maintenance/maintenance.service';
@@ -52,7 +53,7 @@ import { HealthController } from './modules/health/health.controller';
     { provide: LexicalProvider, useClass: AnthropicLexicalProvider },
     { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
     { provide: AudioStorage, useClass: SupabaseAudioStorage },
-    AuthProvider, AuthService, IdentityService, ProgressService, PlannerRepository, PlannerService, CommitService,
+    AuthProvider, AuthService, IdentityService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
     SpeechService, CheckpointService, MaintenanceService, AdminService, PublicationService,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker,
   ],

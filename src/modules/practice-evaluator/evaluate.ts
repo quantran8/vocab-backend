@@ -1,9 +1,8 @@
 import { EVENT_ACTION, OUTCOME, Outcome, TEMPLATE, Template, VALIDITY } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
-import { POLICY } from '../../config/policy';
 import { TaskEvent } from './events';
 import { normalizeAnswer } from './normalizer';
-import { transcriptScore } from './transcript';
+import { transcriptMatches } from './transcript';
 
 export interface Option { id: number; text: string }
 export interface PairKey { leftId: number; rightId: number }
@@ -45,7 +44,6 @@ export interface TargetOutcome {
 export interface TaskEvaluation {
   targets: TargetOutcome[];
   receiptId?: string;
-  accuracyScore?: number | null;
 }
 
 export interface EvaluateInput {
@@ -222,9 +220,9 @@ function evaluateRecording({ body, key, targetOrdinals, events, receipts }: Eval
     if (events.length > attemptLimit(body)) throw invalid('Attempt limit exceeded');
     if (!key.referenceText) throw new ApiError('TASK_DATA_INVALID', 'Recording has no reference');
     const last = events[events.length - 1] as Extract<TaskEvent, { action: typeof EVENT_ACTION.TRANSCRIBED }>;
-    const score = transcriptScore(last.transcript, key.referenceText);
-    const outcome = score === null ? OUTCOME.INVALID : score >= POLICY.speech.passAccuracy ? OUTCOME.ASSESSED_PASSED : OUTCOME.ASSESSED_FAILED;
-    return { targets: target(outcome, events.length), accuracyScore: score };
+    const matches = transcriptMatches(last.transcript, key.referenceText);
+    const outcome = matches === null ? OUTCOME.INVALID : matches ? OUTCOME.ASSESSED_PASSED : OUTCOME.ASSESSED_FAILED;
+    return { targets: target(outcome, events.length) };
   }
 
   if (events.length !== 1) throw invalid('Recording needs exactly one terminal event');

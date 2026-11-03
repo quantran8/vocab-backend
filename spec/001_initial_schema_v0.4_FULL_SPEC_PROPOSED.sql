@@ -12,6 +12,12 @@ CREATE TABLE app_user (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A deleted account's access tokens stay valid until they expire; this stops them provisioning a new user.
+CREATE TABLE deleted_identities (
+    identity_subject TEXT PRIMARY KEY,
+    deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE user_settings (
     user_id UUID PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,
     learning_language VARCHAR(16) NOT NULL DEFAULT 'en',

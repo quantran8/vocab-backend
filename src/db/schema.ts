@@ -24,6 +24,11 @@ export const appUsers = pgTable('app_user', {
   createdAt: createdAt(),
 });
 
+export const deletedIdentities = pgTable('deleted_identities', {
+  identitySubject: text('identity_subject').primaryKey(),
+  deletedAt: ts('deleted_at').notNull().defaultNow(),
+});
+
 export const userSettings = pgTable('user_settings', {
   userId: uuid('user_id').primaryKey(),
   learningLanguage: varchar('learning_language', { length: 16 }).notNull().default('en'),

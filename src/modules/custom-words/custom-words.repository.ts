@@ -323,12 +323,13 @@ export class CustomWordsRepository {
   list(userId: string, locale: string) {
     return this.db.execute<{
       meaningId: string; wordId: string; lemma: string; partOfSpeech: string; meaningText: string | null; definitionText: string | null;
-      examples: ExampleView[] | null; audioUrl: string | null; overridden: boolean; translationPending: boolean; recalled: boolean;
+      examples: ExampleView[] | null; ipa: string | null; audioUrl: string | null; overridden: boolean; translationPending: boolean; recalled: boolean;
     }>(sql`
       SELECT tm.meaning_id AS "meaningId", w.id AS "wordId", w.lemma, wt.part_of_speech AS "partOfSpeech",
         CASE WHEN a.recalled_at IS NULL THEN COALESCE(o.content->>'meaningText', p.snapshot->>'meaningText') END AS "meaningText",
         CASE WHEN a.recalled_at IS NULL THEN COALESCE(o.content->>'definitionText', p.snapshot->>'definitionText') END AS "definitionText",
         CASE WHEN a.recalled_at IS NULL THEN COALESCE(o.content->'examples', p.snapshot->'examples') END AS examples,
+        (SELECT e->>'ipa' FROM jsonb_array_elements(p.snapshot->'pronunciations') e WHERE e->>'accentLocale' = ${DEFAULT_ACCENT}) AS ipa,
         (SELECT e->>'audioUrl' FROM jsonb_array_elements(p.snapshot->'pronunciations') e WHERE e->>'accentLocale' = ${DEFAULT_ACCENT}) AS "audioUrl",
         o.user_id IS NOT NULL AS overridden,
         a.meaning_id IS NULL AS "translationPending",

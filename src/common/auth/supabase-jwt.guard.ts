@@ -68,14 +68,16 @@ export class SupabaseJwtGuard implements CanActivate {
     }
   }
 
-  // One statement: creates user + settings on first sight, otherwise only reads the id.
+  // One statement: creates user + settings on first sight, otherwise only reads the id. A deleted identity gets neither.
   private async provision(subject: string) {
     const { rows } = await this.db.execute<{ id: string }>(sql`
       WITH existing AS (
         SELECT id FROM app_user WHERE identity_subject = ${subject}
       ), inserted AS (
         INSERT INTO app_user (id, identity_subject)
-        SELECT ${uuidv7()}::uuid, ${subject}::text WHERE NOT EXISTS (SELECT 1 FROM existing)
+        SELECT ${uuidv7()}::uuid, ${subject}::text
+        WHERE NOT EXISTS (SELECT 1 FROM existing)
+          AND NOT EXISTS (SELECT 1 FROM deleted_identities WHERE identity_subject = ${subject})
         ON CONFLICT (identity_subject) DO UPDATE SET identity_subject = EXCLUDED.identity_subject
         RETURNING id
       ), settings AS (
@@ -83,6 +85,7 @@ export class SupabaseJwtGuard implements CanActivate {
         ON CONFLICT (user_id) DO NOTHING
       )
       SELECT id FROM existing UNION ALL SELECT id FROM inserted`);
+    if (!rows[0]) throw new ApiError('UNAUTHORIZED', 'Account deleted');
     return rows[0].id;
   }
 }

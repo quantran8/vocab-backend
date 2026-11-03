@@ -701,6 +701,35 @@ describe('Vocab Flow API', () => {
       const revoked = (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
       expect(statuses(revoked)).not.toContain('verified');
       expect(revoked.needsPractice).toBe(true);
+      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+    });
+
+    it('pages and searches the library without skill states', async () => {
+      await onboard(words(4).map((word, i) => ({ ...word, meaningText: `Đường đi ấm áp ${i}` })));
+      await goal(3);
+      const p = await plan();
+      await commit(p, answers(p)).expect(200);
+
+      const first = (await api('get', '/v1/me/words?limit=2').expect(200)).body.words;
+      const second = (await api('get', '/v1/me/words?limit=2&offset=2').expect(200)).body.words;
+      expect(first).toHaveLength(2);
+      expect(second).toHaveLength(1);
+      expect(new Set([...first, ...second].map((w: { wordId: string }) => w.wordId)).size).toBe(3);
+      expect(first[0].meanings[0].meaningId).toEqual(expect.any(String));
+      expect(first[0].meanings[0].skills).toBeUndefined();
+      expect(first[0].needsPractice).toBeUndefined();
+      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 3, needPracticeWords: 0 });
+
+      const search = async (q: string) =>
+        (await api('get', `/v1/me/words?q=${encodeURIComponent(q)}`).expect(200)).body.words as { wordId: string }[];
+      const target = first[0];
+      expect((await search(target.lemma.toUpperCase())).map((w) => w.wordId)).toEqual([target.wordId]);
+      expect(await search('%')).toEqual([]);
+      expect(await search('no such word')).toEqual([]);
+
+      const suffix = target.meanings[0].meaning.text.at(-1);
+      expect((await search(`duong di am ap ${suffix}`)).map((w) => w.wordId)).toEqual([target.wordId]);
+      expect((await search(`ĐƯỜNG ĐI ẤM ÁP ${suffix}`)).map((w) => w.wordId)).toEqual([target.wordId]);
     });
   });
 

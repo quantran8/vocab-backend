@@ -28,6 +28,7 @@ export const START = new Date('2026-11-02T03:00:00Z');
 export const CAPS = { audioPlayback: true, microphone: true };
 const ISSUER_PATH = '/auth/v1';
 export const ANON_KEY = 'test-anon-key';
+const SERVICE_ROLE_KEY = 'test-service-role-key';
 
 const fakeSession = (email: string) => ({
   access_token: `access-${email}`, refresh_token: `refresh-${email}`, expires_in: 3600, user: { id: `uid-${email}`, email },
@@ -130,6 +131,11 @@ export const seedWord = (i: number, overrides: Partial<SeedWord> = {}): SeedWord
   };
 };
 
+export class FakeAuthAdmin {
+  deleted: string[] = [];
+  deleteStatus = 200;
+}
+
 export interface Harness {
   app: NestFastifyApplication;
   db: Db;
@@ -139,6 +145,7 @@ export interface Harness {
   speech: FakeSpeech;
   lexical: FakeLexical;
   tts: FakeTts;
+  authAdmin: FakeAuthAdmin;
   customWords: CustomWordsService;
   planner: PlannerService;
   http: () => ReturnType<typeof request>;
@@ -152,8 +159,14 @@ export interface Harness {
 export async function createHarness(): Promise<Harness> {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = { ...(await exportJWK(publicKey)), kid: 'test', alg: 'RS256', use: 'sig' };
+  const authAdmin = new FakeAuthAdmin();
   const jwks: Server = createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
+    if (req.method === 'DELETE') {
+      res.statusCode = req.headers.apikey === SERVICE_ROLE_KEY ? authAdmin.deleteStatus : 401;
+      if (res.statusCode === 200) authAdmin.deleted.push(decodeURIComponent(req.url?.split('/').pop() ?? ''));
+      return void res.end('{}');
+    }
     if (req.method !== 'POST') return void res.end(JSON.stringify({ keys: [jwk] }));
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
@@ -170,6 +183,7 @@ export async function createHarness(): Promise<Harness> {
     DATABASE_URL: process.env.TEST_DATABASE_URL,
     SUPABASE_URL: base,
     SUPABASE_ANON_KEY: ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
     ALLOW_PLACEHOLDER_AUDIO: 'true',
     ENABLE_CRON: 'false',
   });
@@ -193,7 +207,7 @@ export async function createHarness(): Promise<Harness> {
   const stats = app.get(QueryStats);
 
   return {
-    app, db, clock, speech, lexical, tts,
+    app, db, clock, speech, lexical, tts, authAdmin,
     customWords: app.get(CustomWordsService),
     count: async (table, where) => (await db.select({ n: countRows() }).from(table).where(where))[0].n,
     first: async (table, where) => {
@@ -216,6 +230,7 @@ export async function createHarness(): Promise<Harness> {
       lexical.lemmas.clear();
       lexical.invalid.clear();
       Object.assign(tts, { calls: [], error: undefined });
+      Object.assign(authAdmin, { deleted: [], deleteStatus: 200 });
       const { rows } = await db.execute<{ tablename: string }>(sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
       await db.execute(sql.raw(`TRUNCATE ${rows.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`));
     },

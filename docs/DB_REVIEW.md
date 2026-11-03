@@ -13,7 +13,7 @@ Kiểm chứng: **Tái hiện** là đã chạy qua API hoặc lệnh SQL trên 
 | 1 | Lịch SRS tăng hai lần khi có hai plan song song | Memory | Cao | Tái hiện |
 | 2 | Pronunciation gắn sai cấp | Evidence | Cao | Tái hiện |
 | 3 | Evidence giữ chặt snapshot, không dọn được dữ liệu (đã xử lý) | Retention | Cao | Đo, đọc code |
-| 4 | Không xoá được tài khoản | Vận hành | Cao | Tái hiện |
+| 4 | Không xoá được tài khoản (đã xử lý) | Vận hành | Cao | Tái hiện |
 | 5 | Đổi locale làm tiến trình biến mất khỏi màn hình | Progress | Trung bình | Tái hiện |
 | 6 | Đọc evidence đang full scan | Evidence | Trung bình | Đo |
 | 7 | Thiếu bảng trạng thái skill (đã nâng mức vì scheduler phụ thuộc vào nó) | Evidence | Cao | Đọc code |
@@ -86,6 +86,8 @@ Xoá `app_user` lỗi ở `learning_sessions_user_id_fkey`. Các bảng thuộc 
 App iOS có tạo tài khoản thì Apple bắt buộc phải có xoá tài khoản trong app, nên việc này chặn phát hành.
 
 **Hướng sửa:** thêm `ON DELETE CASCADE` cho mọi bảng thuộc user, kèm endpoint xoá cả user bên Supabase Auth.
+
+**Đã xử lý:** `DELETE /v1/me` (`AccountDeletionService`) xoá lần lượt trong một transaction, rồi gọi Supabase Auth trước khi commit. Không dùng `ON DELETE CASCADE` như đề xuất, vì dữ liệu học còn trỏ tới nghĩa riêng tư của chính user nên vẫn phải xoá theo thứ tự, và FK `NO ACTION` giúp một bảng mới bị bỏ sót sẽ báo lỗi thay vì âm thầm để lại dữ liệu. `deleted_identities` chặn token còn hạn tạo lại user, và được dọn sau 7 ngày.
 
 ## Mức độ trung bình
 

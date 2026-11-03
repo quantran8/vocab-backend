@@ -24,7 +24,6 @@ export interface EvaluatedTask {
   deliveryMode: DeliveryMode;
   targets: TargetOutcome[];
   receiptId?: string;
-  accuracyScore?: number | null;
 }
 
 const invalid = (message: string) => new ApiError('INVALID_SUBMISSION', message);
@@ -93,13 +92,13 @@ const targetIndex = (targets: TargetRow[]) => new Map(targets.map((t) => [target
 export function sessionResult(evaluated: EvaluatedTask[], targets: TargetRow[], receipts: Map<string, { accuracyScore?: number | null }>) {
   const index = targetIndex(targets);
   return {
-    tasks: evaluated.map(({ task, deliveryMode, receiptId, accuracyScore, targets: outcomes }) => ({
+    tasks: evaluated.map(({ task, deliveryMode, receiptId, targets: outcomes }) => ({
       taskId: task.id,
       template: task.template,
       variant: task.variant,
       intent: (task.serverEvaluation as ServerEvaluation).intent,
       deliveryMode,
-      accuracyScore: accuracyScore ?? (receiptId && receipts.get(receiptId)?.accuracyScore) ?? null,
+      accuracyScore: (receiptId && receipts.get(receiptId)?.accuracyScore) ?? null,
       targets: outcomes.map((o) => {
         const target = index.get(targetKey(task.id, o.ordinal));
         return { ...o, meaningId: target?.meaningId ?? null, pronunciationId: target?.pronunciationId ?? null };

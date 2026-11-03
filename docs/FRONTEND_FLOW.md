@@ -56,6 +56,15 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 - **Refresh:** gọi khi `expiresIn` sắp hết, hoặc khi bất kỳ request nào nhận `401 UNAUTHORIZED`: refresh một lần rồi retry request gốc một lần. Nếu refresh cũng `401` thì đăng xuất.
 - Lỗi: `401 UNAUTHORIZED` (sai thông tin/token hỏng), `409 EMAIL_ALREADY_REGISTERED`, `400 VALIDATION_FAILED`, `503 AUTH_PROVIDER_UNAVAILABLE` (retryable).
 
+### Xoá tài khoản
+
+`DELETE /v1/me` (cần bearer token, không có body) trả `200 { deleted: true }`.
+
+- Xoá vĩnh viễn dữ liệu học, từ tự thêm, nghĩa riêng tư, bản sửa riêng và cả user bên Supabase Auth. Không khôi phục được, nên phải hỏi xác nhận trước khi gọi. Sau khi thành công, xoá token và dữ liệu cục bộ.
+- Thao tác là tất cả hoặc không có gì: `503 AUTH_PROVIDER_UNAVAILABLE` (retryable) nghĩa là chưa có gì bị xoá, cho user thử lại.
+- Access token cũ của tài khoản đã xoá nhận `401` ở mọi request và không tạo lại user. Nếu mất response rồi gọi lại, request đó cũng nhận `401`, và refresh cũng `401` nên client đăng xuất như bình thường.
+- Nội dung đã thuộc kho chung vẫn được giữ, chỉ bỏ liên kết với user: từ, phát âm, audio, nghĩa thường và nghĩa riêng đã được admin duyệt.
+
 ## 3. Onboarding và cài đặt
 
 `GET /v1/me` trả hồ sơ:
@@ -84,10 +93,15 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 
 - `GET /v1/me/learn-home` → `{dueCount, checkpointAvailable, checkpointSessionsDone, checkpointSessionsRequired, learnedTotal}`. Một request cho cả Home. Tiến độ tới challenge kế tiếp = `checkpointSessionsDone / checkpointSessionsRequired`; chỉ session có học từ mới mới được đếm, và số này về 0 khi challenge mở.
 - `GET /v1/me/checkpoint-challenges` → `{challenges:[{id, sequence, state:"available", createdAt, meaningCount}]}`. Mở một challenge sau mỗi 7 session có học từ mới, nên có thể nhiều challenge trong một ngày.
-- `GET /v1/me/words?limit=50&offset=0` (limit 1–100) và `GET /v1/words/{wordId}`: từ đã học, trạng thái 4 kỹ năng.
-  - Mỗi meaning có `skills: {reading, writing, listening?, speaking?}`, mỗi kỹ năng là `{status: "not_verified"|"demonstrated"|"verified", needsPractice}`.
+- `GET /v1/me/words?limit=50&offset=0&q=` (limit 1–100): từ đã học, mới học nhất trước. Trang ngắn hơn `limit` là hết.
+  - `q` (tuỳ chọn, tối đa 64 ký tự) tìm trên từ tiếng Anh và nghĩa, không phân biệt hoa thường và dấu tiếng Việt.
+  - Mỗi meaning có `meaningId`, `learnedAt`, `nextReviewAt` và `meaning: {partOfSpeech, text, ipa?, definition, audio?, examples}`, cùng dữ liệu với learn card (đã áp bản sửa của user). `audio` vắng khi không phát được.
+  - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
+- `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
+- `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).
+  - Mỗi meaning có thêm `skills: {reading, writing, listening?, speaking?}` và `needsPractice`, mỗi kỹ năng là `{status: "not_verified"|"demonstrated"|"verified", needsPractice}`.
   - `listening/speaking` vắng mặt khi Meaning không có phát âm.
-  - `fullyVerified` ở cấp Word.
+  - `needsPractice` và `fullyVerified` ở cấp Word.
 
 ## 5. Plan một session
 
@@ -306,7 +320,7 @@ Xem 7.1.
 Client chọn một trong hai cách chấm **cho mỗi task** (không trộn trong cùng một task):
 
 - **Backend (Azure)**: flow bên dưới, commit `assessed`.
-- **On-device**: client tự speech-to-text rồi so với `evaluation.acceptedResponses[0]` để phản hồi ngay, không gọi `recording-assess`. Mỗi lần đọc là một event `{seq, action:"transcribed", transcript}` (`transcript` tối đa 200 ký tự, chuỗi rỗng nếu không nhận ra gì). Tổng số event `transcribed` ≤ 1 + `maxRetries`. Khi commit, backend chấm lại **lần cuối**: chuẩn hoá (bỏ dấu, chữ thường, bỏ dấu câu), điểm = độ giống theo edit distance × 100, đạt khi ≥ 80; transcript rỗng là `invalid`. Kết quả được tính như bằng chứng Speaking từ Azure (cùng luật direct/supporting).
+- **On-device**: client tự speech-to-text rồi so với `evaluation.acceptedResponses[0]` để phản hồi ngay, không gọi `recording-assess`. Mỗi lần đọc là một event `{seq, action:"transcribed", transcript}` (`transcript` tối đa 200 ký tự, chuỗi rỗng nếu không nhận ra gì). Tổng số event `transcribed` ≤ 1 + `maxRetries`. Khi commit, backend chấm lại **lần cuối**: chuẩn hoá (bỏ dấu, chữ thường, bỏ dấu câu), chỉ có đúng hoặc sai và không có điểm (`accuracyScore` là `null`): đúng khi khớp 100% `referenceText`, client chỉ xét kết quả nhận dạng đầu tiên; transcript rỗng là `invalid`. Kết quả được tính như bằng chứng Speaking từ Azure (cùng luật direct/supporting).
 
 Flow chấm bằng backend:
 
@@ -364,7 +378,7 @@ Response `200`:
 
 `GET /v1/sessions/{sessionId}/commit-status` → `{sessionId, status: "issued"|"committed"|"expired", committedAt, expiresAt, response}`. Gọi khi không chắc commit trước đó đã thành công.
 
-Sau commit: gọi lại `learn-home` để làm mới Home. Kết quả chi tiết từng task không được trả về trong response commit; dùng `/me/words` để xem trạng thái kỹ năng.
+Sau commit: gọi lại `learn-home` để làm mới Home. Kết quả chi tiết từng task không được trả về trong response commit; dùng `GET /v1/words/{wordId}` để xem trạng thái kỹ năng.
 
 Bỏ session giữa chừng: không gọi gì. Không có kết quả nào được ghi, các từ mới vẫn còn "chưa học".
 
@@ -576,6 +590,7 @@ Trả `201`:
       "examples": [
         { "text": "Meeting her was pure serendipity.", "translation": "Gặp cô ấy hoàn toàn là một sự tình cờ may mắn.", "targetLocator": { "start": 21, "end": 32 } }
       ],
+      "ipa": "/ˌserənˈdipəti/",
       "audioUrl": "https://...mp3",
       "overridden": true,
       "translationPending": false,
@@ -588,6 +603,7 @@ Trả `201`:
 | Field | Xử lý trên UI |
 |---|---|
 | `meaningText`, `definitionText`, `examples` | Đã áp bản sửa của user. `null` khi `translationPending` hoặc `recalled` |
+| `ipa` | `null` khi `translationPending` hoặc `recalled` |
 | `audioUrl` | Có thể `null`: ẩn nút phát |
 | `overridden` | `true`: hiện nút "Khôi phục bản gốc" |
 | `translationPending` | `true` sau khi user đổi `explanationLocale`: hiện "Đang dịch". Từ tạm không vào session, backend tự dịch dần, có thể mất tới vài chục phút |

@@ -1,17 +1,23 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Put } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthUser, CurrentUser } from '../../common/auth/auth.decorators';
 import { ZodPipe } from '../../common/http/zod.pipe';
+import { AccountDeletionService } from './account-deletion.service';
 import { levelsSchema, scopeSchema, settingsSchema } from './identity.schemas';
 import { IdentityService } from './identity.service';
 
 @Controller('v1/me')
 export class IdentityController {
-  constructor(private readonly identity: IdentityService) {}
+  constructor(private readonly identity: IdentityService, private readonly accounts: AccountDeletionService) {}
 
   @Get()
   me(@CurrentUser() user: AuthUser) {
     return this.identity.getMe(user.id);
+  }
+
+  @Delete()
+  remove(@CurrentUser() user: AuthUser) {
+    return this.accounts.deleteAccount(user);
   }
 
   @Put('levels')

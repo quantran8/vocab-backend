@@ -1,7 +1,7 @@
 import { EVENT_ACTION, OUTCOME, TEMPLATE, VALIDITY } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { EvaluateInput, evaluateTask } from './evaluate';
-import { transcriptScore } from './transcript';
+import { transcriptMatches } from './transcript';
 import { TaskEvent } from './events';
 import { normalizeAnswer, splitGraphemes } from './normalizer';
 
@@ -155,7 +155,7 @@ describe('evaluators', () => {
       evaluateTask({ template: TEMPLATE.SELECT, body: {}, key: {}, targetOrdinals: [0], events: [], ...input });
 
     const passed = evaluate({ ...base, events: takes('apricot', 'Appreciate.') });
-    expect(passed).toMatchObject({ accuracyScore: 100 });
+    expect(passed).not.toHaveProperty('accuracyScore');
     expect(passed.targets[0]).toMatchObject({ outcome: OUTCOME.ASSESSED_PASSED, attemptCount: 2 });
     expect(run({ ...base, events: takes('Appreciate', 'apricot') })[0].outcome).toBe(OUTCOME.ASSESSED_FAILED);
     expect(run({ ...base, events: takes(' . ') })[0].outcome).toBe(OUTCOME.INVALID);
@@ -164,9 +164,14 @@ describe('evaluators', () => {
     expect(() => run({ ...base, key: {}, events: takes('appreciate') })).toThrow(ApiError);
   });
 
-  it('transcriptScore ignores case, accents and punctuation', () => {
-    expect(transcriptScore('  CAFÉ! ', 'cafe')).toBe(100);
-    expect(transcriptScore('appreciates', 'appreciate')).toBe(91);
-    expect(transcriptScore('', 'appreciate')).toBeNull();
+  it('transcriptMatches ignores case, accents and punctuation', () => {
+    expect(transcriptMatches('  CAFÉ! ', 'cafe')).toBe(true);
+    expect(transcriptMatches('', 'appreciate')).toBeNull();
+  });
+
+  it('transcriptMatches needs the exact reference', () => {
+    expect(transcriptMatches('apple', 'appreciate')).toBe(false);
+    expect(transcriptMatches('appreciates', 'appreciate')).toBe(false);
+    expect(transcriptMatches('the cat sat on the hat', 'the cat sat on the mat')).toBe(false);
   });
 });

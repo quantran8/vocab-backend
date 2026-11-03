@@ -24,6 +24,10 @@ export class UserIdCache {
     this.entries.set(subject, { id, expiresAt: Date.now() + TTL_MS });
   }
 
+  delete(subject: string) {
+    this.entries.delete(subject);
+  }
+
   clear() {
     this.entries.clear();
   }
