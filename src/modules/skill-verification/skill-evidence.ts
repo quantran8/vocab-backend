@@ -1,5 +1,5 @@
 import {
-  ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, DeliveryMode, DIRECTNESS, Directness, OUTCOME, Outcome,
+  ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, DeliveryMode, EVIDENCE_REASON, EvidenceReason, OUTCOME, Outcome,
   SKILL, Skill, SKILL_STATUS, SkillStatus, TASK_PHASE, TaskPhase, TEMPLATE, Template, VALIDITY, Validity,
 } from '../../common/constants/domain';
 import { MS_PER_HOUR } from '../../common/constants/time';
@@ -21,21 +21,30 @@ export interface SkillFact {
 
 export interface EvidenceDraft {
   skill: Skill;
-  directness: Directness;
+  reasons: EvidenceReason[];
   validity: Validity;
   passed: boolean | null;
   meaningId: string | null;
   pronunciationId: string | null;
 }
 
-const isCleanAttempt = (fact: SkillFact) =>
-  fact.hintCount === 0 && fact.outcome !== OUTCOME.REVEALED && !fact.isPrimed && fact.phase !== TASK_PHASE.NEW_PRACTICE;
+const when = (condition: boolean, reason: EvidenceReason) => (condition ? [reason] : []);
 
-const meaningEvidence = (fact: SkillFact, skill: Skill, direct: boolean): EvidenceDraft[] =>
+const assistance = (fact: SkillFact) => [
+  ...when(fact.hintCount > 0, EVIDENCE_REASON.HINTED),
+  ...when(fact.outcome === OUTCOME.REVEALED, EVIDENCE_REASON.REVEALED),
+  ...when(fact.isPrimed, EVIDENCE_REASON.PRIMED),
+];
+
+const meaningEvidence = (fact: SkillFact, skill: Skill, weakTemplate: boolean): EvidenceDraft[] =>
   fact.meaningId
     ? [{
         skill,
-        directness: direct ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+        reasons: [
+          ...when(weakTemplate, EVIDENCE_REASON.WEAK_TEMPLATE),
+          ...when(!fact.qualityQualified, EVIDENCE_REASON.QUALITY_UNQUALIFIED),
+          ...assistance(fact),
+        ],
         validity: VALIDITY.VALID,
         passed: fact.outcome === OUTCOME.CORRECT,
         meaningId: fact.meaningId,
@@ -43,13 +52,17 @@ const meaningEvidence = (fact: SkillFact, skill: Skill, direct: boolean): Eviden
       }]
     : [];
 
-function listeningEvidence(fact: SkillFact, direct: boolean): EvidenceDraft[] {
+function listeningEvidence(fact: SkillFact, weakTemplate: boolean): EvidenceDraft[] {
   if (!fact.pronunciationId) return [];
   // Audio that never played says nothing about listening: invalid, not failed.
   const delivered = fact.deliveryMode === DELIVERY_MODE.AUDIO;
   return [{
     skill: SKILL.LISTENING,
-    directness: direct && delivered ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+    reasons: [
+      ...when(!delivered, EVIDENCE_REASON.AUDIO_NOT_PLAYED),
+      ...when(weakTemplate, EVIDENCE_REASON.WEAK_TEMPLATE),
+      ...assistance(fact),
+    ],
     validity: delivered ? VALIDITY.VALID : VALIDITY.INVALID,
     passed: delivered ? fact.outcome === OUTCOME.CORRECT : null,
     meaningId: null,
@@ -62,7 +75,7 @@ function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
   const valid = fact.outcome !== OUTCOME.INVALID;
   return [{
     skill: SKILL.SPEAKING,
-    directness: valid && fact.phase !== TASK_PHASE.NEW_PRACTICE ? DIRECTNESS.DIRECT : DIRECTNESS.SUPPORTING,
+    reasons: when(!valid, EVIDENCE_REASON.INVALID_RECORDING),
     validity: valid ? VALIDITY.VALID : VALIDITY.INVALID,
     passed: valid ? fact.outcome === OUTCOME.ASSESSED_PASSED : null,
     meaningId: null,
@@ -72,25 +85,28 @@ function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
 
 /** Evidence depends on stimulus + response + target + delivery, never on prompt type alone (AR-15). */
 export function deriveEvidence(fact: SkillFact): EvidenceDraft[] {
-  const clean = isCleanAttempt(fact);
+  // Right after Learn the answer was just taught — see memory skill-evidence-learning.
+  const phase = when(fact.phase === TASK_PHASE.NEW_PRACTICE, EVIDENCE_REASON.NEW_PRACTICE);
+  return evidenceFor(fact).map((d) => ({ ...d, reasons: [...phase, ...d.reasons] }));
+}
+
+function evidenceFor(fact: SkillFact): EvidenceDraft[] {
   switch (fact.intent) {
-    case ASSESSMENT_INTENT.MEANING_RECOGNITION: {
-      if (fact.promptIsTargetAudio) return listeningEvidence(fact, clean);
-      const isPlainSelect = fact.template === TEMPLATE.SELECT && fact.qualityQualified;
-      return meaningEvidence(fact, SKILL.READING, clean && isPlainSelect);
-    }
+    case ASSESSMENT_INTENT.MEANING_RECOGNITION:
+      if (fact.promptIsTargetAudio) return listeningEvidence(fact, false);
+      return meaningEvidence(fact, SKILL.READING, fact.template !== TEMPLATE.SELECT);
     case ASSESSMENT_INTENT.MEANING_RECALL:
-      return meaningEvidence(fact, SKILL.WRITING, clean && fact.qualityQualified);
+      return meaningEvidence(fact, SKILL.WRITING, false);
     case ASSESSMENT_INTENT.TRANSCRIPTION:
-      return fact.promptIsTargetAudio ? listeningEvidence(fact, clean) : [];
+      return fact.promptIsTargetAudio ? listeningEvidence(fact, false) : [];
     case ASSESSMENT_INTENT.SOUND_DISCRIMINATION:
-      return listeningEvidence(fact, false);
+      return listeningEvidence(fact, true);
     case ASSESSMENT_INTENT.PRONUNCIATION:
       return speakingEvidence(fact);
     case ASSESSMENT_INTENT.PAIRING:
-      return meaningEvidence(fact, SKILL.READING, false);
+      return meaningEvidence(fact, SKILL.READING, true);
     case ASSESSMENT_INTENT.SPELLING_REPAIR:
-      return meaningEvidence(fact, SKILL.WRITING, false);
+      return meaningEvidence(fact, SKILL.WRITING, true);
   }
 }
 

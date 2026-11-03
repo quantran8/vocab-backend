@@ -350,7 +350,7 @@ CREATE TABLE skill_evidence (
     task_id UUID NOT NULL,
     target_ordinal SMALLINT NOT NULL,
     skill VARCHAR(12) NOT NULL CHECK (skill IN ('listening','speaking','reading','writing')),
-    directness VARCHAR(12) NOT NULL CHECK (directness IN ('direct','supporting')),
+    reasons JSONB NOT NULL CHECK (jsonb_typeof(reasons) = 'array' AND reasons <@ '["new_practice","hinted","revealed","primed","weak_template","quality_unqualified","audio_not_played","invalid_recording","unknown"]'::jsonb),
     validity VARCHAR(12) NOT NULL CHECK (validity IN ('valid','invalid')),
     passed BOOLEAN,
     meaning_id UUID REFERENCES meanings(id),

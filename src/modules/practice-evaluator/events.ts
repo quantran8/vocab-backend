@@ -23,6 +23,7 @@ export const eventSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...base, action: z.literal(EVENT_ACTION.REVEAL) }),
   z.strictObject({ ...base, action: z.literal(EVENT_ACTION.ASSESSED), assessmentReceiptId: z.uuid() }),
   z.strictObject({ ...base, action: z.literal(EVENT_ACTION.UNAVAILABLE), reason: z.string().max(64) }),
+  z.strictObject({ ...base, action: z.literal(EVENT_ACTION.TRANSCRIBED), transcript: z.string().max(200) }),
 ]);
 export type TaskEvent = z.infer<typeof eventSchema>;
 

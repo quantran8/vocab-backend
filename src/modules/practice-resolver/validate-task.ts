@@ -35,7 +35,11 @@ const BODY_SCHEMAS: Record<Template, z.ZodType> = {
     word: z.string().min(1),
     evaluation: z.strictObject({ wrongGraphemeIndex: z.number().int().nonnegative(), replacement: z.string() }),
   }),
-  [TEMPLATE.RECORDING]: z.strictObject({ ...common, assessment: z.strictObject({ kind: z.literal('azurePronunciation') }) }),
+  [TEMPLATE.RECORDING]: z.strictObject({
+    ...common,
+    assessment: z.strictObject({ kind: z.literal('azurePronunciation') }),
+    evaluation: z.strictObject({ acceptedResponses: z.tuple([z.string().min(1)]) }),
+  }),
 };
 
 const FORBIDDEN_CLIENT_KEYS = ['wordId', 'meaningId', 'pronunciationId', 'typeId', 'source', 'targets'];

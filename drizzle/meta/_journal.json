@@ -11,6 +11,7 @@
     { "idx": 6, "version": "7", "when": 1761868800006, "tag": "0006_speech_receipts_task_index", "breakpoints": true },
     { "idx": 7, "version": "7", "when": 1761868800007, "tag": "0007_cloze_sentence_prompt", "breakpoints": true },
     { "idx": 8, "version": "7", "when": 1761868800008, "tag": "0008_meaning_clash_highlight", "breakpoints": true },
-    { "idx": 9, "version": "7", "when": 1761868800009, "tag": "0009_custom_words", "breakpoints": true }
+    { "idx": 9, "version": "7", "when": 1761868800009, "tag": "0009_custom_words", "breakpoints": true },
+    { "idx": 10, "version": "7", "when": 1761868800010, "tag": "0010_evidence_reasons", "breakpoints": true }
   ]
 }

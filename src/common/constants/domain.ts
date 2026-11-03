@@ -104,8 +104,20 @@ export const SKILL_STATUS = {
 } as const;
 export type SkillStatus = (typeof SKILL_STATUS)[keyof typeof SKILL_STATUS];
 
-export const DIRECTNESS = { DIRECT: 'direct', SUPPORTING: 'supporting' } as const;
-export type Directness = (typeof DIRECTNESS)[keyof typeof DIRECTNESS];
+/** Why an evidence row is not direct; an empty list means direct. */
+export const EVIDENCE_REASON = {
+  NEW_PRACTICE: 'new_practice',
+  HINTED: 'hinted',
+  REVEALED: 'revealed',
+  PRIMED: 'primed',
+  WEAK_TEMPLATE: 'weak_template',
+  QUALITY_UNQUALIFIED: 'quality_unqualified',
+  AUDIO_NOT_PLAYED: 'audio_not_played',
+  INVALID_RECORDING: 'invalid_recording',
+  // Only on rows backfilled by migration 0010 whose plan was already cleared.
+  UNKNOWN: 'unknown',
+} as const;
+export type EvidenceReason = (typeof EVIDENCE_REASON)[keyof typeof EVIDENCE_REASON];
 
 export const VALIDITY = { VALID: 'valid', INVALID: 'invalid' } as const;
 export type Validity = (typeof VALIDITY)[keyof typeof VALIDITY];
@@ -123,6 +135,7 @@ export const EVENT_ACTION = {
   REVEAL: 'reveal',
   ASSESSED: 'assessed',
   UNAVAILABLE: 'unavailable',
+  TRANSCRIBED: 'transcribed',
 } as const;
 export type EventAction = (typeof EVENT_ACTION)[keyof typeof EVENT_ACTION];
 

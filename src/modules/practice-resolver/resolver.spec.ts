@@ -44,7 +44,7 @@ const CURATED_BY_TEMPLATE = {
   [TEMPLATE.TYPING]: curated(TEMPLATE.TYPING, VARIANT.MEANING_RECALL, bothPrompts, { acceptedResponses: ['clarify'] }),
   [TEMPLATE.FLY_REORDER]: curated(TEMPLATE.FLY_REORDER, VARIANT.SPELLING_RECALL, { ...bothPrompts, tiles: [{ id: 1, text: 'b' }, { id: 2, text: 'a' }] }, { acceptedResponses: ['ab'] }),
   [TEMPLATE.SURGERY]: curated(TEMPLATE.SURGERY, VARIANT.FIX_SPELLING, { ...bothPrompts, word: 'clarrify' }, { wrongGraphemeIndex: 4, replacement: '' }),
-  [TEMPLATE.RECORDING]: curated(TEMPLATE.RECORDING, VARIANT.SCRIPTED_PRONUNCIATION, { ...bothPrompts, assessment: { kind: 'azurePronunciation' } }, {}),
+  [TEMPLATE.RECORDING]: curated(TEMPLATE.RECORDING, VARIANT.SCRIPTED_PRONUNCIATION, { ...bothPrompts, assessment: { kind: 'azurePronunciation' } }, { referenceText: 'clarify', referenceLocale: 'en-US' }),
 };
 
 describe('generated tasks', () => {
@@ -84,7 +84,7 @@ describe('generated tasks', () => {
     expect(fly.clientPayload.tiles!.map((t) => t.text).join('')).not.toBe('clarify');
     expectClean(buildMatch([clarify, achieve], ctx, rng));
     const recording = expectClean(buildRecording(clarify, PROMPT_TYPE.TEXT, ctx));
-    expect(recording.clientPayload).not.toHaveProperty('evaluation');
+    expect(recording.clientPayload.evaluation).toEqual({ acceptedResponses: ['clarify'] });
     expect(recording.serverEvaluation.referenceText).toBe('clarify');
   });
 

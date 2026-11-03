@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import { DIRECTNESS, MEMORY_SIGNAL, SKILL, TEMPLATE, VALIDITY } from '../src/common/constants/domain';
+import { EVIDENCE_REASON, MEMORY_SIGNAL, SKILL, TEMPLATE, VALIDITY } from '../src/common/constants/domain';
 import { ApiError } from '../src/common/http/api-error';
 import { POLICY } from '../src/config/policy';
 import {
@@ -460,7 +460,7 @@ describe('Vocab Flow API', () => {
       const receipts = new Map([[task.id, body.assessmentReceiptId]]);
       await commit(p, answers(p, { receipts })).expect(200);
       const evidence = await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING));
-      expect(evidence).toMatchObject({ passed: true, directness: DIRECTNESS.SUPPORTING, assessmentReceiptId: body.assessmentReceiptId });
+      expect(evidence).toMatchObject({ passed: true, reasons: [EVIDENCE_REASON.NEW_PRACTICE], assessmentReceiptId: body.assessmentReceiptId });
       expect((await h.first(speechAssessmentReceipts)).consumedAt).not.toBeNull();
     });
 
@@ -500,6 +500,19 @@ describe('Vocab Flow API', () => {
       const res = await assess(p.sessionId, task.id).expect(422);
       expect(res.body).toMatchObject({ code: 'INVALID_SUBMISSION' });
       expect(await h.count(speechAssessmentReceipts)).toBe(allowed);
+    });
+
+    it('transcribed takes are scored at Finish as Speaking evidence with no receipt', async () => {
+      await onboard(words(4));
+      await goal(1);
+      const p = await plan();
+      const [task] = recordings(p);
+      const [reference] = task.evaluation.acceptedResponses;
+      const takes = [{ seq: 1, action: 'transcribed', transcript: 'zzz' }, { seq: 2, action: 'transcribed', transcript: reference }];
+      await commit(p, answers(p, { override: (t) => (t.id === task.id ? takes : undefined) })).expect(200);
+      const evidence = await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING));
+      expect(evidence).toMatchObject({ passed: true, reasons: [EVIDENCE_REASON.NEW_PRACTICE], assessmentReceiptId: null });
+      expect(await h.count(speechAssessmentReceipts)).toBe(0);
     });
 
     it('rejects non-recording tasks and foreign sessions', async () => {

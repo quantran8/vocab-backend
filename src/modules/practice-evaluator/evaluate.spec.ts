@@ -1,6 +1,7 @@
 import { EVENT_ACTION, OUTCOME, TEMPLATE, VALIDITY } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { EvaluateInput, evaluateTask } from './evaluate';
+import { transcriptScore } from './transcript';
 import { TaskEvent } from './events';
 import { normalizeAnswer, splitGraphemes } from './normalizer';
 
@@ -145,5 +146,27 @@ describe('evaluators', () => {
     expect(run({ ...base, events: assessed, receipts: receipts(VALIDITY.INVALID, null) })[0].outcome).toBe(OUTCOME.INVALID);
     expect(run({ ...base, events: events({ action: 'unavailable', reason: 'microphoneDenied' }) })[0].outcome).toBe(OUTCOME.UNAVAILABLE);
     expect(() => run({ ...base, events: assessed })).toThrow(ApiError);
+  });
+
+  it('recording transcribed takes are re-scored against the reference, last take counts', () => {
+    const base = { template: TEMPLATE.RECORDING, body: { maxRetries: 2 }, key: { referenceText: 'appreciate' } };
+    const takes = (...transcripts: string[]) => events(...transcripts.map((transcript) => ({ action: EVENT_ACTION.TRANSCRIBED, transcript })));
+    const evaluate = (input: Partial<EvaluateInput>) =>
+      evaluateTask({ template: TEMPLATE.SELECT, body: {}, key: {}, targetOrdinals: [0], events: [], ...input });
+
+    const passed = evaluate({ ...base, events: takes('apricot', 'Appreciate.') });
+    expect(passed).toMatchObject({ accuracyScore: 100 });
+    expect(passed.targets[0]).toMatchObject({ outcome: OUTCOME.ASSESSED_PASSED, attemptCount: 2 });
+    expect(run({ ...base, events: takes('Appreciate', 'apricot') })[0].outcome).toBe(OUTCOME.ASSESSED_FAILED);
+    expect(run({ ...base, events: takes(' . ') })[0].outcome).toBe(OUTCOME.INVALID);
+    expect(() => run({ ...base, events: takes('a', 'b', 'c', 'd') })).toThrow(ApiError);
+    expect(() => run({ ...base, events: events({ action: EVENT_ACTION.TRANSCRIBED, transcript: 'x' }, { action: 'unavailable', reason: 'r' }) })).toThrow(ApiError);
+    expect(() => run({ ...base, key: {}, events: takes('appreciate') })).toThrow(ApiError);
+  });
+
+  it('transcriptScore ignores case, accents and punctuation', () => {
+    expect(transcriptScore('  CAFÉ! ', 'cafe')).toBe(100);
+    expect(transcriptScore('appreciates', 'appreciate')).toBe(91);
+    expect(transcriptScore('', 'appreciate')).toBeNull();
   });
 });

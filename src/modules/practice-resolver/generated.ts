@@ -33,7 +33,6 @@ interface Parts {
   intent: AssessmentIntent;
   prompt: Prompt;
   body: Record<string, unknown>;
-  // Omitted for recording: it has no local pass key.
   evaluation?: Record<string, unknown>;
   key: Partial<ServerEvaluation>;
   answerTexts: string[];
@@ -189,6 +188,7 @@ export function buildRecording(target: MeaningSnapshot, promptType: PromptType, 
     intent: ASSESSMENT_INTENT.PRONUNCIATION,
     prompt: playable ? audioPrompt(playable.audioUrl, playable.accentLocale) : textPrompt(target.lemma),
     body: { question: copyFor(ctx.locale, 'recording.question'), assessment: AZURE_ASSESSMENT },
+    evaluation: { acceptedResponses: [target.lemma] },
     key: { referenceText: target.lemma, referenceLocale: pronunciation.accentLocale },
     answerTexts: [],
     promptIsTargetAudio: Boolean(playable),

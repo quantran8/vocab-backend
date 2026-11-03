@@ -188,7 +188,7 @@ export class CommitService {
       rawEvents: evaluated.map((e) => ({ taskId: e.task.id, events: e.rawEvents })),
       result: sessionResult(evaluated, targets, receiptMap),
       evidence: evidenceDrafts(evaluated, targets).map((d) => ({
-        id: newId(), task_id: d.taskId, target_ordinal: d.targetOrdinal, skill: d.skill, directness: d.directness,
+        id: newId(), task_id: d.taskId, target_ordinal: d.targetOrdinal, skill: d.skill, reasons: d.reasons,
         validity: d.validity, passed: d.passed, meaning_id: d.meaningId, pronunciation_id: d.pronunciationId,
         assessed_at: (d.receiptId && receiptMap.get(d.receiptId)?.assessedAt) || now,
         assessment_receipt_id: d.receiptId ?? null, evaluator_version: d.evaluatorVersion,
@@ -210,12 +210,12 @@ export class CommitService {
     await tx.execute(sql`
       WITH p AS (SELECT ${data}::jsonb AS d),
       evidence AS (
-        INSERT INTO skill_evidence (id, user_id, session_id, task_id, target_ordinal, skill, directness, validity, passed,
+        INSERT INTO skill_evidence (id, user_id, session_id, task_id, target_ordinal, skill, reasons, validity, passed,
           meaning_id, pronunciation_id, assessed_at, committed_at, assessment_receipt_id, evaluator_version)
-        SELECT x.id, ${userId}::uuid, ${sessionId}::uuid, x.task_id, x.target_ordinal, x.skill, x.directness, x.validity, x.passed,
+        SELECT x.id, ${userId}::uuid, ${sessionId}::uuid, x.task_id, x.target_ordinal, x.skill, x.reasons, x.validity, x.passed,
           x.meaning_id, x.pronunciation_id, x.assessed_at, ${now}::timestamptz, x.assessment_receipt_id, x.evaluator_version
         FROM p, jsonb_to_recordset(p.d->'evidence') AS x(
-          id uuid, task_id uuid, target_ordinal smallint, skill varchar, directness varchar, validity varchar, passed boolean,
+          id uuid, task_id uuid, target_ordinal smallint, skill varchar, reasons jsonb, validity varchar, passed boolean,
           meaning_id uuid, pronunciation_id uuid, assessed_at timestamptz, assessment_receipt_id uuid, evaluator_version varchar)
       ), observations AS (
         INSERT INTO memory_observations (session_id, user_id, meaning_id, signal, is_primed, source_task_ids, observed_at)

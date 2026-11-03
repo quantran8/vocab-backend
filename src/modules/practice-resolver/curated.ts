@@ -112,7 +112,8 @@ export function resolveCurated(item: CuratedItem, promptType: PromptType, ctx: R
       ...authoredBody,
       ...localizedBody,
       maxRetries: POLICY.practice.maxRetries[item.template as Template],
-      ...(!isRecording && { evaluation: clientEvaluation }),
+      // Recording's client key is the text to read, for on-device scoring of `transcribed` takes.
+      evaluation: isRecording ? { acceptedResponses: [evaluation.referenceText] } : clientEvaluation,
     },
     serverEvaluation: {
       ...(evaluation as Partial<ServerEvaluation>),

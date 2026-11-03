@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock';
-import { DEFAULT_ACCENT, DIRECTNESS, Skill, SKILL, SKILL_STATUS, VALIDITY, CHECKPOINT_STATE } from '../../common/constants/domain';
+import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS, VALIDITY, CHECKPOINT_STATE } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { POLICY } from '../../config/policy';
 import { DB, Db, toDate } from '../../db/db';
@@ -170,7 +170,7 @@ export class ProgressService {
         pronunciationId: skillEvidence.pronunciationId,
       })
       .from(skillEvidence)
-      .where(and(eq(skillEvidence.userId, userId), eq(skillEvidence.directness, DIRECTNESS.DIRECT), eq(skillEvidence.validity, VALIDITY.VALID)))
+      .where(and(eq(skillEvidence.userId, userId), sql`${skillEvidence.reasons} = '[]'::jsonb`, eq(skillEvidence.validity, VALIDITY.VALID)))
       .orderBy(asc(skillEvidence.committedAt), asc(skillEvidence.id));
     return rows as EvidenceQueryRow[];
   }

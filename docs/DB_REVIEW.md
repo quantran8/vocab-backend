@@ -103,7 +103,7 @@ Hai partial index `idx_skill_meaning`, `idx_skill_pronunciation` (`drizzle/0000_
 - Query chạy ở cả `/me/words` và `/words/:id`, và luôn tải toàn bộ evidence của user dù chỉ xem một từ.
 - Mỗi task tạo khoảng một dòng evidence, nên một Daily session mặc định tạo khoảng 38 dòng và goal 30 tạo khoảng 163 dòng (xem #20).
 
-**Hướng sửa:** thêm index theo `(user_id, committed_at, id) WHERE directness = 'direct' AND validity = 'valid'`, và lọc theo scope của trang đang xem.
+**Hướng sửa:** thêm index theo `(user_id, committed_at, id) WHERE reasons = '[]' AND validity = 'valid'`, và lọc theo scope của trang đang xem.
 
 ### 7. Thiếu projection trạng thái skill
 
@@ -169,7 +169,7 @@ Số task của Daily session là `n × 5` cho từ mới (`dailyNewWordGoal`, t
 | 30 | 150 | 13 | 163 | 92% |
 
 - Đọc duy nhất ở `progress.service.ts:158`, chỉ lấy `direct` + `valid`.
-- Evidence ở phase `newPractice` luôn là `supporting` (`src/modules/skill-verification/skill-evidence.ts:32`), nên không ảnh hưởng status.
+- Evidence ở phase `new_practice` luôn có reason `new_practice` (`src/modules/skill-verification/skill-evidence.ts`), nên không ảnh hưởng status.
 - `learning_sessions.result` đã lưu cùng độ chi tiết: outcome, hint, số lần thử, delivery mode.
 
 **Hướng sửa:** `skill_evidence` chỉ lưu dòng `direct` + `valid`, tức dòng có thể đổi status. Lượng ghi khi đó chỉ theo số review, không theo `n × m`. Dữ liệu chi tiết nằm ở `learning_sessions.result` (#3), cần lưu cả `intent` và `accuracy_score` để vẫn phân tích được sau khi `plan` bị dọn. Cần cập nhật spec §2.2 và các test `test/api.test.ts:469`, `:482`.

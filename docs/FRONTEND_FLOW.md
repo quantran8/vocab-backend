@@ -165,7 +165,7 @@ Từ user tự thêm (mục 11) luôn được xếp trước các từ từ top
             | { "type": "audio", "audio": { "url": "https://...", "locale": "en-US" } },
   "question": "Từ này có nghĩa là gì?",   // đã localize; có thể vắng
   "...": "phần riêng theo template (xem mục 7)",
-  "evaluation": { ... }            // đáp án để chấm ngay tại máy; KHÔNG có ở recording
+  "evaluation": { ... }            // đáp án để chấm ngay tại máy
 }
 ```
 
@@ -182,7 +182,7 @@ Từ user tự thêm (mục 11) luôn được xếp trước các từ từ top
 | `typing` | `meaning_recall`, `transcription` | Generated (có thể Curated) | `{acceptedResponses[]}` |
 | `fly_reorder` | `spelling_recall` (`transcription` nếu Curated) | Generated (có thể Curated) | `{acceptedResponses[]}` |
 | `match` | `meaning_pairs` (`word_pairs` nếu Curated) | Generated (có thể Curated) | `{correctPairs[]}` |
-| `recording` | `scripted_pronunciation` | Generated | không có |
+| `recording` | `scripted_pronunciation` | Generated | `{acceptedResponses: [text cần đọc]}` (đúng 1 phần tử) |
 | `cloze_select` | `single_blank`, `context_meaning` | Curated only | `{correctOptionId}` |
 | `surgery` | `fix_spelling` | Curated only | `{wrongGraphemeIndex, replacement}` |
 
@@ -299,8 +299,16 @@ Xem 7.1.
 { "template": "recording", "variant": "scripted_pronunciation",
   "prompt": { "type": "text", "text": "clarify" },      // hoặc audio: nghe mẫu rồi đọc lại
   "question": "Read this word aloud.",
-  "assessment": { "kind": "azurePronunciation" } }       // không có evaluation
+  "assessment": { "kind": "azurePronunciation" },
+  "evaluation": { "acceptedResponses": ["clarify"] } }   // text cần đọc, dùng để chấm on-device
 ```
+
+Client chọn một trong hai cách chấm **cho mỗi task** (không trộn trong cùng một task):
+
+- **Backend (Azure)**: flow bên dưới, commit `assessed`.
+- **On-device**: client tự speech-to-text rồi so với `evaluation.acceptedResponses[0]` để phản hồi ngay, không gọi `recording-assess`. Mỗi lần đọc là một event `{seq, action:"transcribed", transcript}` (`transcript` tối đa 200 ký tự, chuỗi rỗng nếu không nhận ra gì). Tổng số event `transcribed` ≤ 1 + `maxRetries`. Khi commit, backend chấm lại **lần cuối**: chuẩn hoá (bỏ dấu, chữ thường, bỏ dấu câu), điểm = độ giống theo edit distance × 100, đạt khi ≥ 80; transcript rỗng là `invalid`. Kết quả được tính như bằng chứng Speaking từ Azure (cùng luật direct/supporting).
+
+Flow chấm bằng backend:
 
 Flow:
 
@@ -316,7 +324,7 @@ Flow:
 
    - Điểm đạt: `accuracyScore >= 80` (`passed`). `validity: "invalid"` nghĩa là không đánh giá được (im lặng, nhiễu, không nhận ra giọng) và `passed = null`: cho phép đọc lại, không phải là fail.
    - Nên hiển thị kết quả ngay. Được gọi assess nhiều lần (đọc lại), mỗi lần ra một receipt riêng.
-4. Event kết thúc, **đúng một event** trong `events` của task này:
+4. Event kết thúc, **đúng một event** trong `events` của task này (trừ khi chấm on-device, xem trên):
    - `{seq:1, action:"assessed", assessmentReceiptId}`: dùng receipt của lần đánh giá cuối cùng người dùng chấp nhận. Receipt thuộc đúng task đó, còn hạn (72 giờ), chưa dùng.
    - `{seq:1, action:"unavailable", reason:"micPermissionDenied"}`: dùng khi không ghi âm được (không có quyền mic, `microphone=false`, thiết bị lỗi, hoặc `503 SPEECH_PROVIDER_UNAVAILABLE`). `reason` tối đa 64 ký tự. Task này không bị tính là sai kỹ năng nói.
    - Nếu `prompt.type = "audio"` phải gửi `deliveryMode` (xem mục 8).
@@ -391,7 +399,7 @@ Với `retryable: true`, retry có backoff. Riêng commit retry nguyên body.
 4. Renderer theo `template` cho cả 7 template, đọc `prompt.type` để chọn text/audio.
 5. Phản hồi tức thì bằng `evaluation`, dùng đúng quy tắc normalize (mục 7.2).
 6. Ghi events: `seq` tăng ngặt theo task; flyReorder gửi đủ tap/remove/move và `submit.tileIds` khớp UI.
-7. Recording: ghi âm, upload, dùng receipt cuối cùng; `unavailable` khi không ghi âm được.
+7. Recording: ghi âm, upload, dùng receipt cuối cùng; hoặc chấm on-device và gửi mỗi lần đọc là một `transcribed`; `unavailable` khi không ghi âm được.
 8. `deliveryMode` cho mọi task có audio prompt.
 9. Chỉ commit khi hoàn tất toàn bộ session, retry nguyên body khi lỗi mạng.
 10. Lưu `sessionId` và tiến độ cục bộ nếu muốn tiếp tục dở dang trong 72 giờ.

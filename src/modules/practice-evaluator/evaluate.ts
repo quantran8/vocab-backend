@@ -1,7 +1,9 @@
 import { EVENT_ACTION, OUTCOME, Outcome, TEMPLATE, Template, VALIDITY } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
+import { POLICY } from '../../config/policy';
 import { TaskEvent } from './events';
 import { normalizeAnswer } from './normalizer';
+import { transcriptScore } from './transcript';
 
 export interface Option { id: number; text: string }
 export interface PairKey { leftId: number; rightId: number }
@@ -20,6 +22,7 @@ export interface AnswerKey {
   correctPairs?: PairKey[];
   wrongGraphemeIndex?: number;
   replacement?: string;
+  referenceText?: string;
   // match: leftId -> target ordinal
   pairTargets?: Record<string, number>;
 }
@@ -42,6 +45,7 @@ export interface TargetOutcome {
 export interface TaskEvaluation {
   targets: TargetOutcome[];
   receiptId?: string;
+  accuracyScore?: number | null;
 }
 
 export interface EvaluateInput {
@@ -208,14 +212,26 @@ function evaluateMatch({ body, key, events }: EvaluateInput) {
   return { targets };
 }
 
-function evaluateRecording({ targetOrdinals, events, receipts }: EvaluateInput): TaskEvaluation {
-  if (events.length !== 1) throw invalid('Recording needs exactly one terminal event');
-  const [event] = events;
+function evaluateRecording({ body, key, targetOrdinals, events, receipts }: EvaluateInput): TaskEvaluation {
   const target = (outcome: Outcome, attemptCount: number) =>
     targetOrdinals.map((ordinal) => ({ ordinal, outcome, firstAttemptCorrect: null, attemptCount, hintCount: 0 }));
 
+  // On-device takes: one event per take, the last one counts.
+  if (events.some((e) => e.action === EVENT_ACTION.TRANSCRIBED)) {
+    if (events.some((e) => e.action !== EVENT_ACTION.TRANSCRIBED)) throw invalid('Transcribed takes cannot mix with other events');
+    if (events.length > attemptLimit(body)) throw invalid('Attempt limit exceeded');
+    if (!key.referenceText) throw new ApiError('TASK_DATA_INVALID', 'Recording has no reference');
+    const last = events[events.length - 1] as Extract<TaskEvent, { action: typeof EVENT_ACTION.TRANSCRIBED }>;
+    const score = transcriptScore(last.transcript, key.referenceText);
+    const outcome = score === null ? OUTCOME.INVALID : score >= POLICY.speech.passAccuracy ? OUTCOME.ASSESSED_PASSED : OUTCOME.ASSESSED_FAILED;
+    return { targets: target(outcome, events.length), accuracyScore: score };
+  }
+
+  if (events.length !== 1) throw invalid('Recording needs exactly one terminal event');
+  const [event] = events;
+
   if (event.action === EVENT_ACTION.UNAVAILABLE) return { targets: target(OUTCOME.UNAVAILABLE, 0) };
-  if (event.action !== EVENT_ACTION.ASSESSED) throw invalid('Recording needs assessed or unavailable');
+  if (event.action !== EVENT_ACTION.ASSESSED) throw invalid('Recording needs assessed, unavailable or transcribed');
 
   const receipt = receipts?.get(event.assessmentReceiptId);
   if (!receipt) throw invalid('Unknown assessment receipt');

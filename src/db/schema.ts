@@ -6,7 +6,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE,
-  type LexicalDraftKind, type MeaningOrigin, type CefrLevel, type ContentStatus, type Directness, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState,
+  type LexicalDraftKind, type MeaningOrigin, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
@@ -306,7 +306,7 @@ export const skillEvidence = pgTable('skill_evidence', {
   taskId: uuid('task_id').notNull(),
   targetOrdinal: smallint('target_ordinal').notNull(),
   skill: varchar('skill', { length: 12 }).$type<Skill>().notNull(),
-  directness: varchar('directness', { length: 12 }).$type<Directness>().notNull(),
+  reasons: jsonb('reasons').notNull().$type<EvidenceReason[]>(),
   validity: varchar('validity', { length: 12 }).$type<Validity>().notNull(),
   passed: boolean('passed'),
   meaningId: uuid('meaning_id'),
