@@ -29,6 +29,7 @@ export type WordMatch = {
   recalled: boolean;
   hasLocalization: boolean;
   inRoadmap: boolean;
+  learned: boolean;
 };
 
 export interface DraftKey {
@@ -60,7 +61,8 @@ export class CustomWordsRepository {
         EXISTS (SELECT 1 FROM active_meaning_publications r WHERE r.meaning_id = m.id AND r.recalled_at IS NOT NULL) AS recalled,
         EXISTS (SELECT 1 FROM meaning_localizations ml WHERE ml.meaning_id = m.id AND ml.locale = ${locale}) AS "hasLocalization",
         EXISTS (SELECT 1 FROM topic_meanings tm JOIN topics t ON t.id = tm.topic_id
-                WHERE tm.meaning_id = m.id AND t.owner_user_id = ${userId}::uuid) AS "inRoadmap"
+                WHERE tm.meaning_id = m.id AND t.owner_user_id = ${userId}::uuid) AS "inRoadmap",
+        EXISTS (SELECT 1 FROM user_meaning_progress ump WHERE ump.meaning_id = m.id AND ump.user_id = ${userId}::uuid) AS learned
       FROM words w
       JOIN word_types wt ON wt.word_id = w.id
       JOIN meanings m ON m.type_id = wt.id

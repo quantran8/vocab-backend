@@ -118,12 +118,16 @@ export class CustomWordsService {
         const draft = drafts.get(match.meaningId);
         const shown = match.snapshot ?? draft?.payload;
         const available = status !== CUSTOM_MEANING_STATUS.UNAVAILABLE;
+        // Pronunciations don't vary by locale, so a translation draft takes them from the source snapshot.
+        const pronunciations = (match.snapshot ?? match.sourceSnapshot)?.pronunciations ?? [];
         return {
           meaningId: match.meaningId,
           status,
           partOfSpeech: match.partOfSpeech,
           inRoadmap: match.inRoadmap,
+          learned: match.learned,
           draftId: draft?.id,
+          ipa: available ? pronunciations.find((p) => p.accentLocale === DEFAULT_ACCENT)?.ipa : undefined,
           meaningText: available ? shown?.meaningText : undefined,
           definitionText: available ? shown?.definitionText : undefined,
           examples: available ? match.snapshot?.examples ?? withLocators(draft?.payload, match.sourceSnapshot) : undefined,

@@ -55,7 +55,7 @@ describe('custom words', () => {
       const lemma = seedWord(0).lemma;
       const body = await lookup(`  ${lemma.toUpperCase()}  `);
       expect(body).toMatchObject({ result: CUSTOM_WORD_LOOKUP_RESULT.EXISTING, wordId: seeded.wordIds[0], lemma });
-      expect(body.meanings[0]).toMatchObject({ status: CUSTOM_MEANING_STATUS.AVAILABLE, meaningId: seeded.meaningIds[0], meaningText: seedWord(0).meaningText });
+      expect(body.meanings[0]).toMatchObject({ status: CUSTOM_MEANING_STATUS.AVAILABLE, meaningId: seeded.meaningIds[0], meaningText: seedWord(0).meaningText, ipa: seedWord(0).ipa, learned: false });
       expect(body.meanings[0].examples).toEqual([expect.objectContaining({ text: seedWord(0).example, targetLocator: expect.any(Object) })]);
       expect(h.lexical.generated).toEqual([]);
     });
@@ -321,6 +321,7 @@ describe('custom words', () => {
       const first = await plan();
       expect(JSON.stringify(first)).toContain('serendipity');
       await api('post', `/v1/sessions/${first.sessionId}/commit`).send(answers(first)).expect(200);
+      expect((await lookup('serendipity')).meanings[0]).toMatchObject({ inRoadmap: true, learned: true });
       h.clock.advance(24 * 3);
       const review = await plan();
       expect(JSON.stringify(review)).toContain('serendipity');
@@ -510,7 +511,7 @@ describe('custom words', () => {
       const { meaningId } = await addWord('serendipity');
       await setLocale(EN, other);
       const preview = await lookup('serendipity', other);
-      expect(preview.meanings[0]).toMatchObject({ status: CUSTOM_MEANING_STATUS.TRANSLATION_DRAFT, meaningText: `${EN} gloss of serendipity` });
+      expect(preview.meanings[0]).toMatchObject({ status: CUSTOM_MEANING_STATUS.TRANSLATION_DRAFT, meaningText: `${EN} gloss of serendipity`, ipa: '/serendipity/' });
       expect(preview.meanings[0].examples).toEqual([{ text: 'Use serendipity here.', translation: `${EN} sentence`, targetLocator: { start: 4, end: 15 } }]);
       expect(h.lexical.generated).toHaveLength(1);
       expect(h.lexical.translated).toHaveLength(1);

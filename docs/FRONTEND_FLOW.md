@@ -464,6 +464,8 @@ Trả `200`. Khi phải gọi AI, request có thể mất vài chục giây: đ�
       "status": "available",
       "partOfSpeech": "noun",
       "inRoadmap": false,
+      "learned": false,
+      "ipa": "/bæŋk/",
       "meaningText": "bờ sông",
       "definitionText": "Dải đất ven sông.",
       "examples": [
@@ -475,14 +477,16 @@ Trả `200`. Khi phải gọi AI, request có thể mất vài chục giây: đ�
       "status": "translation_draft",
       "partOfSpeech": "verb",
       "inRoadmap": false,
+      "learned": false,
       "draftId": "01a3...",
+      "ipa": "/bæŋk/",
       "meaningText": "nghiêng",
       "definitionText": "Nghiêng sang một bên khi rẽ.",
       "examples": [
         { "text": "The plane began to bank.", "translation": "Máy bay bắt đầu nghiêng.", "targetLocator": { "start": 19, "end": 23 } }
       ]
     },
-    { "meaningId": "01a4...", "status": "unavailable", "partOfSpeech": "noun", "inRoadmap": false }
+    { "meaningId": "01a4...", "status": "unavailable", "partOfSpeech": "noun", "inRoadmap": false, "learned": false }
   ]
 }
 ```
@@ -493,7 +497,11 @@ Trả `200`. Khi phải gọi AI, request có thể mất vài chục giây: đ�
 | `translation_draft` | Có sẵn nhưng chưa có ngôn ngữ của user; AI vừa dịch để xem trước | `{ draftId }` từ chính phần tử đó |
 | `unavailable` | Admin đã gỡ hoặc đang biên tập. Không có `meaningText`, `definitionText`, `examples` | Không thêm được |
 
+`ipa` là phiên âm en-US, có thể vắng (luôn vắng với `unavailable`).
+
 Nếu `inRoadmap = true`, hiện "Đã có trong lộ trình" thay cho nút thêm.
+
+`learned = true` khi user đã học nghĩa này (có tiến độ ôn tập), dù từ lộ trình riêng hay chủ đề chung. Thêm lại nghĩa đã học không có tác dụng, nên hiện "Đã học" thay cho nút thêm.
 
 Với `available` và `translation_draft`, user sửa được trước khi thêm: gửi kèm `edits` khi gọi `POST /custom-words` (mục 11.3).
 
