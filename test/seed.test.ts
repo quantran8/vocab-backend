@@ -12,7 +12,7 @@ import { createHarness, Harness } from './support/app';
 
 describe('demo seed', () => {
   let h: Harness;
-  beforeAll(async () => { h = await createHarness(); });
+  beforeAll(async () => { h = await createHarness(); await h.reset(); });
   afterAll(async () => { await h.close(); });
 
   it('loads 13 topics, 120 meanings and 218 items, and every item resolves', async () => {

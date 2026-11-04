@@ -3,7 +3,7 @@ import {
 } from '../../common/constants/domain';
 import { POLICY } from '../../config/policy';
 import { splitGraphemes } from '../practice-evaluator/normalizer';
-import { Rng, shuffle } from '../session-planner/interleave';
+import { Rng, shuffle } from '../session-planner/domain/interleave';
 import { resolveAudioUrl } from './asset-url';
 import { copyFor } from './locale-copy';
 import {

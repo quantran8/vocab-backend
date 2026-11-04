@@ -2,8 +2,8 @@ import { eq, max } from 'drizzle-orm';
 import { CONTENT_STATUS, DEFAULT_ACCENT, DEFAULT_LOCALE, EDITORIAL_STATE, LEARNING_LANGUAGE, PartOfSpeech } from '../common/constants/domain';
 import { Db } from '../db/db';
 import { collections, topicMeanings, topics } from '../db/schema';
-import { AdminService } from '../modules/admin/admin.service';
-import { PublicationService } from '../modules/admin/publication.service';
+import { AdminService } from '../modules/admin/services/admin.service';
+import { PublicationService } from '../modules/admin/services/publication.service';
 
 export interface SeedWord {
   lemma: string;

@@ -1,14 +1,12 @@
-import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { sql } from 'drizzle-orm';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { uuidv7 } from 'uuidv7';
 import { AppConfig } from '../../config/app-config';
-import { DB, Db } from '../../db/db';
-import { ADMIN_ROLES } from '../constants/domain';
+import { ADMIN_ROLE, ADMIN_ROLES } from '../constants/domain';
 import { ApiError } from '../http/api-error';
-import { AuthUser, IS_ADMIN, IS_PUBLIC } from './auth.decorators';
+import { AuthUser, IS_ADMIN, IS_FULL_ADMIN, IS_PUBLIC } from './auth.decorators';
 import { UserIdCache } from './user-id-cache';
+import { UserProvisioningRepository } from './user-provisioning.repository';
 
 const BEARER_PREFIX = 'Bearer ';
 
@@ -18,7 +16,7 @@ export class SupabaseJwtGuard implements CanActivate {
 
   constructor(
     private readonly reflector: Reflector,
-    @Inject(DB) private readonly db: Db,
+    private readonly users: UserProvisioningRepository,
     private readonly config: AppConfig,
     private readonly userIds: UserIdCache,
   ) {
@@ -41,10 +39,14 @@ export class SupabaseJwtGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(IS_ADMIN, targets) && !this.isAdmin(role)) {
       throw new ApiError('FORBIDDEN', 'Admin role required');
     }
+    if (this.reflector.getAllAndOverride<boolean>(IS_FULL_ADMIN, targets) && role !== ADMIN_ROLE.ADMIN) {
+      throw new ApiError('FORBIDDEN', 'Admin role required');
+    }
 
     let id = this.userIds.get(claims.sub);
     if (!id) {
-      id = await this.provision(claims.sub);
+      id = await this.users.provision(claims.sub);
+      if (!id) throw new ApiError('UNAUTHORIZED', 'Account deleted');
       this.userIds.set(claims.sub, id);
     }
     const user: AuthUser = { id, subject: claims.sub, role };
@@ -66,26 +68,5 @@ export class SupabaseJwtGuard implements CanActivate {
     } catch {
       throw new ApiError('UNAUTHORIZED', 'Invalid token');
     }
-  }
-
-  // One statement: creates user + settings on first sight, otherwise only reads the id. A deleted identity gets neither.
-  private async provision(subject: string) {
-    const { rows } = await this.db.execute<{ id: string }>(sql`
-      WITH existing AS (
-        SELECT id FROM app_user WHERE identity_subject = ${subject}
-      ), inserted AS (
-        INSERT INTO app_user (id, identity_subject)
-        SELECT ${uuidv7()}::uuid, ${subject}::text
-        WHERE NOT EXISTS (SELECT 1 FROM existing)
-          AND NOT EXISTS (SELECT 1 FROM deleted_identities WHERE identity_subject = ${subject})
-        ON CONFLICT (identity_subject) DO UPDATE SET identity_subject = EXCLUDED.identity_subject
-        RETURNING id
-      ), settings AS (
-        INSERT INTO user_settings (user_id) SELECT id FROM inserted
-        ON CONFLICT (user_id) DO NOTHING
-      )
-      SELECT id FROM existing UNION ALL SELECT id FROM inserted`);
-    if (!rows[0]) throw new ApiError('UNAUTHORIZED', 'Account deleted');
-    return rows[0].id;
   }
 }

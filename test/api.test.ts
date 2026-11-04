@@ -6,9 +6,9 @@ import {
   appUsers, learningSessions, meaningLocalizations, meaningPublications, memoryObservations, practiceItems,
   skillEvidence, speechAssessmentReceipts, topicMeanings, topics, userMeaningProgress, userSettings, words as wordsTable,
 } from '../src/db/schema';
-import { AdminService } from '../src/modules/admin/admin.service';
-import { PublicationService } from '../src/modules/admin/publication.service';
-import { MaintenanceService } from '../src/modules/maintenance/maintenance.service';
+import { AdminService } from '../src/modules/admin/services/admin.service';
+import { PublicationService } from '../src/modules/admin/services/publication.service';
+import { MaintenanceService } from '../src/modules/maintenance/services/maintenance.service';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 import { answers, learnIds, tasksOf, wrongEvents } from './support/driver';
 

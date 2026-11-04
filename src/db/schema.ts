@@ -10,7 +10,7 @@ import {
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
-import type { SessionPlan } from '../modules/session-planner/session-plan';
+import type { SessionPlan } from '../modules/session-planner/domain/session-plan';
 
 const id = () => uuid('id').primaryKey().$defaultFn(newId);
 const ts = (name: string) => timestamp(name, { withTimezone: true, precision: 6 });

@@ -12,3 +12,4 @@ export function copyFor(locale: string, key: string) {
 }
 
 export const hasLocaleCopy = (locale: string) => locale in COPY;
+export const SUPPORTED_LOCALES = Object.keys(COPY);

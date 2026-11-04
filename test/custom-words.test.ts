@@ -5,7 +5,7 @@ import { POLICY } from '../src/config/policy';
 import {
   customWordUsage, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, pronunciations, userActiveTopics, userMeaningOverrides, words, wordTypes,
 } from '../src/db/schema';
-import { PlannerRepository } from '../src/modules/session-planner/planner.repository';
+import { PlannerRepository } from '../src/modules/session-planner/repositories/planner.repository';
 import { answers, tasksOf } from './support/driver';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 
