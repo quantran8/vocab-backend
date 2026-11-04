@@ -1160,6 +1160,18 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | `POST /admin/practice-items` | Create Curated item and target links |
 | `PUT /admin/practice-items/{id}/locales/{locale}` | Edit locale-specific prompts/clues/explanations; optional audio source metadata for any template |
 | `POST /admin/practice-items/{id}/publish` | Validate and mark immutable approved revision published |
+| `GET /admin/meta` | Enums and supported locales for admin screens |
+| `GET /admin/words`, `GET/PATCH/DELETE /admin/words/{id}` | Browse and edit Words; delete only if never published |
+| `POST /admin/words/{id}/types`, `DELETE /admin/word-types/{id}` | Manage Types |
+| `POST /admin/word-types/{id}/pronunciations`, `PATCH/DELETE /admin/pronunciations/{id}` | Manage Pronunciations |
+| `GET /admin/meanings`, `POST /admin/word-types/{id}/meanings`, `PATCH/DELETE /admin/meanings/{id}` | Browse shared Meanings and manage them |
+| `DELETE /admin/meanings/{id}/locales/{locale}`, `GET /admin/meanings/{id}/publications` | Remove an unpublished locale; list revisions |
+| `POST /admin/meanings/{id}/examples`, `PATCH/DELETE /admin/examples/{id}` | Manage Examples |
+| `GET /admin/practice-items`, `GET/PATCH/DELETE /admin/practice-items/{id}`, `POST /admin/practice-items/{id}/retire` | Browse items; edit or delete drafts; retire published items |
+| `GET/POST /admin/collections`, `GET/PATCH/DELETE /admin/collections/{id}`, `PUT/DELETE /admin/collections/{id}/locales/{locale}` | Manage Collections |
+| `POST /admin/collections/{id}/topics`, `GET/PATCH/DELETE /admin/topics/{id}`, `PUT/DELETE /admin/topics/{id}/locales/{locale}` | Manage Topics |
+| `GET/POST /admin/topics/{id}/meanings`, `PUT /admin/topics/{id}/meanings/order`, `DELETE /admin/topics/{id}/meanings/{meaningId}` | Assign and order Meanings in a Topic |
+| `GET /admin/users`, `PUT /admin/users/{id}/role` | List accounts and grant or clear `editor`; `admin` role only. The `admin` role exists only on the seeded account |
 
 **Example validation matrix:**
 

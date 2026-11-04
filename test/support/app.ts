@@ -15,20 +15,29 @@ import { VALIDITY } from '../../src/common/constants/domain';
 import { addHours } from '../../src/common/constants/time';
 import { createHttpAdapter } from '../../src/common/http/http-adapter';
 import { DB, Db, QueryStats } from '../../src/db/db';
-import { AdminService } from '../../src/modules/admin/admin.service';
-import { AudioStorage } from '../../src/modules/custom-words/audio-storage';
-import { CustomWordsService } from '../../src/modules/custom-words/custom-words.service';
-import { GeneratedWord, GenerateRequest, LexicalProvider, SourceMeaning, TranslatedMeaning } from '../../src/modules/custom-words/lexical.provider';
-import { TtsProvider } from '../../src/modules/custom-words/tts.provider';
-import { PublicationService } from '../../src/modules/admin/publication.service';
-import { PlannerService } from '../../src/modules/session-planner/planner.service';
-import { SpeechProvider, SpeechResult } from '../../src/modules/speech/speech.provider';
+import { AdminService } from '../../src/modules/admin/services/admin.service';
+import { AudioStorage } from '../../src/modules/custom-words/providers/audio-storage';
+import { CustomWordsService } from '../../src/modules/custom-words/services/custom-words.service';
+import { GeneratedWord, GenerateRequest, LexicalProvider, SourceMeaning, TranslatedMeaning } from '../../src/modules/custom-words/providers/lexical.provider';
+import { TtsProvider } from '../../src/modules/custom-words/providers/tts.provider';
+import { PublicationService } from '../../src/modules/admin/services/publication.service';
+import { PlannerService } from '../../src/modules/session-planner/services/planner.service';
+import { SpeechProvider, SpeechResult } from '../../src/modules/speech/providers/speech.provider';
 
 export const START = new Date('2026-11-02T03:00:00Z');
 export const CAPS = { audioPlayback: true, microphone: true };
 const ISSUER_PATH = '/auth/v1';
 export const ANON_KEY = 'test-anon-key';
-const SERVICE_ROLE_KEY = 'test-service-role-key';
+export const SERVICE_KEY = 'test-service-key';
+export const SEED_ADMIN = { USERNAME: 'admin123213', EMAIL: 'seeded-admin@example.com', PASSWORD: 'test-admin-password' };
+
+export interface FakeAuthUser {
+  id: string;
+  email?: string;
+  app_metadata?: { role?: string };
+  created_at?: string;
+  last_sign_in_at?: string | null;
+}
 
 const fakeSession = (email: string) => ({
   access_token: `access-${email}`, refresh_token: `refresh-${email}`, expires_in: 3600, user: { id: `uid-${email}`, email },
@@ -141,6 +150,7 @@ export interface Harness {
   db: Db;
   count: (table: PgTable, where?: SQL) => Promise<number>;
   first: <T extends PgTable>(table: T, where?: SQL) => Promise<T['$inferSelect']>;
+  authUsers: FakeAuthUser[];
   clock: TestClock;
   speech: FakeSpeech;
   lexical: FakeLexical;
@@ -159,18 +169,57 @@ export interface Harness {
 export async function createHarness(): Promise<Harness> {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = { ...(await exportJWK(publicKey)), kid: 'test', alg: 'RS256', use: 'sig' };
+  const authUsers: FakeAuthUser[] = [];
   const authAdmin = new FakeAuthAdmin();
   const jwks: Server = createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
-    if (req.method === 'DELETE') {
-      res.statusCode = req.headers.apikey === SERVICE_ROLE_KEY ? authAdmin.deleteStatus : 401;
-      if (res.statusCode === 200) authAdmin.deleted.push(decodeURIComponent(req.url?.split('/').pop() ?? ''));
+    const url = req.url ?? '';
+    const isAdminCall = url.includes('/admin/users');
+    if (isAdminCall && req.headers.apikey !== SERVICE_KEY) {
+      res.statusCode = 401;
       return void res.end('{}');
     }
-    if (req.method !== 'POST') return void res.end(JSON.stringify({ keys: [jwk] }));
+    if (isAdminCall && req.method === 'GET' && !url.includes('?')) {
+      const target = authUsers.find((u) => url.endsWith(`/${u.id}`));
+      res.statusCode = target ? 200 : 404;
+      return void res.end(JSON.stringify(target ?? {}));
+    }
+    if (isAdminCall && req.method === 'GET') {
+      const params = new URL(url, 'http://fake').searchParams;
+      const perPage = Number(params.get('per_page'));
+      const start = (Number(params.get('page')) - 1) * perPage;
+      res.setHeader('x-total-count', String(authUsers.length));
+      return void res.end(JSON.stringify({ users: authUsers.slice(start, start + perPage) }));
+    }
+    if (isAdminCall && req.method === 'DELETE') {
+      res.statusCode = authAdmin.deleteStatus;
+      if (res.statusCode === 200) authAdmin.deleted.push(decodeURIComponent(url.split('/').pop() ?? ''));
+      return void res.end('{}');
+    }
+    if (req.method !== 'POST' && !isAdminCall) return void res.end(JSON.stringify({ keys: [jwk] }));
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
     req.on('end', () => {
+      if (isAdminCall && req.method === 'POST') {
+        const created = JSON.parse(raw) as { email: string; app_metadata: { role?: string } };
+        if (authUsers.some((u) => u.email === created.email)) {
+          res.statusCode = 422;
+          return void res.end(JSON.stringify({ error_code: 'email_exists', msg: 'exists' }));
+        }
+        const user = { id: randomUUID(), email: created.email, app_metadata: created.app_metadata };
+        authUsers.push(user);
+        return void res.end(JSON.stringify(user));
+      }
+      if (isAdminCall) {
+        const target = authUsers.find((u) => url.endsWith(`/${u.id}`));
+        if (!target) {
+          res.statusCode = 404;
+          return void res.end('{}');
+        }
+        const { role } = (JSON.parse(raw) as { app_metadata: { role: string | null } }).app_metadata;
+        target.app_metadata = role ? { role } : {};
+        return void res.end(JSON.stringify(target));
+      }
       const [status, body] = fakeAuth(req.url ?? '', req.headers.apikey, JSON.parse(raw));
       res.statusCode = status;
       res.end(JSON.stringify(body));
@@ -183,7 +232,10 @@ export async function createHarness(): Promise<Harness> {
     DATABASE_URL: process.env.TEST_DATABASE_URL,
     SUPABASE_URL: base,
     SUPABASE_ANON_KEY: ANON_KEY,
-    SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY,
+    SEED_ADMIN_USERNAME: SEED_ADMIN.USERNAME,
+    SEED_ADMIN_EMAIL: SEED_ADMIN.EMAIL,
+    SEED_ADMIN_PASSWORD: SEED_ADMIN.PASSWORD,
     ALLOW_PLACEHOLDER_AUDIO: 'true',
     ENABLE_CRON: 'false',
   });
@@ -207,7 +259,7 @@ export async function createHarness(): Promise<Harness> {
   const stats = app.get(QueryStats);
 
   return {
-    app, db, clock, speech, lexical, tts, authAdmin,
+    app, db, authUsers, authAdmin, clock, speech, lexical, tts,
     customWords: app.get(CustomWordsService),
     count: async (table, where) => (await db.select({ n: countRows() }).from(table).where(where))[0].n,
     first: async (table, where) => {
@@ -225,6 +277,7 @@ export async function createHarness(): Promise<Harness> {
     seed: (slug, words) => seedTopic({ db, admin: app.get(AdminService), publications: app.get(PublicationService) }, slug, words),
     reset: async () => {
       clock.current = START;
+      authUsers.length = 0;
       app.get(UserIdCache).clear();
       Object.assign(lexical, { generated: [], translated: [], duplicateOf: null, ipa: undefined, error: undefined });
       lexical.lemmas.clear();

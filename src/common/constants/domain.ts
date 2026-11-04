@@ -172,7 +172,9 @@ export type ItemStatus = (typeof ITEM_STATUS)[keyof typeof ITEM_STATUS];
 export const CHECKPOINT_STATE = { AVAILABLE: 'available', COMPLETED: 'completed' } as const;
 export type CheckpointState = (typeof CHECKPOINT_STATE)[keyof typeof CHECKPOINT_STATE];
 
-export const ADMIN_ROLES = ['editor', 'admin'] as const;
+export const ADMIN_ROLE = { EDITOR: 'editor', ADMIN: 'admin' } as const;
+export const ADMIN_ROLES = [ADMIN_ROLE.EDITOR, ADMIN_ROLE.ADMIN] as const;
+export const ASSIGNABLE_ROLES = [ADMIN_ROLE.EDITOR] as const;
 
 export const MEANING_ORIGIN = { CURATED: 'curated', AI_GENERATED: 'ai_generated' } as const;
 export type MeaningOrigin = (typeof MEANING_ORIGIN)[keyof typeof MEANING_ORIGIN];

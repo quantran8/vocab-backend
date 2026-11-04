@@ -34,10 +34,10 @@ Spec v0.4 leaves these points open or undefined. Each default below is what the 
 
 ## Not implemented
 
-- **Curation admin:** no API for collections, topics or `topic_meanings`, because §10 does not list them. Only the seed writes these today, so production content cannot be assigned to topics without direct SQL or a new route.
+- **Curation admin:** closed. `/admin/collections`, `/admin/topics` and `/admin/topics/:id/meanings` manage the catalog; see "Admin CRUD" below.
 - **DB role separation (§12):** the app connects as `postgres`. Triggers protect snapshots, but a dedicated least-privilege runtime role is not set up.
 - **Rate limits (§12):** event and audio sizes are capped; request rate limiting is not implemented. Custom word lookups that call AI have their own daily limit (`POLICY.customWords`).
-- **Custom word reporting:** learners cannot report a wrong AI meaning. Approved meanings cannot be assigned to a catalog topic through the API (see Curation admin).
+- **Custom word reporting:** learners cannot report a wrong AI meaning.
 - **Catalog audio:** ElevenLabs audio covers only words created through custom words; existing catalog words are not backfilled.
 - **Metrics (§12):** logs carry `requestId`; the listed monitoring metrics and audit log are not implemented.
 - **Recording abuse control (§4.2):** repeated `unavailable` events are accepted without limits.
@@ -54,3 +54,18 @@ Spec v0.4 leaves these points open or undefined. Each default below is what the 
 - Database session TimeZone must be UTC; the app refuses to boot otherwise.
 - Drizzle ORM is pinned to 0.45.4 (stable `latest`); the 1.0 beta tags are not used.
 - `embedded-postgres` runs tests on Postgres 17. Native `uuidv7()` is not used.
+
+## Admin CRUD
+
+Routes beyond spec §10 exist so an admin screen can browse and edit content. Rules:
+
+| Topic | Decision |
+|---|---|
+| Delete | Only content never published. Published content is taken down with `recall` or `retire`, because learners may have studied it. Anything still referenced answers 409 `CONTENT_LOCKED` |
+| Word identity | `lemma` and `homographKey` are locked once a meaning was published or a learner owns one |
+| Edit after publish | Meaning, pronunciation and example fields stay editable. What is live changes only on the next publish |
+| Private meanings | Never listed outside `GET /admin/ai-meanings`, and every edit is refused, including `PUT .../locales/:locale`. They can only be approved or recalled, so approval always shares the stored AI text |
+| Practice items | `PATCH` and `DELETE` are draft-only. Publish runs the same check the planner uses at serve time. A retired item cannot be published again |
+| Catalog | The `personal` collection and owned topics are invisible to these routes. Only shared, live meanings can join a topic |
+| Roles | The `admin` role exists only on the account `pnpm db:seed` creates from the `SEED_ADMIN_*` env values. The API can grant or clear `editor` only, and refuses to change an account holding `admin`. `/admin/users` needs the `admin` role. A new role applies when that user's token refreshes. Changes are logged, since no audit table exists |
+| Locales | Admin `:locale` and `?locale=` accept only locales with copy in `locale-copy.ts` |

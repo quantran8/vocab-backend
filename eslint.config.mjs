@@ -33,6 +33,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/**/*.service.ts', 'src/**/*.controller.ts', 'src/**/*.guard.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['drizzle-orm', 'drizzle-orm/*', '**/db/schema'], message: 'Database queries belong in a *.repository.ts.' },
+          { group: ['**/db/db'], importNames: ['DB', 'Db'], message: 'Database queries belong in a *.repository.ts.' },
+        ],
+      }],
+    },
+  },
+  {
     files: ['test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

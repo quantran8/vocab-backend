@@ -12,7 +12,7 @@ Requires Node 22.18+ and pnpm.
 pnpm install
 cp .env.example .env      # fill in Supabase values
 pnpm db:migrate           # needs DIRECT_URL
-pnpm db:seed              # optional demo: 4 collections, 20 words, 33 curated items (text-only, no audio)
+pnpm db:seed              # admin account, plus optional demo: 4 collections, 20 words, 33 curated items (text-only, no audio)
 pnpm start:dev
 ```
 
@@ -25,7 +25,7 @@ API docs are served at `/docs`.
 - Migrations enable RLS on every table with no policies, so anon and authenticated roles cannot reach them through PostgREST. The app uses the `postgres` role, which bypasses RLS.
 - `/v1/custom-words` needs `ANTHROPIC_API_KEY` for generation, and `ELEVENLABS_*` plus `SUPABASE_SERVICE_ROLE_KEY` for audio. Create the public `SUPABASE_AUDIO_BUCKET` first. Provider choice is one `useClass` line in `src/app.module.ts`.
 - `/v1/auth/{signup,login,google,refresh}` are public and proxy Supabase Auth (needs `SUPABASE_ANON_KEY`). Google: enable the provider in the Supabase dashboard; the client sends the Google ID token (and the raw `nonce` if it used one). Email confirmation on means signup returns `session: null`.
-- Admin routes require `app_metadata.role` of `editor` or `admin`, set server-side in Supabase Auth.
+- Admin routes require `app_metadata.role` of `editor` or `admin`. `pnpm db:seed` creates the only `admin` account from `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` (needs `SUPABASE_SERVICE_ROLE_KEY`). `SEED_ADMIN_USERNAME` is its login name. `PUT /admin/users/:id/role` grants `editor` only.
 
 ## Audio
 

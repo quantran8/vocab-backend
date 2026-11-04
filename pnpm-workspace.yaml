@@ -2,6 +2,7 @@ allowBuilds:
   '@embedded-postgres/darwin-arm64': true
   '@scarf/scarf': false
   '@swc/core': true
+  embedded-postgres: true
   esbuild: true
 overrides:
   '@nestjs/platform-express': '-'

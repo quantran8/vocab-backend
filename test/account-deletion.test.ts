@@ -6,7 +6,7 @@ import {
   lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, speechAssessmentReceipts,
   skillEvidence, topics, userMeaningProgress, userSettings, words,
 } from '../src/db/schema';
-import { MaintenanceService } from '../src/modules/maintenance/maintenance.service';
+import { MaintenanceService } from '../src/modules/maintenance/services/maintenance.service';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 import { answers } from './support/driver';
 

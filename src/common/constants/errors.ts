@@ -5,6 +5,8 @@ export const ERROR = {
   NOT_FOUND: { status: 404, retryable: false },
   EMAIL_ALREADY_REGISTERED: { status: 409, retryable: false },
   WORD_ALREADY_EXISTS: { status: 409, retryable: false },
+  DUPLICATE_CONTENT: { status: 409, retryable: false },
+  CONTENT_LOCKED: { status: 409, retryable: false },
   SESSION_PAYLOAD_CONFLICT: { status: 409, retryable: false },
   SESSION_STALE: { status: 409, retryable: false },
   SESSION_EXPIRED: { status: 410, retryable: false },

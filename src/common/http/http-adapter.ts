@@ -9,9 +9,9 @@ const JSON_BODY_LIMIT_BYTES = 1024 * 1024;
 const logger = new Logger('HTTP');
 
 const LOG_BODY_MAX_CHARS = 2000;
-const REDACTED_KEY = /password|token|secret|authorization|apikey|audio/i;
+const REDACTED_KEY = /password|token|secret|authorization|apikey|audio|email/i;
 
-// Secrets and audio payloads must not reach logs; long bodies are cut.
+// Secrets, emails and audio payloads must not reach logs; long bodies are cut.
 function bodyForLog(body: unknown) {
   if (body === undefined || body === null || body === '') return '-';
   const text = typeof body === 'string' ? body : JSON.stringify(body, (k, v) => (REDACTED_KEY.test(k) ? '[redacted]' : v));
