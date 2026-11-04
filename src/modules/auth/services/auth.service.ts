@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import { ApiError } from '../../../common/http/api-error';
+import { AppConfig } from '../../../config/app-config';
 import { AuthProvider, ProviderSession, SignupResponse } from '../providers/auth.provider';
-import { credentialsSchema, googleSchema } from '../dto/auth.schemas';
+import { credentialsSchema, googleSchema, loginSchema } from '../dto/auth.schemas';
 
 const toSession = (s: ProviderSession) => ({
   accessToken: s.access_token,
@@ -15,7 +17,7 @@ const hasSession = (r: SignupResponse): r is ProviderSession => 'access_token' i
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly provider: AuthProvider) {}
+  constructor(private readonly provider: AuthProvider, private readonly config: AppConfig) {}
 
   async signup({ email, password }: z.infer<typeof credentialsSchema>) {
     const result = await this.provider.signup(email, password);
@@ -23,8 +25,11 @@ export class AuthService {
     return { session: null, confirmationRequired: true };
   }
 
-  async login({ email, password }: z.infer<typeof credentialsSchema>) {
-    return toSession(await this.provider.password(email, password));
+  async login({ email: login, password }: z.infer<typeof loginSchema>) {
+    const { seedAdminUsername, seedAdminEmail } = this.config;
+    const email = z.email().safeParse(login === seedAdminUsername ? seedAdminEmail : login);
+    if (!email.success) throw new ApiError('VALIDATION_FAILED', 'email: Invalid email address');
+    return toSession(await this.provider.password(email.data, password));
   }
 
   async google({ idToken, nonce }: z.infer<typeof googleSchema>) {

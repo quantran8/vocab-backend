@@ -1171,7 +1171,7 @@ Admin routes ngoài consumer surface, có quyền biên tập riêng:
 | `GET/POST /admin/collections`, `GET/PATCH/DELETE /admin/collections/{id}`, `PUT/DELETE /admin/collections/{id}/locales/{locale}` | Manage Collections |
 | `POST /admin/collections/{id}/topics`, `GET/PATCH/DELETE /admin/topics/{id}`, `PUT/DELETE /admin/topics/{id}/locales/{locale}` | Manage Topics |
 | `GET/POST /admin/topics/{id}/meanings`, `PUT /admin/topics/{id}/meanings/order`, `DELETE /admin/topics/{id}/meanings/{meaningId}` | Assign and order Meanings in a Topic |
-| `GET /admin/users`, `PUT /admin/users/{id}/role` | List accounts and set roles; `admin` role only |
+| `GET /admin/users`, `PUT /admin/users/{id}/role` | List accounts and grant or clear `editor`; `admin` role only. The `admin` role exists only on the seeded account |
 
 **Example validation matrix:**
 

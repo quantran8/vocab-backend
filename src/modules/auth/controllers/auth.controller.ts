@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { Public } from '../../../common/auth/auth.decorators';
 import { ZodPipe } from '../../../common/http/zod.pipe';
-import { credentialsSchema, googleSchema, refreshSchema } from '../dto/auth.schemas';
+import { credentialsSchema, googleSchema, loginSchema, refreshSchema } from '../dto/auth.schemas';
 import { AuthService } from '../services/auth.service';
 
 @Public()
@@ -17,7 +17,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  login(@Body(new ZodPipe(credentialsSchema, 'VALIDATION_FAILED')) body: z.infer<typeof credentialsSchema>) {
+  login(@Body(new ZodPipe(loginSchema, 'VALIDATION_FAILED')) body: z.infer<typeof loginSchema>) {
     return this.auth.login(body);
   }
 

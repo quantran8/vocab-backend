@@ -29,6 +29,7 @@ export const CAPS = { audioPlayback: true, microphone: true };
 const ISSUER_PATH = '/auth/v1';
 export const ANON_KEY = 'test-anon-key';
 export const SERVICE_KEY = 'test-service-key';
+export const SEED_ADMIN = { USERNAME: 'admin123213', EMAIL: 'seeded-admin@example.com', PASSWORD: 'test-admin-password' };
 
 export interface FakeAuthUser {
   id: string;
@@ -178,6 +179,11 @@ export async function createHarness(): Promise<Harness> {
       res.statusCode = 401;
       return void res.end('{}');
     }
+    if (isAdminCall && req.method === 'GET' && !url.includes('?')) {
+      const target = authUsers.find((u) => url.endsWith(`/${u.id}`));
+      res.statusCode = target ? 200 : 404;
+      return void res.end(JSON.stringify(target ?? {}));
+    }
     if (isAdminCall && req.method === 'GET') {
       const params = new URL(url, 'http://fake').searchParams;
       const perPage = Number(params.get('per_page'));
@@ -194,6 +200,16 @@ export async function createHarness(): Promise<Harness> {
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
     req.on('end', () => {
+      if (isAdminCall && req.method === 'POST') {
+        const created = JSON.parse(raw) as { email: string; app_metadata: { role?: string } };
+        if (authUsers.some((u) => u.email === created.email)) {
+          res.statusCode = 422;
+          return void res.end(JSON.stringify({ error_code: 'email_exists', msg: 'exists' }));
+        }
+        const user = { id: randomUUID(), email: created.email, app_metadata: created.app_metadata };
+        authUsers.push(user);
+        return void res.end(JSON.stringify(user));
+      }
       if (isAdminCall) {
         const target = authUsers.find((u) => url.endsWith(`/${u.id}`));
         if (!target) {
@@ -217,6 +233,9 @@ export async function createHarness(): Promise<Harness> {
     SUPABASE_URL: base,
     SUPABASE_ANON_KEY: ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY,
+    SEED_ADMIN_USERNAME: SEED_ADMIN.USERNAME,
+    SEED_ADMIN_EMAIL: SEED_ADMIN.EMAIL,
+    SEED_ADMIN_PASSWORD: SEED_ADMIN.PASSWORD,
     ALLOW_PLACEHOLDER_AUDIO: 'true',
     ENABLE_CRON: 'false',
   });

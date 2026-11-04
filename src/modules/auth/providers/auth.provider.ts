@@ -6,6 +6,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const SERVER_ERROR_MIN = 500;
 const TOO_MANY_REQUESTS = 429;
 const NOT_FOUND = 404;
+const UNPROCESSABLE = 422;
 const TOTAL_COUNT_HEADER = 'x-total-count';
 // GoTrue error_code values that mean "wrong credentials" or "token no longer usable".
 const CREDENTIAL_ERRORS = new Set([
@@ -72,6 +73,16 @@ export class AuthProvider {
     await this.adminCall(`admin/users/${encodeURIComponent(userId)}`, 'PUT', { app_metadata: { role } });
   }
 
+  async getUser(userId: string) {
+    const response = await this.adminCall(`admin/users/${encodeURIComponent(userId)}`, 'GET');
+    return (await response.json()) as ProviderAdminUser;
+  }
+
+  async createConfirmedUser(email: string, password: string, role: string) {
+    const response = await this.adminCall('admin/users', 'POST', { email, password, email_confirm: true, app_metadata: { role } });
+    return (await response.json()) as ProviderAdminUser;
+  }
+
   async deleteUser(subject: string) {
     try {
       await this.adminCall(`admin/users/${encodeURIComponent(subject)}`, 'DELETE');
@@ -98,6 +109,7 @@ export class AuthProvider {
     }
     if (response.ok) return response;
     if (response.status === NOT_FOUND) throw new ApiError('NOT_FOUND', 'User not found');
+    if (response.status === UNPROCESSABLE) throw await this.toApiError(response);
     throw new ApiError('AUTH_PROVIDER_UNAVAILABLE', 'Auth provider rejected the admin request');
   }
 

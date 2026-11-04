@@ -2,8 +2,11 @@ import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PERSONAL_COLLECTION_SLUG } from '../src/common/constants/domain';
+import { AppConfig } from '../src/config/app-config';
 import { appUsers, collections, topicMeanings, topics, userMeaningOverrides, words } from '../src/db/schema';
-import { createHarness, Harness, seedWord } from './support/app';
+import { AuthProvider } from '../src/modules/auth/providers/auth.provider';
+import { seedAdmin } from '../src/seed/seed-admin';
+import { createHarness, Harness, SEED_ADMIN, seedWord } from './support/app';
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -440,17 +443,57 @@ describe('admin API', () => {
       expect(JSON.stringify(body)).not.toContain('app_metadata');
     });
 
-    it('sets and clears a role, but not your own', async () => {
-      expect((await api('put', `/admin/users/${subject}/role`).send({ role: 'admin' }).expect(200)).body.role).toBe('admin');
-      expect(h.authUsers[0].app_metadata).toEqual({ role: 'admin' });
-      await api('put', `/admin/users/${subject}/role`).send({ role: null }).expect(200);
-      expect(h.authUsers[0].app_metadata).toEqual({});
-      await api('put', `/admin/users/${subject}/role`).send({ role: 'owner' }).expect(400);
-      await api('put', `/admin/users/${randomUUID()}/role`).send({ role: 'admin' }).expect(404);
+    it('sets and clears the editor role', async () => {
+      const learner = randomUUID();
+      h.authUsers.push({ id: learner, email: 'learner@example.com', app_metadata: {} });
+      await api('put', `/admin/users/${learner}/role`).send({ role: 'editor' }).expect(200);
+      expect(h.authUsers.at(-1)?.app_metadata).toEqual({ role: 'editor' });
+      await api('put', `/admin/users/${learner}/role`).send({ role: null }).expect(200);
+      expect(h.authUsers.at(-1)?.app_metadata).toEqual({});
+      await api('put', `/admin/users/${learner}/role`).send({ role: 'owner' }).expect(400);
+      await api('put', `/admin/users/${randomUUID()}/role`).send({ role: 'editor' }).expect(404);
+    });
 
-      const selfSubject = randomUUID();
-      const self = await h.token(selfSubject, 'admin');
-      await api('put', `/admin/users/${selfSubject}/role`, self).send({ role: null }).expect(403);
+    it('never grants the admin role and never changes an admin account', async () => {
+      await api('put', `/admin/users/${subject}/role`).send({ role: 'admin' }).expect(400);
+      expect(h.authUsers[0].app_metadata).toEqual({ role: 'editor' });
+      const otherAdmin = randomUUID();
+      h.authUsers.push({ id: otherAdmin, email: 'other@example.com', app_metadata: { role: 'admin' } });
+      await api('put', `/admin/users/${otherAdmin}/role`).send({ role: null }).expect(403);
+      await api('put', `/admin/users/${otherAdmin}/role`).send({ role: 'editor' }).expect(403);
+      expect(h.authUsers.at(-1)?.app_metadata).toEqual({ role: 'admin' });
+    });
+  });
+
+  describe('seeded admin', () => {
+    const auth = () => h.app.get(AuthProvider);
+    const config = () => h.app.get(AppConfig);
+
+    it('creates the account once and keeps it on later runs', async () => {
+      await seedAdmin(auth(), config());
+      await seedAdmin(auth(), config());
+      const seeded = h.authUsers.filter((u) => u.email === SEED_ADMIN.EMAIL);
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0].app_metadata).toEqual({ role: 'admin' });
+    });
+
+    it('refuses to promote a learner who already holds the address', async () => {
+      h.authUsers.push({ id: randomUUID(), email: SEED_ADMIN.EMAIL, app_metadata: {} });
+      await expect(seedAdmin(auth(), config())).rejects.toThrow(/without the admin role/);
+      expect(h.authUsers[0].app_metadata).toEqual({});
+    });
+
+    it('refuses to seed without the env values', async () => {
+      await expect(seedAdmin(auth(), { seedAdminEmail: SEED_ADMIN.EMAIL, seedAdminPassword: undefined })).rejects.toThrow(/SEED_ADMIN_PASSWORD/);
+      await expect(seedAdmin(auth(), { seedAdminEmail: undefined, seedAdminPassword: 'x' })).rejects.toThrow(/SEED_ADMIN_EMAIL/);
+      expect(h.authUsers).toEqual([]);
+    });
+
+    it('signs in with the login name, and accepts no other bare name', async () => {
+      const login = (email: string) => h.http().post('/v1/auth/login').send({ email, password: 'correct-horse' });
+      expect((await login(' Admin ').expect(200)).body.user.email).toBe(SEED_ADMIN.EMAIL);
+      await login('someone').expect(400);
+      await h.http().post('/v1/auth/signup').send({ email: 'admin', password: 'correct-horse' }).expect(400);
     });
   });
 

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AuthUser } from '../../../common/auth/auth.decorators';
+import { ADMIN_ROLE } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AuthProvider } from '../../auth/providers/auth.provider';
 import { AdminUsersRepository } from '../repositories/admin-users.repository';
@@ -28,9 +29,10 @@ export class AdminUsersService {
     };
   }
 
-  // Self-change is refused so the last admin cannot lock everyone out. No audit table exists yet, so the log is the trail.
+  // The admin role exists only on the seeded account, so it can be neither granted nor changed here. No audit table yet, so the log is the trail.
   async setRole(actor: AuthUser, targetId: string, role: string | null) {
-    if (actor.subject === targetId) throw new ApiError('FORBIDDEN', 'You cannot change your own role');
+    const target = await this.auth.getUser(targetId);
+    if (target.app_metadata?.role === ADMIN_ROLE.ADMIN) throw new ApiError('FORBIDDEN', 'The admin account cannot be changed');
     await this.auth.setRole(targetId, role);
     this.logger.log(`role changed: actor=${actor.subject} target=${targetId} role=${role ?? 'none'}`);
     return { id: targetId, role };

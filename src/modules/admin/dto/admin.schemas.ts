@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS, ADMIN_ROLES } from '../../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS, ASSIGNABLE_ROLES } from '../../../common/constants/domain';
 import { ZodPipe } from '../../../common/http/zod.pipe';
 import { hasLocaleCopy } from '../../practice-resolver/locale-copy';
 import { hasValidHighlight } from '../services/publication.service';
@@ -138,5 +138,5 @@ export const topicMeaningIdsSchema = z.strictObject({ meaningIds: uniqueIds });
 export type TopicMeaningIds = z.infer<typeof topicMeaningIdsSchema>;
 
 export const listUsersSchema = z.object({ page: z.coerce.number().int().min(1).default(1), perPage: z.coerce.number().int().min(1).max(100).default(50) });
-export const setRoleSchema = z.strictObject({ role: z.enum(ADMIN_ROLES).nullable() });
+export const setRoleSchema = z.strictObject({ role: z.enum(ASSIGNABLE_ROLES).nullable() });
 export type SetRole = z.infer<typeof setRoleSchema>;

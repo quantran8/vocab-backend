@@ -67,5 +67,5 @@ Routes beyond spec §10 exist so an admin screen can browse and edit content. Ru
 | Private meanings | Never listed outside `GET /admin/ai-meanings`, and every edit is refused, including `PUT .../locales/:locale`. They can only be approved or recalled, so approval always shares the stored AI text |
 | Practice items | `PATCH` and `DELETE` are draft-only. Publish runs the same check the planner uses at serve time. A retired item cannot be published again |
 | Catalog | The `personal` collection and owned topics are invisible to these routes. Only shared, live meanings can join a topic |
-| Roles | `/admin/users` needs the `admin` role, `editor` is refused. Nobody can change their own role. A new role applies when that user's token refreshes. Changes are logged, since no audit table exists |
+| Roles | The `admin` role exists only on the account `pnpm db:seed` creates from the `SEED_ADMIN_*` env values. The API can grant or clear `editor` only, and refuses to change an account holding `admin`. `/admin/users` needs the `admin` role. A new role applies when that user's token refreshes. Changes are logged, since no audit table exists |
 | Locales | Admin `:locale` and `?locale=` accept only locales with copy in `locale-copy.ts` |
