@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { Clock } from '../../../common/clock';
-import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION } from '../../../common/constants/domain';
+import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION, Skill } from '../../../common/constants/domain';
 import { addHours, HOURS_PER_DAY } from '../../../common/constants/time';
 import { ApiError } from '../../../common/http/api-error';
 import { newId } from '../../../common/ids';
@@ -65,6 +65,7 @@ export class PlannerService {
       mode: request.mode,
       reviewTargets,
       newTargets,
+      focusSkills: selected.focusSkills,
       pool,
       curated,
       proficiency: learner.proficiencyLevel,
@@ -94,7 +95,7 @@ export class PlannerService {
     { mode, challengeId }: PlanRequest,
     learner: Awaited<ReturnType<PlannerRepository['loadLearner']>>,
     now: Date,
-  ): Promise<{ reviewTargets: MeaningSnapshot[]; newTargets: MeaningSnapshot[]; challengeId?: string }> {
+  ): Promise<{ reviewTargets: MeaningSnapshot[]; newTargets: MeaningSnapshot[]; challengeId?: string; focusSkills?: Map<string, Skill[]> }> {
     const settings = learner.settings!;
     const locale = settings.explanationLocale;
 
@@ -111,8 +112,12 @@ export class PlannerService {
     }
     if (mode === SESSION_MODE.WEAK_WORDS_PRACTICE) {
       const since = addHours(now, -POLICY.weak.lookbackDays * HOURS_PER_DAY);
-      const reviewTargets = await this.repository.weakTargets(userId, locale, since, POLICY.weak.minAttempts, practiceTaskCap);
-      return { reviewTargets, newTargets: [] };
+      const rows = await this.repository.weakTargets(userId, locale, since, POLICY.weak.minAttempts, practiceTaskCap);
+      return {
+        reviewTargets: rows.map((r) => r.snapshot),
+        newTargets: [],
+        focusSkills: new Map(rows.flatMap((r) => (r.skills ? [[r.snapshot.meaningId, r.skills] as const] : []))),
+      };
     }
     const challenge = await this.repository.oldestChallenge(userId, challengeId);
     if (!challenge) throw new ApiError('NOT_FOUND', 'No available checkpoint challenge');

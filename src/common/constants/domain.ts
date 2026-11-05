@@ -105,10 +105,17 @@ export const SKILL_STATUS = {
 export type SkillStatus = (typeof SKILL_STATUS)[keyof typeof SKILL_STATUS];
 
 /** Why an evidence row is not direct; an empty list means direct. */
+export const SKILL_ISSUE = {
+  FAILED: 'failed',
+  ASSISTED: 'assisted',
+} as const;
+export type SkillIssue = (typeof SKILL_ISSUE)[keyof typeof SKILL_ISSUE];
+
 export const EVIDENCE_REASON = {
   NEW_PRACTICE: 'new_practice',
   HINTED: 'hinted',
   REVEALED: 'revealed',
+  RETRIED: 'retried',
   PRIMED: 'primed',
   WEAK_TEMPLATE: 'weak_template',
   QUALITY_UNQUALIFIED: 'quality_unqualified',

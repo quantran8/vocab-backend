@@ -1,9 +1,10 @@
 import {
   ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, DeliveryMode, EVIDENCE_REASON, EvidenceReason, OUTCOME, Outcome,
-  SKILL, Skill, SKILL_STATUS, SkillStatus, TASK_PHASE, TaskPhase, TEMPLATE, Template, VALIDITY, Validity,
+  SKILL, Skill, SKILL_ISSUE, SKILL_STATUS, SkillIssue, SkillStatus, TASK_PHASE, TaskPhase, TEMPLATE, Template, VALIDITY, Validity,
 } from '../../common/constants/domain';
 import { MS_PER_HOUR } from '../../common/constants/time';
 import { POLICY } from '../../config/policy';
+import { isLightRetry } from '../memory-srs/memory-reducer';
 
 export interface SkillFact {
   template: Template;
@@ -15,6 +16,7 @@ export interface SkillFact {
   deliveryMode: DeliveryMode;
   outcome: Outcome;
   hintCount: number;
+  attemptCount: number;
   meaningId: string | null;
   pronunciationId: string | null;
 }
@@ -33,6 +35,7 @@ const when = (condition: boolean, reason: EvidenceReason) => (condition ? [reaso
 const assistance = (fact: SkillFact) => [
   ...when(fact.hintCount > 0, EVIDENCE_REASON.HINTED),
   ...when(fact.outcome === OUTCOME.REVEALED, EVIDENCE_REASON.REVEALED),
+  ...when(fact.intent === ASSESSMENT_INTENT.MEANING_RECALL && isLightRetry(fact), EVIDENCE_REASON.RETRIED),
   ...when(fact.isPrimed, EVIDENCE_REASON.PRIMED),
 ];
 
@@ -114,27 +117,59 @@ export interface EvidenceRow {
   sessionId: string;
   passed: boolean | null;
   committedAt: Date;
+  reasons: EvidenceReason[];
 }
 
 export interface SkillState {
   status: SkillStatus;
   needsPractice: boolean;
+  issue: SkillIssue | null;
 }
 
-/** Input: valid direct rows for one skill + scope, oldest first. */
-export function deriveSkillStatus(rows: EvidenceRow[]): SkillState {
-  const lastFailure = rows.findLastIndex((r) => r.passed === false);
-  const passes = rows.slice(lastFailure + 1).filter((r) => r.passed === true);
-  const needsPractice = lastFailure === rows.length - 1 && rows.length > 0;
+// Other reasons (new learning, weak template, ...) say nothing about this skill.
+export const SKILL_STATE_REASONS: EvidenceReason[] = [
+  EVIDENCE_REASON.HINTED, EVIDENCE_REASON.REVEALED, EVIDENCE_REASON.RETRIED, EVIDENCE_REASON.PRIMED,
+];
+
+const PASS = 'pass';
+
+function classify({ passed, reasons }: EvidenceRow): typeof PASS | SkillIssue | null {
+  if (!reasons.every((r) => SKILL_STATE_REASONS.includes(r))) return null;
+  if (passed) {
+    if (reasons.length === 0) return PASS;
+    return reasons.includes(EVIDENCE_REASON.HINTED) ? SKILL_ISSUE.ASSISTED : null;
+  }
+  return reasons.includes(EVIDENCE_REASON.RETRIED) ? SKILL_ISSUE.ASSISTED : SKILL_ISSUE.FAILED;
+}
+
+const isIssue = (kind: ReturnType<typeof classify>) => kind === SKILL_ISSUE.FAILED || kind === SKILL_ISSUE.ASSISTED;
+
+function currentIssue(rows: EvidenceRow[]): SkillIssue | null {
+  const last = rows.findLastIndex((r) => isIssue(classify(r)));
+  if (last < 0) return null;
+  const earliestRecovery = rows[last].committedAt.getTime() + POLICY.memory.recoveryHours * MS_PER_HOUR;
+  const recovered = rows.slice(last + 1).some((r) => classify(r) === PASS && r.committedAt.getTime() >= earliestRecovery);
+  if (recovered) return null;
+  const failedInSession = rows.some((r) => r.sessionId === rows[last].sessionId && classify(r) === SKILL_ISSUE.FAILED);
+  return failedInSession ? SKILL_ISSUE.FAILED : SKILL_ISSUE.ASSISTED;
+}
+
+/** Input: valid rows carrying only SKILL_STATE_REASONS for one skill + scope, oldest first. Rules: memory memory-assessment-rework. */
+export function deriveSkillStatus(allRows: EvidenceRow[]): SkillState {
+  const issue = currentIssue(allRows);
+  const needsPractice = issue !== null;
+  const rows = allRows.filter((r) => [PASS, SKILL_ISSUE.FAILED].includes(classify(r) as string));
+  const lastFailure = rows.findLastIndex((r) => classify(r) === SKILL_ISSUE.FAILED);
+  const passes = rows.slice(lastFailure + 1);
 
   if (passes.length === 0) {
-    const hadPass = rows.some((r) => r.passed === true);
-    return { status: hadPass ? SKILL_STATUS.DEMONSTRATED : SKILL_STATUS.NOT_VERIFIED, needsPractice };
+    const hadPass = rows.some((r) => classify(r) === PASS);
+    return { status: hadPass ? SKILL_STATUS.DEMONSTRATED : SKILL_STATUS.NOT_VERIFIED, needsPractice, issue };
   }
   const sessions = new Set(passes.map((r) => r.sessionId));
   const spanHours = (passes.at(-1)!.committedAt.getTime() - passes[0].committedAt.getTime()) / MS_PER_HOUR;
   const verified = sessions.size >= POLICY.skill.requiredSessions && spanHours >= POLICY.skill.delayedRecheckHours;
-  return { status: verified ? SKILL_STATUS.VERIFIED : SKILL_STATUS.DEMONSTRATED, needsPractice };
+  return { status: verified ? SKILL_STATUS.VERIFIED : SKILL_STATUS.DEMONSTRATED, needsPractice, issue };
 }
 
 export interface WordScopes {

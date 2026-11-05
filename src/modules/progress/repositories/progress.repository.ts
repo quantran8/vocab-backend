@@ -6,6 +6,7 @@ import { skillEvidence } from '../../../db/schema';
 import { MeaningOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { EvidenceRow } from '../../skill-verification/skill-evidence';
+import { openSkillIssuesSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
 
 export type RawMeaningRow = {
   wordId: string;
@@ -101,7 +102,7 @@ export class ProgressRepository {
     return rows;
   }
 
-  /** Mirrors deriveSkillStatus's needsPractice (latest valid direct evidence failed) in one statement. */
+  /** Mirrors deriveSkillStatus's needsPractice (latest skill issue not yet recovered) in one statement. */
   async wordStats(userId: string) {
     const { rows: [row] } = await this.db.execute<{ learnedWords: number; needPracticeWords: number }>(sql`
       WITH learned AS (
@@ -115,16 +116,11 @@ export class ProgressRepository {
         JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale
         JOIN meaning_publications p ON p.id = a.publication_id
         WHERE ump.user_id = ${userId}::uuid
-      ), latest AS (
-        SELECT DISTINCT ON (skill, COALESCE(meaning_id, pronunciation_id)) meaning_id, pronunciation_id, passed
-        FROM skill_evidence
-        WHERE user_id = ${userId}::uuid AND reasons = '[]'::jsonb AND validity = ${VALIDITY.VALID}
-        ORDER BY skill, COALESCE(meaning_id, pronunciation_id), committed_at DESC, id DESC
-      )
+      ), open_issue AS (${openSkillIssuesSql(userId)})
       SELECT count(DISTINCT l.word_id)::int AS "learnedWords",
         count(DISTINCT l.word_id) FILTER (WHERE EXISTS (
-          SELECT 1 FROM latest e
-          WHERE e.passed = false AND (e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id)))::int AS "needPracticeWords"
+          SELECT 1 FROM open_issue e
+          WHERE e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id))::int AS "needPracticeWords"
       FROM learned l`);
     return row;
   }
@@ -152,6 +148,7 @@ export class ProgressRepository {
         sessionId: skillEvidence.sessionId,
         skill: skillEvidence.skill,
         passed: skillEvidence.passed,
+        reasons: skillEvidence.reasons,
         committedAt: skillEvidence.committedAt,
         meaningId: skillEvidence.meaningId,
         pronunciationId: skillEvidence.pronunciationId,
@@ -159,7 +156,7 @@ export class ProgressRepository {
       .from(skillEvidence)
       .where(and(
         eq(skillEvidence.userId, userId),
-        sql`${skillEvidence.reasons} = '[]'::jsonb`,
+        skillStateReasonsSql,
         eq(skillEvidence.validity, VALIDITY.VALID),
         or(inArray(skillEvidence.meaningId, meaningIds), pronunciationIds.length > 0 ? inArray(skillEvidence.pronunciationId, pronunciationIds) : undefined),
       ))

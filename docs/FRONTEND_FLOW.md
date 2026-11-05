@@ -99,7 +99,11 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
   - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
 - `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
 - `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).
-  - Mỗi meaning có thêm `skills: {reading, writing, listening?, speaking?}` và `needsPractice`, mỗi kỹ năng là `{status: "not_verified"|"demonstrated"|"verified", needsPractice}`.
+  - Mỗi meaning có thêm `skills: {reading, writing, listening?, speaking?}` và `needsPractice` (bật khi có kỹ năng cần luyện).
+  - Mỗi kỹ năng là `{status: "not_verified"|"demonstrated"|"verified", needsPractice, issue: "failed"|"assisted"|null}`. Dùng `skills` để biết kỹ năng nào của nghĩa này đang có vấn đề. Một kỹ năng có thể vừa `verified` vừa có `issue: "assisted"`.
+    - `failed`: trả lời sai hoặc show answer, kể cả khi có hint; đã mất `verified`.
+    - `assisted`: đúng nhờ hint, hoặc recall đúng ở lần 2; vẫn giữ `verified`.
+    - `issue` tắt sau một lần tự trả lời đúng của kỹ năng đó, cách lần có vấn đề ít nhất 12h.
   - `listening/speaking` vắng mặt khi Meaning không có phát âm.
   - `needsPractice` và `fullyVerified` ở cấp Word.
 
@@ -120,7 +124,7 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 | `daily` | Ôn các Meaning đến hạn (tối đa 10) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
 | `checkpoint_challenge` | Ôn lại các Meaning đã học trong 7 session đó, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
 | `random_practice` | Tối đa 10 task từ các Meaning đã học |
-| `weak_words_practice` | Các từ hay sai/dùng hint trong 30 ngày qua (cần tối thiểu 3 lần thử), tối đa 10 task |
+| `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
 
 `capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì task `recording` **vẫn được phát hành**, client gửi event `unavailable` (xem 7.7).
 
@@ -287,7 +291,7 @@ Events: `{seq, action:"submit", value:"clarify"}` (`value` tối đa 200 ký t�
 - Mỗi lần người dùng nối một cặp (đúng hay sai) gửi `{action:"pair", leftId, rightId}`. Cặp đã nối đúng không được gửi lại.
 - Task chỉ kết thúc hợp lệ khi **tất cả** cặp trái đã được nối đúng, hoặc có `reveal`. Nếu người dùng thoát sớm, task vẫn phải gửi `reveal` (hoặc bạn cho phép thoát session thì không commit).
 - Kết quả được tính riêng cho từng cặp (mỗi cặp ứng với một Meaning).
-- `match` chỉ xuất hiện ở các mode luyện tập (random/weak), không có trong daily và checkpoint.
+- `match` chỉ xuất hiện ở các mode luyện tập (random/weak), không có trong daily và checkpoint. Weak không có `match` khi đang luyện theo `issue`.
 
 ### 7.5 `surgery`: sửa lỗi chính tả (Curated)
 
