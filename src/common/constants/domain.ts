@@ -96,6 +96,7 @@ export const SKILL = {
   WRITING: 'writing',
 } as const;
 export type Skill = (typeof SKILL)[keyof typeof SKILL];
+export const SKILLS = Object.values(SKILL);
 
 export const SKILL_STATUS = {
   NOT_VERIFIED: 'not_verified',

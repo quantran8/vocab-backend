@@ -48,6 +48,9 @@ import { ProgressController } from './modules/progress/controllers/progress.cont
 import { ProgressService } from './modules/progress/services/progress.service';
 import { CommitService } from './modules/session-commit/services/commit.service';
 import { SessionCommitController } from './modules/session-commit/controllers/session-commit.controller';
+import { PlacementController } from './modules/placement/controllers/placement.controller';
+import { PlacementRepository } from './modules/placement/repositories/placement.repository';
+import { PlacementService } from './modules/placement/services/placement.service';
 import { PlannerRepository } from './modules/session-planner/repositories/planner.repository';
 import { PlannerService } from './modules/session-planner/services/planner.service';
 import { SessionPlannerController } from './modules/session-planner/controllers/session-planner.controller';
@@ -61,7 +64,7 @@ import { HealthController } from './modules/health/health.controller';
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
-    AuthController, IdentityController, CatalogController, ProgressController, SessionPlannerController,
+    AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
     SessionCommitController, SpeechController, CheckpointController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController,
     HealthController,
@@ -74,7 +77,7 @@ import { HealthController } from './modules/health/health.controller';
     { provide: LexicalProvider, useClass: AnthropicLexicalProvider },
     { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
     { provide: AudioStorage, useClass: SupabaseAudioStorage },
-    AuthProvider, AuthService, IdentityService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
+    AuthProvider, AuthService, IdentityService, PlacementRepository, PlacementService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
     SpeechService, CheckpointService, MaintenanceService, AdminService, PublicationService,
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,

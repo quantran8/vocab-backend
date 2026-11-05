@@ -86,6 +86,25 @@ function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
   }];
 }
 
+/** The skill a task of this shape trains; must agree with evidenceFor below. */
+export function skillOf(intent: AssessmentIntent, promptIsTargetAudio: boolean): Skill | null {
+  switch (intent) {
+    case ASSESSMENT_INTENT.MEANING_RECOGNITION:
+      return promptIsTargetAudio ? SKILL.LISTENING : SKILL.READING;
+    case ASSESSMENT_INTENT.TRANSCRIPTION:
+      return promptIsTargetAudio ? SKILL.LISTENING : null;
+    case ASSESSMENT_INTENT.SOUND_DISCRIMINATION:
+      return SKILL.LISTENING;
+    case ASSESSMENT_INTENT.PRONUNCIATION:
+      return SKILL.SPEAKING;
+    case ASSESSMENT_INTENT.PAIRING:
+      return SKILL.READING;
+    case ASSESSMENT_INTENT.MEANING_RECALL:
+    case ASSESSMENT_INTENT.SPELLING_REPAIR:
+      return SKILL.WRITING;
+  }
+}
+
 /** Evidence depends on stimulus + response + target + delivery, never on prompt type alone (AR-15). */
 export function deriveEvidence(fact: SkillFact): EvidenceDraft[] {
   // Right after Learn the answer was just taught — see memory skill-evidence-learning.

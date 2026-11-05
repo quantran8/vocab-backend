@@ -267,6 +267,12 @@ describe('Vocab Flow API', () => {
 
     const learnSteps = (p: { steps: { type: string }[] }) => JSON.stringify(p.steps.filter((s) => s.type === 'learn'));
 
+    it('tells the learn card its part of speech', async () => {
+      await onboard();
+      const card = (await plan()).steps.find((s: { type: string }) => s.type === 'learn').card;
+      expect(card.partOfSpeech).toBe('verb');
+    });
+
     it('prefers new Meanings at or above the level', async () => {
       await onboard([...words(4), seedWord(9, { cefrLevel: 'A1', meaningText: 'mức thấp' })], 'B1');
       await goal(4);

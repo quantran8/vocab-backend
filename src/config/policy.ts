@@ -51,5 +51,7 @@ export const POLICY = {
   speech: { passAccuracy: 80, receiptTtlHours: 72, maxAudioBytes: 2 * 1024 * 1024 },
   weak: { lookbackDays: 30, minAttempts: 3 },
   checkpoint: { sessionsPerChallenge: 7 },
+  // A level passes at this ratio; the result is the highest level with every level below it passed too.
+  placement: { questionsPerLevel: 3, minCorrectRatio: 0.6 },
   customWords: { maxRoadmapWords: 500, dailyLookups: 30, maxTextLength: 64, maxContextLength: 200, maxMeaningsPerWord: 8, maxSensesPerDraft: 3 },
 } as const;

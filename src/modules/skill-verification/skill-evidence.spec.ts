@@ -1,6 +1,6 @@
 import { ASSESSMENT_INTENT, DELIVERY_MODE, EVIDENCE_REASON as R, OUTCOME, SKILL, SKILL_ISSUE, SKILL_STATUS, TASK_PHASE, TEMPLATE, VALIDITY } from '../../common/constants/domain';
 import { addHours } from '../../common/constants/time';
-import { deriveEvidence, deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillFact } from './skill-evidence';
+import { deriveEvidence, deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillFact, skillOf } from './skill-evidence';
 
 const AT = new Date('2026-10-30T00:00:00Z');
 const fact = (overrides: Partial<SkillFact>): SkillFact => ({
@@ -10,6 +10,15 @@ const fact = (overrides: Partial<SkillFact>): SkillFact => ({
 });
 const audio = { promptIsTargetAudio: true, deliveryMode: DELIVERY_MODE.AUDIO };
 const row = (sessionId: string, hours: number, passed: boolean, reasons: EvidenceRow['reasons'] = []): EvidenceRow => ({ sessionId, passed, reasons, committedAt: addHours(AT, hours) });
+
+describe('skillOf', () => {
+  const cases = Object.values(ASSESSMENT_INTENT).flatMap((intent) => [false, true].map((promptIsTargetAudio) => ({ intent, promptIsTargetAudio })));
+
+  it.each(cases)('matches the evidence for $intent audio=$promptIsTargetAudio', ({ intent, promptIsTargetAudio }) => {
+    const [evidence] = deriveEvidence(fact({ intent, promptIsTargetAudio, deliveryMode: DELIVERY_MODE.AUDIO }));
+    expect(skillOf(intent, promptIsTargetAudio)).toBe(evidence?.skill ?? null);
+  });
+});
 
 describe('evidence mapping', () => {
   it('select(text) gives direct Reading on the Meaning', () => {
