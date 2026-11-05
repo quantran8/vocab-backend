@@ -4,7 +4,7 @@ name: Deploy backend to OCI
 
 on:
   push:
-    branches: [develop]
+    branches: [master]
   workflow_dispatch:
     inputs:
       skip_migrations:
@@ -26,7 +26,7 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/master'
     # Native runner: arm64 under QEMU crashes Node layers and takes 10+ minutes.
     runs-on: ${{ vars.BUILD_PLATFORM == 'linux/amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
     outputs:
