@@ -25,6 +25,8 @@ const effectiveSignal = ({ signal, isPrimed }: Observation) =>
 
 const earlier = (a: Date, b: Date) => (a < b ? a : b);
 
+const weakenedInterval = (hours: number) => Math.max(SRS.failedRecallIntervalHours, hours * SRS.weakenedIntervalFactor);
+
 export function initialState(observation: Observation | undefined, at: Date): SrsState {
   const signal = observation ? effectiveSignal(observation) : MEMORY_SIGNAL.FAILED_RECALL;
   const intervalHours =
@@ -58,13 +60,17 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
         recognitionGraceUsed: false,
       };
     }
-    case MEMORY_SIGNAL.ASSISTED_RECALL:
+    case MEMORY_SIGNAL.ASSISTED_RECALL: {
+      const intervalHours = weakenedInterval(state.intervalHours);
       return {
         ...reviewed,
+        intervalHours,
         unaidedStreak: 0,
-        nextReviewAt: addHours(at, Math.min(state.intervalHours, SRS.assistedFollowUpHours)),
+        nextReviewAt: addHours(at, Math.min(intervalHours, SRS.assistedFollowUpHours)),
       };
+    }
     case MEMORY_SIGNAL.FAILED_RECALL:
+    case MEMORY_SIGNAL.FAILED_RECOGNITION:
       return {
         ...reviewed,
         intervalHours: SRS.failedRecallIntervalHours,
@@ -72,8 +78,6 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
         unaidedStreak: 0,
         lapseCount: state.lapseCount + 1,
       };
-    case MEMORY_SIGNAL.FAILED_RECOGNITION:
-      return { ...reviewed, nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.failedRecognitionDelayHours)) };
     case MEMORY_SIGNAL.RECOGNITION_SUCCESS: {
       const isDue = state.nextReviewAt <= at;
       if (!isDue || state.recognitionGraceUsed) return reviewed;
@@ -84,9 +88,17 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
 
 const FAILURE_SIGNALS: MemorySignal[] = [MEMORY_SIGNAL.FAILED_RECALL, MEMORY_SIGNAL.FAILED_RECOGNITION];
 
-/** Checkpoint/Random/Weak: success never extends the schedule; failure can only pull it closer. */
+/** Checkpoint/Random/Weak: success never extends the schedule; weak answers only pull it closer. */
 export function applyNonDaily(state: SrsState, observation: Observation, at: Date): SrsState {
   const reviewed = { ...state, lastReviewedAt: at };
+  if (observation.signal === MEMORY_SIGNAL.ASSISTED_RECALL) {
+    return { ...reviewed, nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.assistedFollowUpHours)) };
+  }
   if (!FAILURE_SIGNALS.includes(observation.signal)) return reviewed;
-  return { ...reviewed, nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.failedRecognitionDelayHours)) };
+  return {
+    ...reviewed,
+    intervalHours: weakenedInterval(state.intervalHours),
+    unaidedStreak: 0,
+    nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.failedRecognitionDelayHours)),
+  };
 }

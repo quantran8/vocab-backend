@@ -118,6 +118,7 @@ export function memoryDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]) {
       intent: server.intent,
       outcome: o.outcome,
       hintCount: o.hintCount,
+      attemptCount: o.attemptCount,
       isPrimed: server.isPrimed,
     }));
   });
@@ -147,6 +148,7 @@ export function evidenceDrafts(evaluated: EvaluatedTask[], targets: TargetRow[])
         deliveryMode,
         outcome: o.outcome,
         hintCount: o.hintCount,
+        attemptCount: o.attemptCount,
         meaningId: target?.meaningId ?? null,
         pronunciationId: target?.pronunciationId ?? null,
       }).map((draft) => ({ ...draft, taskId: task.id, targetOrdinal: o.ordinal, receiptId, evaluatorVersion: task.evaluatorVersion }));

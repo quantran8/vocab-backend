@@ -10,7 +10,7 @@ import { AdminService } from '../src/modules/admin/services/admin.service';
 import { PublicationService } from '../src/modules/admin/services/publication.service';
 import { MaintenanceService } from '../src/modules/maintenance/services/maintenance.service';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
-import { answers, learnIds, tasksOf, wrongEvents } from './support/driver';
+import { answers, correctEvents, learnIds, tasksOf, wrongEvents } from './support/driver';
 
 const USER = 'user-1';
 const words = (n: number, from = 0) => Array.from({ length: n }, (_, i) => seedWord(i + from));
@@ -702,6 +702,140 @@ describe('Vocab Flow API', () => {
       expect(statuses(revoked)).not.toContain('verified');
       expect(revoked.needsPractice).toBe(true);
       expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+    });
+
+    describe('memory grading after verified', () => {
+      type Task = { template: string; options?: unknown; tiles?: unknown };
+      const graded = (t: Task) => Boolean(t.options || t.tiles || t.template === TEMPLATE.TYPING);
+      const statuses = (word: { meanings: { skills: Record<string, { status: string } | undefined> }[] }) =>
+        Object.values(word.meanings[0].skills).map((s) => s?.status);
+
+      const issues = (word: { meanings: { skills: Record<string, { issue: string | null } | undefined> }[] }) =>
+        Object.values(word.meanings[0].skills).flatMap((s) => (s?.issue ? [s.issue] : []));
+
+      async function verifiedWord() {
+        await onboard(words(4));
+        const wordId = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id)))[0].id;
+        await learnOne();
+        h.planner.setRng(() => 0.99);
+        const review = async (override?: (t: Task) => object[] | undefined) => {
+          h.clock.advance(30);
+          const p = await plan('random_practice');
+          await commit(p, answers(p, { override })).expect(200);
+          return (await api('get', `/v1/words/${wordId}`).expect(200)).body;
+        };
+        await review();
+        const word = await review();
+        expect(statuses(word)).toContain('verified');
+        expect(word.needsPractice).toBe(false);
+        return review;
+      }
+
+      it('show answer revokes verified and flags the word', async () => {
+        const review = await verifiedWord();
+        const word = await review((t) => (graded(t) ? [{ seq: 1, action: 'reveal' }] : undefined));
+        expect(statuses(word)).not.toContain('verified');
+        expect(word.needsPractice).toBe(true);
+        expect(issues(word)).toContain('failed');
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+      });
+
+      it('a hint before a correct answer keeps verified, and only a later unaided answer clears the flag', async () => {
+        const review = await verifiedWord();
+        const hinted = (t: Task) => (graded(t)
+          ? [{ seq: 1, action: 'hint' }, ...correctEvents(t).map((e) => ({ ...e, seq: e.seq + 1 }))]
+          : undefined);
+        const word = await review(hinted);
+        expect(statuses(word)).toContain('verified');
+        expect(issues(word)).toContain('assisted');
+        expect(issues(word)).not.toContain('failed');
+        expect(word.needsPractice).toBe(true);
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+
+        h.clock.advance(1);
+        const soon = await plan('random_practice');
+        await commit(soon, answers(soon)).expect(200);
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(1);
+
+        const recovered = await review();
+        expect(issues(recovered)).toEqual([]);
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(0);
+      });
+
+      it('mistakes while learning a new word do not flag it', async () => {
+        await onboard(words(4));
+        await goal(1);
+        const wordId = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id)))[0].id;
+        const p = await plan();
+        await commit(p, answers(p, { override: (t) => (graded(t) ? wrongEvents(t) : undefined) })).expect(200);
+        const word = (await api('get', `/v1/words/${wordId}`).expect(200)).body;
+        expect(word.needsPractice).toBe(false);
+        expect(issues(word)).toEqual([]);
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 0 });
+      });
+
+      it('a second-try recall stores the retried reason', async () => {
+        await onboard(words(4));
+        await goal(1);
+        h.planner.setRng(() => 0);
+        const p = await plan();
+        expect(tasksOf(p).some((t) => t.template === TEMPLATE.TYPING)).toBe(true);
+        const retry = (t: Task) => {
+          if (t.template !== TEMPLATE.TYPING) return undefined;
+          const wrong = wrongEvents(t);
+          return [...wrong, ...correctEvents(t).map((e, i) => ({ ...e, seq: wrong.length + i + 1 }))];
+        };
+        await commit(p, answers(p, { override: retry })).expect(200);
+        const rows = await h.db.select({ reasons: skillEvidence.reasons }).from(skillEvidence);
+        expect(rows.some((r) => r.reasons.includes(EVIDENCE_REASON.RETRIED))).toBe(true);
+        expect((await h.first(memoryObservations)).signal).toBe(MEMORY_SIGNAL.ASSISTED_RECALL);
+      });
+
+      it('Weak practices only the skill with the issue, and a clean pass there clears it', async () => {
+        const review = await verifiedWord();
+        const word = await review((t) => (graded(t) ? wrongEvents(t) : undefined));
+        const flagged = Object.entries(word.meanings[0].skills as Record<string, { issue: string | null }>)
+          .filter(([, s]) => s?.issue).map(([skill]) => skill);
+        expect(flagged.length).toBeGreaterThan(0);
+
+        h.clock.advance(30);
+        const p = await plan('weak_words_practice');
+        await commit(p, answers(p)).expect(200);
+        const rows = await h.db.select({ skill: skillEvidence.skill, reasons: skillEvidence.reasons })
+          .from(skillEvidence).where(eq(skillEvidence.sessionId, p.sessionId));
+        expect(rows.length).toBeGreaterThan(0);
+        for (const row of rows) {
+          expect(flagged).toContain(row.skill);
+          expect(row.reasons).toEqual([]);
+        }
+        const wordId = word.wordId;
+        const after = (await api('get', `/v1/words/${wordId}`).expect(200)).body;
+        for (const skill of new Set(rows.map((r) => r.skill))) expect(after.meanings[0].skills[skill].issue).toBeNull();
+      });
+
+      it('Weak rotates instead of repeating the same failing words', async () => {
+        await onboard(words(14));
+        await learnOne(12);
+        // Keeps shuffle stable, so two rounds of 10 cover all 12 Meanings.
+        h.planner.setRng(() => 0.99);
+        const fail = (t: Task) => (graded(t) ? wrongEvents(t) : undefined);
+        for (let i = 0; i < 2; i += 1) {
+          h.clock.advance(1);
+          const practice = await plan('random_practice');
+          await commit(practice, answers(practice, { override: fail })).expect(200);
+        }
+        const weakSession = async () => {
+          h.clock.advance(1);
+          const p = await plan('weak_words_practice');
+          await commit(p, answers(p, { override: fail })).expect(200);
+          const rows = await h.db.select({ id: memoryObservations.meaningId }).from(memoryObservations).where(eq(memoryObservations.sessionId, p.sessionId));
+          return rows.map((r) => r.id);
+        };
+        const first = await weakSession();
+        const second = await weakSession();
+        expect(first).toHaveLength(POLICY.session.practiceTaskCap);
+        expect(second.some((id) => !first.includes(id))).toBe(true);
+      });
     });
 
     it('pages and searches the library without skill states', async () => {

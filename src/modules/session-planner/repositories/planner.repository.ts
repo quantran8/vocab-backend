@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, exists, inArray, or, sql } from 'drizzle-orm';
-import { CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, MEMORY_SIGNAL, CHECKPOINT_STATE } from '../../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, MEMORY_SIGNAL, CHECKPOINT_STATE, Skill } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
+import { POLICY } from '../../../config/policy';
 import { DB, Db } from '../../../db/db';
 import { practiceItemLocalizations, practiceItemTargets, checkpointChallenges, learningSessions, userMeaningOverrides } from '../../../db/schema';
 import { CuratedItem } from '../../practice-resolver/curated';
 import { DistractorView, MeaningSnapshot } from '../../practice-resolver/task.types';
+import { openSkillIssuesSql } from '../../skill-verification/skill-issue.sql';
 
 type SnapshotRow = { snapshot: MeaningSnapshot };
 
@@ -90,24 +92,45 @@ export class PlannerRepository {
       LIMIT ${limit}`)).rows);
   }
 
-  // Rolling window, not lifetime wrong counts (§8.3).
+  // Rolling window, not lifetime wrong counts (§8.3). Rotates by last practice so repeat failures cannot hold every slot.
   async weakTargets(userId: string, locale: string, since: Date, minAttempts: number, limit: number) {
-    return inScope((await this.db.execute<SnapshotRow>(sql`
-      WITH attempts AS (
-        SELECT meaning_id, count(*) AS total,
-               count(*) FILTER (WHERE signal NOT IN (${MEMORY_SIGNAL.UNAIDED_RECALL}, ${MEMORY_SIGNAL.RECOGNITION_SUCCESS})) AS weak
-        FROM memory_observations
-        WHERE user_id = ${userId}::uuid AND observed_at >= ${since}::timestamptz
-        GROUP BY meaning_id
-        HAVING count(*) >= ${minAttempts}
+    const { rows } = await this.db.execute<SnapshotRow & { skills: Skill[] | null }>(sql`
+      WITH learned AS (
+        SELECT ump.meaning_id, ump.last_reviewed_at, p.snapshot,
+          (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e
+           WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) AS pronunciation_id
+        FROM user_meaning_progress ump
+        JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
+        JOIN meaning_publications p ON p.id = a.publication_id
+        WHERE ump.user_id = ${userId}::uuid
+      ), open_issue AS (${openSkillIssuesSql(userId, since)}
+      ), attempts AS (
+        SELECT o.meaning_id, count(*) AS total,
+               count(*) FILTER (WHERE o.signal NOT IN (${MEMORY_SIGNAL.UNAIDED_RECALL}, ${MEMORY_SIGNAL.RECOGNITION_SUCCESS})) AS weak
+        FROM memory_observations o
+        JOIN user_meaning_progress ump ON ump.user_id = o.user_id AND ump.meaning_id = o.meaning_id
+        WHERE o.user_id = ${userId}::uuid AND o.observed_at >= ${since}::timestamptz
+          AND o.session_id IS DISTINCT FROM ump.learned_session_id
+        GROUP BY o.meaning_id
+      ), candidates AS (
+        SELECT l.snapshot, l.meaning_id, l.pronunciation_id, l.last_reviewed_at, i.skills
+        FROM learned l
+        LEFT JOIN attempts x ON x.meaning_id = l.meaning_id
+        CROSS JOIN LATERAL (
+          SELECT array_agg(DISTINCT e.skill::text) AS skills FROM open_issue e
+          WHERE e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id) i
+        WHERE i.skills IS NOT NULL OR (x.weak > 0 AND x.total >= ${minAttempts})
+        ORDER BY i.skills IS NOT NULL DESC, COALESCE(x.weak::numeric / x.total, 0) DESC, l.meaning_id
+        LIMIT ${limit * POLICY.review.candidateMultiplier}
       )
-      SELECT p.snapshot
-      FROM attempts x
-      JOIN active_meaning_publications a ON a.meaning_id = x.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
-      JOIN meaning_publications p ON p.id = a.publication_id
-      WHERE x.weak > 0
-      ORDER BY x.weak::numeric / x.total DESC, x.meaning_id
-      LIMIT ${limit}`)).rows);
+      SELECT c.snapshot, c.skills
+      FROM candidates c
+      ORDER BY GREATEST(c.last_reviewed_at, (
+        SELECT max(e.committed_at) FROM skill_evidence e
+        WHERE e.user_id = ${userId}::uuid AND (e.meaning_id = c.meaning_id OR e.pronunciation_id = c.pronunciation_id)
+      )) NULLS FIRST, c.meaning_id
+      LIMIT ${limit}`);
+    return rows;
   }
 
   async oldestChallenge(userId: string, challengeId?: string) {

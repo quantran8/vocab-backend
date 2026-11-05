@@ -7,7 +7,7 @@ export const learnIds = (plan: Json): string[] => plan.steps.filter((s: Json) =>
 
 const wrongOption = (task: Json) => task.options.find((o: Json) => o.id !== task.evaluation.correctOptionId).id;
 
-function correctEvents(task: Json, receiptId?: string): Json[] {
+export function correctEvents(task: Json, receiptId?: string): Json[] {
   switch (task.template) {
     case TEMPLATE.SELECT:
     case TEMPLATE.CLOZE_SELECT:

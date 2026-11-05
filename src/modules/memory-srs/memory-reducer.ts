@@ -1,4 +1,5 @@
 import { ASSESSMENT_INTENT, AssessmentIntent, MEMORY_SIGNAL, MemorySignal, OUTCOME, Outcome } from '../../common/constants/domain';
+import { POLICY } from '../../config/policy';
 
 export interface MemoryFact {
   taskId: string;
@@ -7,6 +8,7 @@ export interface MemoryFact {
   intent: AssessmentIntent;
   outcome: Outcome;
   hintCount: number;
+  attemptCount: number;
   isPrimed: boolean;
 }
 
@@ -17,13 +19,18 @@ export interface MemoryDraft {
   sourceTaskIds: string[];
 }
 
+// Grading rules — see memory memory-assessment-rework.
+export const isLightRetry = ({ outcome, attemptCount, hintCount }: Pick<MemoryFact, 'outcome' | 'attemptCount' | 'hintCount'>) =>
+  outcome === OUTCOME.CORRECTED_AFTER_RETRY && attemptCount === POLICY.memory.lightRetryAttempts && hintCount === 0;
+
 const recallSignal = (fact: MemoryFact): MemorySignal => {
+  if (isLightRetry(fact)) return MEMORY_SIGNAL.ASSISTED_RECALL;
   if (fact.outcome !== OUTCOME.CORRECT) return MEMORY_SIGNAL.FAILED_RECALL;
   return fact.hintCount > 0 ? MEMORY_SIGNAL.ASSISTED_RECALL : MEMORY_SIGNAL.UNAIDED_RECALL;
 };
 
 const recognitionSignal = (fact: MemoryFact): MemorySignal =>
-  fact.outcome === OUTCOME.CORRECT ? MEMORY_SIGNAL.RECOGNITION_SUCCESS : MEMORY_SIGNAL.FAILED_RECOGNITION;
+  fact.outcome === OUTCOME.CORRECT && fact.hintCount === 0 ? MEMORY_SIGNAL.RECOGNITION_SUCCESS : MEMORY_SIGNAL.FAILED_RECOGNITION;
 
 // Worst first: a wrong recall must not be hidden by a later success.
 const SEVERITY: MemorySignal[] = [

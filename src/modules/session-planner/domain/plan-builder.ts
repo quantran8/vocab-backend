@@ -1,4 +1,4 @@
-import { ASSESSMENT_INTENT, PROMPT_TYPE, PromptType, SESSION_MODE, SessionMode, TASK_PHASE, TaskPhase, TEMPLATE, VARIANT } from '../../../common/constants/domain';
+import { ASSESSMENT_INTENT, PROMPT_TYPE, PromptType, SESSION_MODE, SessionMode, SKILL, Skill, TASK_PHASE, TaskPhase, TEMPLATE, VARIANT } from '../../../common/constants/domain';
 import { newId } from '../../../common/ids';
 import { POLICY } from '../../../config/policy';
 import { normalizeAnswer } from '../../practice-evaluator/normalizer';
@@ -14,6 +14,8 @@ export interface PlanInput {
   mode: SessionMode;
   newTargets: MeaningSnapshot[];
   reviewTargets: MeaningSnapshot[];
+  // Weak only: skills with an open issue, by meaningId.
+  focusSkills?: Map<string, Skill[]>;
   pool: DistractorView[];
   curated: CuratedItem[];
   proficiency: string | null;
@@ -110,8 +112,42 @@ function skillCandidates(target: MeaningSnapshot, input: PlanInput) {
   );
 }
 
+const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYPE.AUDIO : PROMPT_TYPE.TEXT);
+
+// Each task must yield direct evidence for its skill, or the issue could never clear.
+function taskForSkill(skill: Skill, target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
+  switch (skill) {
+    case SKILL.READING:
+      return buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng) ?? buildSelectReverse(target, pool, ctx, rng);
+    case SKILL.WRITING:
+      return (rng() < POLICY.newLearning.recallTypingWeight ? null : buildFlyReorder(target, ctx, rng)) ?? buildTypingRecall(target, ctx);
+    case SKILL.LISTENING:
+      return buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng);
+    case SKILL.SPEAKING:
+      return buildRecording(target, pickModality(rng), ctx) ?? buildRecording(target, PROMPT_TYPE.TEXT, ctx);
+  }
+}
+
+function focusedTasks(input: PlanInput, focus: Map<string, Skill[]>) {
+  const perTarget = input.reviewTargets.map((target) => {
+    const tasks = (focus.get(target.meaningId) ?? []).flatMap((skill) => taskForSkill(skill, target, input) ?? []);
+    if (tasks.length > 0) return tasks;
+    const fallback = pickWeighted(semanticCandidates(target, input), input.rng);
+    return fallback ? [fallback] : [];
+  });
+  const rounds = Math.max(0, ...perTarget.map((tasks) => tasks.length));
+  // Every target gets its first skill before any target gets a second.
+  const capped = Array.from({ length: rounds }, (_, round) => perTarget.flatMap((tasks) => tasks[round] ?? []))
+    .flat()
+    .slice(0, POLICY.session.practiceTaskCap);
+  const isRecall = (task: ResolvedTask) => task.serverEvaluation.intent === ASSESSMENT_INTENT.MEANING_RECALL;
+  // Recall first: a select or recording of the same word would prime it, and a primed pass clears nothing.
+  return [...shuffle(capped.filter(isRecall), input.rng), ...shuffle(capped.filter((t) => !isRecall(t)), input.rng)];
+}
+
 function reviewTasks(input: PlanInput): ResolvedTask[] {
-  const { mode, reviewTargets, rng, ctx } = input;
+  const { mode, reviewTargets, rng, ctx, focusSkills } = input;
+  if (focusSkills?.size) return focusedTasks(input, focusSkills);
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {
     const semantic = semanticCandidates(target, input);
@@ -128,8 +164,6 @@ function reviewTasks(input: PlanInput): ResolvedTask[] {
   }
   return shuffle(tasks, rng);
 }
-
-const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYPE.AUDIO : PROMPT_TYPE.TEXT);
 
 function buildGloss(target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
   return (

@@ -1,4 +1,4 @@
-import { ASSESSMENT_INTENT, DELIVERY_MODE, EVIDENCE_REASON as R, OUTCOME, SKILL, SKILL_STATUS, TASK_PHASE, TEMPLATE, VALIDITY } from '../../common/constants/domain';
+import { ASSESSMENT_INTENT, DELIVERY_MODE, EVIDENCE_REASON as R, OUTCOME, SKILL, SKILL_ISSUE, SKILL_STATUS, TASK_PHASE, TEMPLATE, VALIDITY } from '../../common/constants/domain';
 import { addHours } from '../../common/constants/time';
 import { deriveEvidence, deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillFact } from './skill-evidence';
 
@@ -6,10 +6,10 @@ const AT = new Date('2026-10-30T00:00:00Z');
 const fact = (overrides: Partial<SkillFact>): SkillFact => ({
   template: TEMPLATE.SELECT, intent: ASSESSMENT_INTENT.MEANING_RECOGNITION, phase: TASK_PHASE.DUE_REVIEW,
   promptIsTargetAudio: false, qualityQualified: true, isPrimed: false, deliveryMode: DELIVERY_MODE.NONE,
-  outcome: OUTCOME.CORRECT, hintCount: 0, meaningId: 'm', pronunciationId: 'p', ...overrides,
+  outcome: OUTCOME.CORRECT, hintCount: 0, attemptCount: 1, meaningId: 'm', pronunciationId: 'p', ...overrides,
 });
 const audio = { promptIsTargetAudio: true, deliveryMode: DELIVERY_MODE.AUDIO };
-const row = (sessionId: string, hours: number, passed: boolean): EvidenceRow => ({ sessionId, passed, committedAt: addHours(AT, hours) });
+const row = (sessionId: string, hours: number, passed: boolean, reasons: EvidenceRow['reasons'] = []): EvidenceRow => ({ sessionId, passed, reasons, committedAt: addHours(AT, hours) });
 
 describe('evidence mapping', () => {
   it('select(text) gives direct Reading on the Meaning', () => {
@@ -30,6 +30,14 @@ describe('evidence mapping', () => {
   it('C16 each kind of help is its own reason', () => {
     expect(deriveEvidence(fact({ hintCount: 1 }))[0].reasons).toEqual([R.HINTED]);
     expect(deriveEvidence(fact({ hintCount: 1, outcome: OUTCOME.REVEALED, isPrimed: true }))[0].reasons).toEqual([R.HINTED, R.REVEALED, R.PRIMED]);
+  });
+  it('only a second-try recall without a hint is retried', () => {
+    const recall = { intent: ASSESSMENT_INTENT.MEANING_RECALL, template: TEMPLATE.TYPING, outcome: OUTCOME.CORRECTED_AFTER_RETRY };
+    expect(deriveEvidence(fact({ ...recall, attemptCount: 2 }))[0]).toMatchObject({ reasons: [R.RETRIED], passed: false });
+    expect(deriveEvidence(fact({ ...recall, attemptCount: 3 }))[0].reasons).toEqual([]);
+    expect(deriveEvidence(fact({ ...recall, attemptCount: 2, hintCount: 1 }))[0].reasons).toEqual([R.HINTED]);
+    expect(deriveEvidence(fact({ outcome: OUTCOME.CORRECTED_AFTER_RETRY, attemptCount: 2 }))[0].reasons).toEqual([]);
+    expect(deriveEvidence(fact({ ...audio, intent: ASSESSMENT_INTENT.TRANSCRIPTION, template: TEMPLATE.TYPING, outcome: OUTCOME.CORRECTED_AFTER_RETRY, attemptCount: 2 }))[0].reasons).toEqual([]);
   });
   it('records every reason that applies', () => {
     const match = { intent: ASSESSMENT_INTENT.PAIRING, template: TEMPLATE.MATCH };
@@ -74,7 +82,34 @@ describe('skill status', () => {
   });
   it('C22 later valid failure revokes verified', () => {
     const state = deriveSkillStatus([row('a', 0, true), row('b', 24, true), row('c', 30, false)]);
-    expect(state).toEqual({ status: SKILL_STATUS.DEMONSTRATED, needsPractice: true });
+    expect(state).toEqual({ status: SKILL_STATUS.DEMONSTRATED, needsPractice: true, issue: SKILL_ISSUE.FAILED });
+  });
+  describe('issue per skill', () => {
+    const verified = [row('a', 0, true), row('b', 24, true)];
+    it('help on a correct answer or a second try keeps verified', () => {
+      for (const weak of [row('c', 30, true, [R.HINTED]), row('c', 30, false, [R.RETRIED])]) {
+        expect(deriveSkillStatus([...verified, weak])).toEqual({ status: SKILL_STATUS.VERIFIED, needsPractice: true, issue: SKILL_ISSUE.ASSISTED });
+      }
+    });
+    it('a wrong or revealed answer revokes, with or without help', () => {
+      for (const reasons of [[], [R.HINTED], [R.REVEALED], [R.PRIMED]] as EvidenceRow['reasons'][]) {
+        expect(deriveSkillStatus([...verified, row('c', 30, false, reasons)])).toEqual({ status: SKILL_STATUS.DEMONSTRATED, needsPractice: true, issue: SKILL_ISSUE.FAILED });
+      }
+    });
+    it('a clean pass clears the issue only after the recovery delay', () => {
+      const weak = row('c', 30, true, [R.HINTED]);
+      expect(deriveSkillStatus([...verified, weak, row('d', 41, true)]).issue).toBe(SKILL_ISSUE.ASSISTED);
+      expect(deriveSkillStatus([...verified, weak, row('d', 42, true)])).toMatchObject({ needsPractice: false, issue: null });
+      expect(deriveSkillStatus([...verified, weak, row('d', 42, true, [R.HINTED])]).issue).toBe(SKILL_ISSUE.ASSISTED);
+    });
+    it('a primed success is neutral, and the worst answer in a session wins', () => {
+      expect(deriveSkillStatus([...verified, row('c', 30, true, [R.PRIMED])]).issue).toBeNull();
+      expect(deriveSkillStatus([row('c', 30, false), row('c', 30, true, [R.HINTED])]).issue).toBe(SKILL_ISSUE.FAILED);
+    });
+    it('new learning and weak templates never raise an issue', () => {
+      expect(deriveSkillStatus([row('a', 0, false, [R.NEW_PRACTICE])])).toEqual({ status: SKILL_STATUS.NOT_VERIFIED, needsPractice: false, issue: null });
+      expect(deriveSkillStatus([row('a', 0, false, [R.WEAK_TEMPLATE, R.HINTED])]).issue).toBeNull();
+    });
   });
   it('word needs every learned scope verified', () => {
     const v = SKILL_STATUS.VERIFIED;
