@@ -4,7 +4,7 @@ vocab-backend runs on the same OCI VM as money-space-backend and is served from
 money-space's domain at **`https://<money-space domain>/service/vocab/`**.
 
 ```
-push to develop ──> build arm64 image ──> OCIR (vocab-backend repo) ──> ssh to the VM
+push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ──> ssh to the VM
                                                                           │
    /opt/money-space (money-space)            <APP_DIR> (vocab)            │
    ├─ caddy :80/:443 ── edge network ──────> backend (alias vocab-backend)◄┘
