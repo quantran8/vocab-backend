@@ -146,7 +146,7 @@ Response:
 
 ```jsonc
 { "type": "learn", "id": "...", "card": {
-  "word": "clarify", "meaning": "làm rõ", "definition": "...", "ipa": "/ˈklærɪfaɪ/",
+  "word": "clarify", "partOfSpeech": "verb", "meaning": "làm rõ", "definition": "...", "ipa": "/ˈklærɪfaɪ/",
   "audio": { "url": "https://...", "locale": "en-US" },   // có thể vắng
   "examples": [{ "text": "...", "translation": "..." }]
 } }
