@@ -130,6 +130,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 - `GET /v1/me/words?limit=50&offset=0&q=` (limit 1–100): từ đã học, mới học nhất trước. Trang ngắn hơn `limit` là hết.
   - `q` (tuỳ chọn, tối đa 64 ký tự) tìm trên từ tiếng Anh và nghĩa, không phân biệt hoa thường và dấu tiếng Việt.
   - Mỗi meaning có `meaningId`, `learnedAt`, `nextReviewAt` và `meaning: {partOfSpeech, text, ipa?, definition, audio?, examples}`, cùng dữ liệu với learn card (đã áp bản sửa của user). `audio` vắng khi không phát được.
+  - `meaningCount`: tổng số meaning của từ mà user thấy được (cùng phạm vi với `GET /v1/words/{wordId}`), để hiện "1 / 4 nghĩa đã học". `meanings` chỉ gồm nghĩa đã học.
   - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
 - `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
 - `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).
@@ -196,13 +197,15 @@ Response:
 
 ```jsonc
 { "type": "learn", "id": "...", "card": {
-  "word": "clarify", "partOfSpeech": "verb", "meaning": "làm rõ", "definition": "...", "ipa": "/ˈklærɪfaɪ/",
+  "wordId": "01a0...", "meaningId": "01a1...", "word": "clarify", "partOfSpeech": "verb", "meaning": "làm rõ", "definition": "...", "ipa": "/ˈklærɪfaɪ/",
   "audio": { "url": "https://...", "locale": "en-US" },   // có thể vắng
   "examples": [{ "text": "...", "translation": "..." }]
 } }
 ```
 
 Hiển thị thẻ, người dùng bấm tiếp tục. Chỉ cần ghi nhớ `id` để đưa vào `learnStepsCompleted` khi commit. `ipa` và `audio` có thể vắng.
+
+`wordId` dùng để gọi `GET /v1/words/{wordId}` khi cần hiện các nghĩa khác của từ (chỉ để tham khảo, không thuộc session); `meaningId` là nghĩa của thẻ này, dùng để loại nó ra khỏi danh sách đó. Plan tạo trước khi có hai field này thì không có chúng.
 
 ### 5.2 Thứ tự từ mới (mode daily)
 

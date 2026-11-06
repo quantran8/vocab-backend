@@ -58,6 +58,8 @@ function buildCard(target: MeaningSnapshot, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
   const playable = playablePronunciation(target, ctx);
   return {
+    wordId: target.wordId,
+    meaningId: target.meaningId,
     word: target.lemma,
     partOfSpeech: target.partOfSpeech,
     meaning: target.meaningText,
