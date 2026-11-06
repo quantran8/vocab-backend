@@ -581,6 +581,7 @@ Với `available` và `translation_draft`, user sửa được trước khi thê
       "partOfSpeech": "noun",
       "ipa": "/ˌserənˈdɪpəti/",
       "cefrLevel": "C1",
+      "popularity": 35,
       "meaningText": "sự tình cờ may mắn",
       "definitionText": "Việc tìm thấy điều tốt đẹp một cách tình cờ.",
       "examples": [

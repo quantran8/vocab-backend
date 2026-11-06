@@ -36,7 +36,7 @@ export class AdminService {
       word: { id: wordId, language: body.language, lemma: body.lemma, homographKey: body.homographKey },
       types: types.map(({ id, partOfSpeech }) => ({ id, wordId, partOfSpeech })),
       pronunciations: types.flatMap((t) => t.pronunciations.map((p) => ({ ...p, typeId: t.id }))),
-      meanings: typeMeanings.map(({ id, typeId, cefrLevel, coreDefinition }) => ({ id, typeId, cefrLevel, coreDefinition })),
+      meanings: typeMeanings.map(({ id, typeId, cefrLevel, coreDefinition, popularity }) => ({ id, typeId, cefrLevel, coreDefinition, popularity })),
       examples: typeMeanings.flatMap((m) =>
         m.examples.map(({ id, sourceText, targetLocator }) => ({ id, meaningId: m.id, sourceText, targetLocator })),
       ),

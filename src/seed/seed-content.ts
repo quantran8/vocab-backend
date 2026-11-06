@@ -10,6 +10,7 @@ export interface SeedWord {
   partOfSpeech: PartOfSpeech;
   ipa: string;
   cefrLevel: string;
+  popularity?: number;
   meaningText: string;
   definitionText: string;
   example: string;
@@ -51,6 +52,7 @@ export async function seedTopic({ db, admin, publications }: SeedServices, slug:
         meanings: [{
           cefrLevel: word.cefrLevel as never,
           coreDefinition: word.definitionText,
+          popularity: word.popularity,
           examples: [{ sourceText: word.example, targetLocator: { start, end: start + word.lemma.length } }],
         }],
       }],

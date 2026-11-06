@@ -79,7 +79,7 @@ export class FakeSpeech extends SpeechProvider {
 }
 
 const sense = (lemma: string, locale: string, overrides: Partial<GeneratedWord['senses'][number]> = {}): GeneratedWord['senses'][number] => ({
-  partOfSpeech: 'noun', ipa: `/${lemma}/`, cefrLevel: 'B1', meaningText: `${locale} gloss of ${lemma}`, definitionText: `${locale} definition of ${lemma}`,
+  partOfSpeech: 'noun', ipa: `/${lemma}/`, cefrLevel: 'B1', popularity: 50, meaningText: `${locale} gloss of ${lemma}`, definitionText: `${locale} definition of ${lemma}`,
   examples: [{ text: `Use ${lemma} here.`, translation: `${locale} sentence`, target: lemma }], ...overrides,
 });
 

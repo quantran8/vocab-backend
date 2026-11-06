@@ -14,6 +14,7 @@
     { "idx": 9, "version": "7", "when": 1761868800009, "tag": "0009_custom_words", "breakpoints": true },
     { "idx": 10, "version": "7", "when": 1761868800010, "tag": "0010_evidence_reasons", "breakpoints": true },
     { "idx": 11, "version": "7", "when": 1761868800011, "tag": "0011_deleted_identities", "breakpoints": true },
-    { "idx": 12, "version": "7", "when": 1761868800012, "tag": "0012_evidence_reason_retried", "breakpoints": true }
+    { "idx": 12, "version": "7", "when": 1761868800012, "tag": "0012_evidence_reason_retried", "breakpoints": true },
+    { "idx": 13, "version": "7", "when": 1761868800013, "tag": "0013_meaning_popularity", "breakpoints": true }
   ]
 }

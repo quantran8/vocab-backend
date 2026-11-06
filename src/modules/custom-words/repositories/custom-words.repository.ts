@@ -206,7 +206,7 @@ export class CustomWordsRepository {
 
     const meaningId = newId();
     await tx.insert(meanings).values({
-      id: meaningId, typeId, cefrLevel: sense.cefrLevel, coreDefinition: sense.definitionText, origin: MEANING_ORIGIN.AI_GENERATED,
+      id: meaningId, typeId, cefrLevel: sense.cefrLevel, coreDefinition: sense.definitionText, popularity: sense.popularity ?? null, origin: MEANING_ORIGIN.AI_GENERATED,
       createdByUserId: userId, ownerUserId: isPrivate ? userId : null, lexicalDraftId: draftId, draftSenseIndex: senseIndex,
     });
     await tx.insert(meaningLocalizations).values({

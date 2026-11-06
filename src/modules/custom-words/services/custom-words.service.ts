@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
 import {
-  CUSTOM_MEANING_STATUS, CUSTOM_WORD_LOOKUP_RESULT, CustomMeaningStatus, DEFAULT_ACCENT, LEXICAL_DRAFT_KIND, LexicalDraftKind,
+  CUSTOM_MEANING_STATUS, CUSTOM_WORD_LOOKUP_RESULT, CustomMeaningStatus, DEFAULT_ACCENT, LEXICAL_DRAFT_KIND, LexicalDraftKind, MEANING_POPULARITY,
 } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { POLICY } from '../../../config/policy';
@@ -37,6 +37,9 @@ function withLocators(draft?: TranslationDraftPayload, source?: MeaningSnapshot 
   });
 }
 
+// Structured output cannot carry a range, so the model's score is clamped here.
+const clampPopularity = (value: number) => Math.min(MEANING_POPULARITY.MAX, Math.max(MEANING_POPULARITY.MIN, Math.round(value)));
+
 /** Drops examples whose target is not in the sentence, then senses left without one: publish would reject them. */
 function toPayload(generated: GeneratedWord, duplicateOfMeaningId: string | null = null): WordDraftPayload {
   const senses = generated.senses.slice(0, maxSensesPerDraft).flatMap((sense) => {
@@ -44,7 +47,7 @@ function toPayload(generated: GeneratedWord, duplicateOfMeaningId: string | null
       const targetLocator = locateTarget(text, target);
       return targetLocator && translation.trim() ? [{ text, translation, targetLocator }] : [];
     });
-    return examples.length > 0 && sense.ipa.trim() && sense.meaningText.trim() && sense.definitionText.trim() ? [{ ...sense, examples }] : [];
+    return examples.length > 0 && sense.ipa.trim() && sense.meaningText.trim() && sense.definitionText.trim() ? [{ ...sense, popularity: clampPopularity(sense.popularity), examples }] : [];
   });
   return { isValidWord: generated.isValidWord && senses.length > 0, lemma: generated.lemma.trim(), duplicateOfMeaningId, senses };
 }

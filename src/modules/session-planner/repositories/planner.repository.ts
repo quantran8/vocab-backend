@@ -65,6 +65,7 @@ export class PlannerRepository {
   // Goal is per session, not per day: a finished session never blocks the next one.
   // Level only orders: at or above it first, nearest first, then easier ones; it never empties the pool.
   // Words the learner added come first: they asked for them, and CEFR gap could bury them.
+  // Within one word the most popular meaning goes first, ahead of level — see memory meaning-popularity.
   async newTargets(userId: string, locale: string, level: string | null, goal: number) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       WITH ranked AS (
@@ -85,7 +86,7 @@ export class PlannerRepository {
         WHERE NOT EXISTS (
             SELECT 1 FROM user_meaning_progress ump
             WHERE ump.user_id = ${userId}::uuid AND ump.meaning_id = r.meaning_id)
-        ORDER BY wt.word_id, r.personal DESC, below, gap, r.curated_rank, r.meaning_id
+        ORDER BY wt.word_id, r.personal DESC, m.popularity DESC NULLS LAST, below, gap, r.curated_rank, r.meaning_id
       )
       SELECT snapshot FROM eligible
       ORDER BY personal DESC, below, gap, curated_rank, meaning_id
