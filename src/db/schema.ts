@@ -119,6 +119,7 @@ export const meanings = pgTable('meanings', {
   reviewedAt: ts('reviewed_at'),
   lexicalDraftId: uuid('lexical_draft_id'),
   draftSenseIndex: smallint('draft_sense_index'),
+  popularity: smallint('popularity'),
   createdAt: createdAt(),
 }, (t) => [unique('meanings_lexical_draft_id_draft_sense_index_key').on(t.lexicalDraftId, t.draftSenseIndex)]);
 

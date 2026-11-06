@@ -8,6 +8,7 @@ import {
   playablePronunciation, pronunciationFor,
 } from '../../practice-resolver/generated';
 import { DistractorView, MeaningSnapshot, ResolveContext, ResolvedTask } from '../../practice-resolver/task.types';
+import { skillOf } from '../../skill-verification/skill-evidence';
 import { pickWeighted, planNewMeanings, Rng, shuffle, TaskSlot } from './interleave';
 
 export interface PlanInput {
@@ -19,6 +20,8 @@ export interface PlanInput {
   pool: DistractorView[];
   curated: CuratedItem[];
   proficiency: string | null;
+  // Set: one task per target, all training this skill. Unset: mixed practice.
+  skill?: Skill;
   ctx: ResolveContext;
   rng: Rng;
 }
@@ -145,8 +148,22 @@ function focusedTasks(input: PlanInput, focus: Map<string, Skill[]>) {
   return [...shuffle(capped.filter(isRecall), input.rng), ...shuffle(capped.filter((t) => !isRecall(t)), input.rng)];
 }
 
+function skillTask(target: MeaningSnapshot, skill: Skill, input: PlanInput) {
+  const { pool, ctx, rng } = input;
+  const candidates = [
+    ...semanticCandidates(target, input),
+    ...weighted([buildSelectReverse(target, pool, ctx, rng)], semanticWeight),
+    ...skillCandidates(target, input),
+  ];
+  return pickWeighted(
+    candidates.filter(({ value: { serverEvaluation: e } }) => skillOf(e.intent, e.promptIsTargetAudio) === skill),
+    rng,
+  );
+}
+
 function reviewTasks(input: PlanInput): ResolvedTask[] {
-  const { mode, reviewTargets, rng, ctx, focusSkills } = input;
+  const { mode, reviewTargets, rng, ctx, skill, focusSkills } = input;
+  if (skill) return shuffle(reviewTargets.flatMap((target) => skillTask(target, skill, input) ?? []), rng);
   if (focusSkills?.size) return focusedTasks(input, focusSkills);
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {

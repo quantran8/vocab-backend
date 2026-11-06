@@ -17,7 +17,8 @@ signup / login / google ──► token
         │
         ▼
 GET /me ──► (chưa có level/scope?) ──► onboarding:
-        │      PUT /me/levels → GET /catalog/collections → PUT /me/scope (+ PUT /me/settings)
+        │      PUT /me/levels hoặc bài test (GET + POST /me/placement-test)
+        │      → GET /catalog/collections → PUT /me/scope (+ PUT /me/settings)
         ▼
 GET /me/learn-home ──► chọn mode
         │
@@ -82,12 +83,45 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 | Bước | Request |
 |---|---|
 | Chọn level | `PUT /v1/me/levels` `{proficiencyLevel: "A1".."C2"}`; level chỉ dùng để sắp xếp từ mới (từ ≥ level trước), không loại từ nào |
+| Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
 | Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,topics:[{id,slug,title,description}]}]}`, đã localize theo `uiLocale` |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
 | Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30) |
 
 - `explanationLocale` quyết định ngôn ngữ của nghĩa, câu hỏi và nội dung trong task. Đổi locale ảnh hưởng đến session sau đó, không ảnh hưởng session đã plan.
 - `dailyNewWordGoal` là số từ mới **mỗi session** daily, không phải mỗi ngày: hoàn tất một session thì luôn có thể plan session tiếp theo.
+
+### Bài test xếp level
+
+Dành cho user chưa biết mình ở level nào. Chỉ có câu `select`, không có audio.
+
+`GET /v1/me/placement-test`:
+
+```jsonc
+{ "questions": [{
+  "id": "<questionId>", "template": "select", "variant": "gloss",
+  "prompt": { "type": "text", "text": "clarify" },
+  "question": "Từ này có nghĩa là gì?",
+  "options": [{ "id": "<uuid>", "text": "làm rõ" }, { "id": "<uuid>", "text": "..." }]   // 2 đến 4 lựa chọn
+}] }
+```
+
+- Tối đa 3 câu mỗi level, A1 đến C2 (tối đa 18 câu), dễ trước khó sau. Giữ nguyên thứ tự câu và thứ tự `options`.
+- **Khác task thường:** option `id` là **UUID string**, không phải số, và không có `evaluation`. Client không chấm và không hiện đúng/sai, mỗi câu chỉ chọn một lần.
+- `questions` rỗng nghĩa là chưa đủ nội dung: chuyển sang cho user tự chọn level bằng `PUT /v1/me/levels`.
+
+`POST /v1/me/placement-test` gửi một lần khi làm xong, kèm mọi câu đã nhận:
+
+```jsonc
+{ "answers": [{ "questionId": "...", "optionId": "..." }, { "questionId": "...", "optionId": null }] }   // null = "Không biết"
+```
+
+Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu luôn, không cần gọi thêm `PUT /v1/me/levels`.
+
+- Nên có nút "Không biết": đoán bừa làm level bị cao hơn thực tế.
+- Một level đạt khi đúng từ 60% số câu. Kết quả là level cao nhất mà nó và mọi level dưới nó đều đạt; không đạt level nào thì là `A1`.
+- User vẫn đổi được kết quả bằng `PUT /v1/me/levels`, và làm lại test được. Bài test không tạo tiến độ học hay skill evidence.
+- `400 VALIDATION_FAILED`: trùng `questionId`, hoặc không có câu nào hợp lệ.
 
 ## 4. Màn hình Home và tiến độ
 
@@ -115,7 +149,8 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 {
   "mode": "daily" | "checkpoint_challenge" | "random_practice" | "weak_words_practice",
   "capabilities": { "audioPlayback": true, "microphone": true },
-  "challengeId": "uuid"   // chỉ cho checkpoint_challenge, tuỳ chọn, mặc định thử thách cũ nhất còn available
+  "challengeId": "uuid",  // chỉ cho checkpoint_challenge, tuỳ chọn, mặc định thử thách cũ nhất còn available
+  "skill": "listening" | "speaking" | "reading" | "writing"   // chỉ cho random_practice, tuỳ chọn
 }
 ```
 
@@ -123,10 +158,21 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 |---|---|
 | `daily` | Ôn các Meaning đến hạn (tối đa 10) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
 | `checkpoint_challenge` | Ôn lại các Meaning đã học trong 7 session đó, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
-| `random_practice` | Tối đa 10 task từ các Meaning đã học |
+| `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skill` là practice tổng hợp; gửi `skill` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
 
 `capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì task `recording` **vẫn được phát hành**, client gửi event `unavailable` (xem 7.7).
+
+**Practice theo kỹ năng:** mỗi từ đúng một task, mọi task đều luyện kỹ năng đã chọn. Commit như session thường.
+
+| `skill` | Task có thể nhận |
+|---|---|
+| `reading` | `select` gloss (text), `reverse_gloss`; `cloze_select` và `select/meaning_clash` nếu có nội dung Curated |
+| `writing` | `typing/meaning_recall`, `fly_reorder/spelling_recall`; `surgery` nếu có nội dung Curated |
+| `listening` | `select/gloss` (audio), `typing/transcription`; `phonetic_choice`, `stress_choice` nếu có nội dung Curated. Chỉ dùng từ có audio |
+| `speaking` | `recording` |
+
+Trả plan rỗng (`sessionId: null`) khi không có gì để luyện: `speaking` với `microphone=false`, `listening` với `audioPlayback=false`, hoặc chưa có từ đã học phù hợp (nhiều từ catalog chưa có audio). Gửi `skill` với mode khác `random_practice` nhận `400`.
 
 Response:
 
@@ -535,6 +581,7 @@ Với `available` và `translation_draft`, user sửa được trước khi thê
       "partOfSpeech": "noun",
       "ipa": "/ˌserənˈdɪpəti/",
       "cefrLevel": "C1",
+      "popularity": 35,
       "meaningText": "sự tình cờ may mắn",
       "definitionText": "Việc tìm thấy điều tốt đẹp một cách tình cờ.",
       "examples": [

@@ -11,6 +11,7 @@ export const generatedSchema = z.object({
     partOfSpeech: z.enum(PARTS_OF_SPEECH),
     ipa: z.string(),
     cefrLevel: z.enum(CEFR_LEVELS),
+    popularity: z.number().int(),
     meaningText: z.string(),
     definitionText: z.string(),
     examples: z.array(z.object({ text: z.string(), translation: z.string(), target: z.string() })),

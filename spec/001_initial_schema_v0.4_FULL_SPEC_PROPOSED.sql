@@ -111,6 +111,7 @@ CREATE TABLE meanings (
     reviewed_at TIMESTAMPTZ,
     lexical_draft_id UUID, -- FK added after lexical_drafts
     draft_sense_index SMALLINT,
+    popularity SMALLINT CHECK (popularity BETWEEN 0 AND 100), -- higher = more common sense; picks which meaning of a word is learned first
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (lexical_draft_id, draft_sense_index)
 );

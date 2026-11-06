@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { Clock } from '../../../common/clock';
-import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION, Skill } from '../../../common/constants/domain';
+import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION, SKILL, Skill, SKILLS } from '../../../common/constants/domain';
 import { addHours, HOURS_PER_DAY } from '../../../common/constants/time';
 import { ApiError } from '../../../common/http/api-error';
 import { newId } from '../../../common/ids';
@@ -14,14 +14,20 @@ import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from '../domain/pla
 import { PlannerRepository } from '../repositories/planner.repository';
 import { SessionPlan } from '../domain/session-plan';
 
-export const planRequestSchema = z.strictObject({
-  mode: z.enum(SESSION_MODES),
-  capabilities: z.strictObject({ audioPlayback: z.boolean(), microphone: z.boolean() }),
-  challengeId: z.uuid().optional(),
-});
+export const planRequestSchema = z
+  .strictObject({
+    mode: z.enum(SESSION_MODES),
+    capabilities: z.strictObject({ audioPlayback: z.boolean(), microphone: z.boolean() }),
+    challengeId: z.uuid().optional(),
+    skill: z.enum(SKILLS).optional(),
+  })
+  .refine(({ mode, skill }) => !skill || mode === SESSION_MODE.RANDOM_PRACTICE, { path: ['skill'], message: 'skill requires random_practice' });
 export type PlanRequest = z.infer<typeof planRequestSchema>;
 
 const { reviewCap, practiceTaskCap, ttlHours, distractorPoolSize } = POLICY.session;
+
+const cannotTrain = ({ skill, capabilities }: PlanRequest) =>
+  (skill === SKILL.SPEAKING && !capabilities.microphone) || (skill === SKILL.LISTENING && !capabilities.audioPlayback);
 
 @Injectable()
 export class PlannerService {
@@ -38,6 +44,7 @@ export class PlannerService {
   }
 
   async plan(userId: string, request: PlanRequest) {
+    if (cannotTrain(request)) return { sessionId: null, mode: request.mode, steps: [] };
     const now = this.clock.now();
     const learner = await this.repository.loadLearner(userId);
     const settings = learner.settings!;
@@ -69,6 +76,7 @@ export class PlannerService {
       pool,
       curated,
       proficiency: learner.proficiencyLevel,
+      skill: request.skill,
       rng: this.rng,
       ctx: {
         locale,
@@ -86,13 +94,14 @@ export class PlannerService {
       topicIds: learner.activeTopics.map((t) => t.topicId),
       capabilities: request.capabilities,
       ...(challengeId && { challengeId }),
+      ...(request.skill && { skill: request.skill }),
     });
     return { sessionId, mode: request.mode, expiresAt, steps: steps.map(toClientStep) };
   }
 
   private async selectTargets(
     userId: string,
-    { mode, challengeId }: PlanRequest,
+    { mode, challengeId, skill }: PlanRequest,
     learner: Awaited<ReturnType<PlannerRepository['loadLearner']>>,
     now: Date,
   ): Promise<{ reviewTargets: MeaningSnapshot[]; newTargets: MeaningSnapshot[]; challengeId?: string; focusSkills?: Map<string, Skill[]> }> {
@@ -107,7 +116,7 @@ export class PlannerService {
       return { reviewTargets, newTargets };
     }
     if (mode === SESSION_MODE.RANDOM_PRACTICE) {
-      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier);
+      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier, skill);
       return { reviewTargets: shuffle(pool, this.rng).slice(0, practiceTaskCap), newTargets: [] };
     }
     if (mode === SESSION_MODE.WEAK_WORDS_PRACTICE) {

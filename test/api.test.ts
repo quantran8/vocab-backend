@@ -267,6 +267,12 @@ describe('Vocab Flow API', () => {
 
     const learnSteps = (p: { steps: { type: string }[] }) => JSON.stringify(p.steps.filter((s) => s.type === 'learn'));
 
+    it('tells the learn card its part of speech', async () => {
+      await onboard();
+      const card = (await plan()).steps.find((s: { type: string }) => s.type === 'learn').card;
+      expect(card.partOfSpeech).toBe('verb');
+    });
+
     it('prefers new Meanings at or above the level', async () => {
       await onboard([...words(4), seedWord(9, { cefrLevel: 'A1', meaningText: 'mức thấp' })], 'B1');
       await goal(4);
@@ -575,6 +581,36 @@ describe('Vocab Flow API', () => {
       const tomorrow = await plan();
       await commit(tomorrow, answers(tomorrow)).expect(200);
       expect((await progressRows()).map((r) => r.meaningId)).toContain(second.id);
+    });
+
+    it('the most popular Meaning of a Word is learned first, ahead of CEFR fit and curated rank', async () => {
+      const seeded = await onboard(words(4), 'B1');
+      const admin = h.app.get(AdminService);
+      const example = { sourceText: 'Use bank here.', targetLocator: { start: 4, end: 8 } };
+      const created = await admin.createWord({
+        language: 'en', lemma: 'bank',
+        types: [{
+          partOfSpeech: 'noun',
+          pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }],
+          meanings: [{ cefrLevel: 'B1', popularity: 20, examples: [example] }, { cefrLevel: 'A1', popularity: 90, examples: [example] }],
+        }],
+      });
+      const [rare, common] = created.types[0].meanings;
+      for (const meaning of [rare, common]) {
+        await admin.putMeaningLocale(meaning.id, 'vi-VN', {
+          meaningText: `ngân hàng ${meaning.id}`, definitionText: 'x', editorialState: 'approved',
+          exampleTranslations: [{ exampleId: meaning.examples[0].id, translationText: 'dịch' }],
+        });
+        await h.app.get(PublicationService).publish(meaning.id, 'vi-VN');
+      }
+      await h.db.insert(topicMeanings).values([rare, common].map((m, i) => ({ topicId: seeded.topicId, meaningId: m.id, curatedRank: 100 + i })));
+      await h.db.delete(topicMeanings).where(inArray(topicMeanings.meaningId, seeded.meaningIds));
+
+      await goal(2);
+      const p = await plan();
+      await commit(p, answers(p)).expect(200);
+      const learned = (await progressRows()).map((r) => r.meaningId);
+      expect(learned).toEqual([common.id]);
     });
 
     it('a completed session never blocks the next: each daily plan offers a fresh goal of new Meanings', async () => {

@@ -15,6 +15,7 @@ const GENERATE_SYSTEM = `You write entries for an English vocabulary app. The in
 Set isValidWord to false, with no senses, for misspellings, gibberish, slurs or sexual content.
 lemma is the dictionary form ("ran" becomes "run"). Give the most common senses, most useful first.
 ipa is US English, between slashes. cefrLevel is the level at which a learner meets this sense.
+popularity is how common this sense is in everyday English, from 0 (rare) to 100 (the most common sense of a very common word), comparable across words.
 meaningText is a short gloss and definitionText one clear sentence, both written in the requested locale.
 Each sense has one natural English example, its translation into the requested locale, and target: the exact substring of the example where the word appears.
 When existingMeanings is given, generate only the sense described by context. If an existing meaning already covers it, set duplicateOfIndex to its index and return no senses; otherwise duplicateOfIndex is null.`;

@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS, ASSIGNABLE_ROLES } from '../../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, MEANING_POPULARITY, EDITORIAL_STATE, ITEM_STATUS, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS, ASSIGNABLE_ROLES } from '../../../common/constants/domain';
 import { ZodPipe } from '../../../common/http/zod.pipe';
 import { hasLocaleCopy } from '../../practice-resolver/locale-copy';
 import { hasValidHighlight } from '../services/publication.service';
 
 const locale = z.string().min(2).max(32);
 const editorial = z.enum(Object.values(EDITORIAL_STATE));
+const popularity = z.number().int().min(MEANING_POPULARITY.MIN).max(MEANING_POPULARITY.MAX);
 
 export const createWordSchema = z.strictObject({
   language: z.string().max(16).default(LEARNING_LANGUAGE),
@@ -21,6 +22,7 @@ export const createWordSchema = z.strictObject({
         z.strictObject({
           cefrLevel: z.enum(CEFR_LEVELS).optional(),
           coreDefinition: z.string().optional(),
+          popularity: popularity.optional(),
           examples: z.array(z.strictObject({ sourceText: z.string().min(1), targetLocator: z.record(z.string(), z.unknown()) })).default([]),
         }),
       ).min(1),
@@ -90,10 +92,13 @@ export type ExampleBody = z.infer<typeof exampleSchema>;
 export const meaningSchema = z.strictObject({
   cefrLevel: z.enum(CEFR_LEVELS).optional(),
   coreDefinition: z.string().trim().min(1).optional(),
+  popularity: popularity.optional(),
   examples: z.array(exampleSchema).default([]),
 });
 export type MeaningBody = z.infer<typeof meaningSchema>;
-export const patchMeaningSchema = z.strictObject({ cefrLevel: z.enum(CEFR_LEVELS).nullable().optional(), coreDefinition: z.string().trim().min(1).nullable().optional() })
+export const patchMeaningSchema = z.strictObject({
+  cefrLevel: z.enum(CEFR_LEVELS).nullable().optional(), coreDefinition: z.string().trim().min(1).nullable().optional(), popularity: popularity.nullable().optional(),
+})
   .refine(notEmpty, NOTHING_TO_UPDATE);
 export type PatchMeaning = z.infer<typeof patchMeaningSchema>;
 

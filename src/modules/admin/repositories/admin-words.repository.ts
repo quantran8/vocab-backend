@@ -69,7 +69,7 @@ export class AdminWordsRepository {
             pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
             meanings: {
               where: (m) => isNull(m.ownerUserId),
-              columns: { id: true, cefrLevel: true, coreDefinition: true, origin: true, reviewedAt: true, createdAt: true },
+              columns: { id: true, cefrLevel: true, coreDefinition: true, popularity: true, origin: true, reviewedAt: true, createdAt: true },
               with: {
                 localizations: { columns: { locale: true, meaningText: true, definitionText: true, editorialState: true, origin: true, updatedAt: true } },
                 examples: { columns: { id: true, sourceText: true, targetLocator: true }, with: { localizations: { columns: { locale: true, translationText: true } } } },
@@ -204,7 +204,7 @@ export class AdminWordsRepository {
       .update(meanings)
       .set(body)
       .where(and(eq(meanings.id, id), isNull(meanings.ownerUserId)))
-      .returning({ id: meanings.id, cefrLevel: meanings.cefrLevel, coreDefinition: meanings.coreDefinition });
+      .returning({ id: meanings.id, cefrLevel: meanings.cefrLevel, coreDefinition: meanings.coreDefinition, popularity: meanings.popularity });
     return row;
   }
 

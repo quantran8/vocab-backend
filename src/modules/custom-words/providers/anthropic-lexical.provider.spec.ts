@@ -5,7 +5,7 @@ import { AnthropicLexicalProvider } from './anthropic-lexical.provider';
 const config = (model: string, anthropicApiKey: string | undefined = 'key') => ({ anthropicApiKey, lexicalAiModel: model }) as AppConfig;
 const word = {
   isValidWord: true, lemma: 'run', duplicateOfIndex: null,
-  senses: [{ partOfSpeech: 'verb', ipa: '/rʌn/', cefrLevel: 'A1', meaningText: 'chạy', definitionText: 'di chuyển nhanh', examples: [{ text: 'I run.', translation: 'Tôi chạy.', target: 'run' }] }],
+  senses: [{ partOfSpeech: 'verb', ipa: '/rʌn/', cefrLevel: 'A1', popularity: 90, meaningText: 'chạy', definitionText: 'di chuyển nhanh', examples: [{ text: 'I run.', translation: 'Tôi chạy.', target: 'run' }] }],
 };
 const reply = (text: string, stop_reason = 'end_turn') => new Response(JSON.stringify({
   id: 'msg', type: 'message', role: 'assistant', model: 'm', stop_reason, stop_sequence: null,
