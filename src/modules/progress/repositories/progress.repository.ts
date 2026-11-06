@@ -78,7 +78,7 @@ export class ProgressRepository {
           OR ${foldedColumn(sql`COALESCE(override->>'meaningText', snapshot->>'meaningText')`)} LIKE ${searchPattern(query)})`
       : sql`true`;
     // The publication join sits inside `learned` so a page is always full while more words remain.
-    const { rows } = await this.db.execute<RawMeaningRow>(sql`
+    const { rows } = await this.db.execute<RawMeaningRow & { meaningCount: number }>(sql`
       WITH learned AS (
         SELECT ump.meaning_id, ump.learned_at, ump.next_review_at, wt.word_id, p.snapshot, o.content AS override
         FROM user_meaning_progress ump
@@ -93,11 +93,24 @@ export class ProgressRepository {
         SELECT word_id, max(learned_at) AS last_learned
         FROM learned GROUP BY word_id HAVING ${matches}
         ORDER BY last_learned DESC, word_id LIMIT ${limit} OFFSET ${offset}
+      ), totals AS (
+        -- Same visibility as wordMeanings, so the count matches the word detail.
+        SELECT page.word_id, count(*)::int AS meaning_count
+        FROM page
+        JOIN word_types wt ON wt.word_id = page.word_id
+        JOIN meanings m ON m.type_id = wt.id
+        JOIN user_settings s ON s.user_id = ${userId}::uuid
+        JOIN active_meaning_publications a ON a.meaning_id = m.id AND a.locale = s.explanation_locale
+        LEFT JOIN user_meaning_progress ump ON ump.meaning_id = m.id AND ump.user_id = s.user_id
+        WHERE (a.recalled_at IS NULL OR ump.user_id IS NOT NULL)
+          AND (m.owner_user_id IS NULL OR m.owner_user_id = s.user_id)
+        GROUP BY page.word_id
       )
       SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", l.snapshot, l.override,
-             l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt"
+             l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt", t.meaning_count AS "meaningCount"
       FROM learned l
       JOIN page ON page.word_id = l.word_id
+      JOIN totals t ON t.word_id = l.word_id
       ORDER BY page.last_learned DESC, l.word_id, l.learned_at`);
     return rows;
   }

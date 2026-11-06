@@ -273,6 +273,14 @@ describe('Vocab Flow API', () => {
       expect(card.partOfSpeech).toBe('verb');
     });
 
+    it('lets the learn card open its word detail', async () => {
+      await onboard();
+      const card = (await plan()).steps.find((s: { type: string }) => s.type === 'learn').card;
+      const word = (await api('get', `/v1/words/${card.wordId}`).expect(200)).body;
+      expect(word.lemma).toBe(card.word);
+      expect(word.meanings.map((m: { meaningId: string }) => m.meaningId)).toContain(card.meaningId);
+    });
+
     it('prefers new Meanings at or above the level', async () => {
       await onboard([...words(4), seedWord(9, { cefrLevel: 'A1', meaningText: 'mức thấp' })], 'B1');
       await goal(4);
@@ -576,6 +584,8 @@ describe('Vocab Flow API', () => {
       const learned = (await progressRows()).map((r) => r.meaningId);
       expect(learned).toContain(first.id);
       expect(learned).not.toContain(second.id);
+      const bank = (await api('get', '/v1/me/words').expect(200)).body.words.find((w: { lemma: string }) => w.lemma === 'bank');
+      expect(bank).toMatchObject({ meaningCount: 2, meanings: [expect.anything()] });
 
       h.clock.advance(24);
       const tomorrow = await plan();
@@ -887,6 +897,7 @@ describe('Vocab Flow API', () => {
       expect(new Set([...first, ...second].map((w: { wordId: string }) => w.wordId)).size).toBe(3);
       expect(first[0].meanings[0].meaningId).toEqual(expect.any(String));
       expect(first[0].meanings[0].skills).toBeUndefined();
+      expect(first[0].meaningCount).toBe(1);
       expect(first[0].needsPractice).toBeUndefined();
       expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 3, needPracticeWords: 0 });
 

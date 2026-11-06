@@ -85,9 +85,10 @@ function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudi
 }
 
 /** The library row: content and review dates only, so listing never reads skill evidence. */
-const wordSummary = (rows: MeaningRow[], allowPlaceholderAudio: boolean) => ({
+const wordSummary = (rows: MeaningRow[], meaningCount: number, allowPlaceholderAudio: boolean) => ({
   wordId: rows[0].wordId,
   lemma: rows[0].snapshot.lemma,
+  meaningCount,
   meanings: rows.map((row) => ({
     meaningId: row.meaningId,
     meaning: senseView(row.snapshot, allowPlaceholderAudio),
@@ -108,8 +109,9 @@ export class ProgressService {
 
   async words(userId: string, limit: number, offset: number, query?: string) {
     const rows = await this.repository.learnedWordsPage(userId, limit, offset, query);
+    const counts = new Map(rows.map((r) => [r.wordId, r.meaningCount]));
     const groups = Map.groupBy(parseMeaningRows(rows), (r) => r.wordId).values();
-    return { words: [...groups].map((group) => wordSummary(group, this.config.allowPlaceholderAudio)) };
+    return { words: [...groups].map((group) => wordSummary(group, counts.get(group[0].wordId)!, this.config.allowPlaceholderAudio)) };
   }
 
   wordStats(userId: string) {
