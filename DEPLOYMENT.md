@@ -7,7 +7,7 @@ money-space's domain at **`https://<money-space domain>/service/vocab/`**.
 push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ──> ssh to the VM
                                                                           │
    /opt/money-space (money-space)            <APP_DIR> (vocab)            │
-   ├─ caddy :80/:443 ── edge network ──────> backend (alias vocab-backend)◄┘
+   ├─ caddy :80/:443 ── edge network ──────> vocab-backend              ◄┘
    │   └─ routes/vocab.caddy  (written by this deploy)
    └─ backend, redis
 ```

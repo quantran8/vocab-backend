@@ -184,7 +184,7 @@ jobs:
         if: ${{ !inputs.skip_migrations }}
         run: |
           ssh oci "cd '$APP_DIR' && \
-            docker compose run --rm --no-deps backend node dist/db/migrate.js"
+            docker compose run --rm --no-deps vocab-backend node dist/db/migrate.js"
 
       - name: Restart
         run: ssh oci "cd '$APP_DIR' && docker compose up -d --remove-orphans"
@@ -208,7 +208,7 @@ jobs:
             echo "waiting for backend ($i/20)..."; sleep 6
           done
           echo "backend never became healthy" >&2
-          ssh oci "cd '$APP_DIR' && docker compose ps && docker compose logs --tail 80 backend" >&2
+          ssh oci "cd '$APP_DIR' && docker compose ps && docker compose logs --tail 80 vocab-backend" >&2
           exit 1
 
       # Served at https://<DOMAIN_NAME>/service/vocab/; DOMAIN_NAME is money-space's domain.

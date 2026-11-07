@@ -1,7 +1,9 @@
 # Production stack, copied to the VM by .github/workflows/deploy.yml. It never builds:
 # the image comes from OCIR. TLS is served by money-space's Caddy over the shared `edge` network.
 services:
-  backend:
+  # Not `backend`: Compose puts the service name on every network the service
+  # joins, and on `edge` that name also resolved to money-space's backend.
+  vocab-backend:
     image: ${BACKEND_IMAGE}
     env_file: .env
     environment:
@@ -13,7 +15,6 @@ services:
     networks:
       default:
       edge:
-        aliases: [vocab-backend]
     restart: unless-stopped
     healthcheck:
       test:

@@ -39,7 +39,7 @@ jobs:
           PATTERN: ${{ inputs.grep }}
         run: |
           ssh oci "cd '${{ secrets.APP_DIR }}' && \
-            docker compose logs --tail '$LINES' --no-color backend" > logs.txt 2>&1 || true
+            docker compose logs --tail '$LINES' --no-color vocab-backend" > logs.txt 2>&1 || true
           if [ -n "$PATTERN" ]; then
             echo "=== lines matching '$PATTERN' ==="
             grep -iE -- "$PATTERN" logs.txt || echo "(no match)"
