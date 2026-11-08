@@ -20,10 +20,11 @@ const hasPronunciation = (extra = sql``) => sql`AND EXISTS (
   WHERE pr->>'accentLocale' = ${DEFAULT_ACCENT} ${extra})`;
 
 // Most catalog words have no audio; without this the oldest words could leave a Listening plan empty.
-function skillFilter(skill?: Skill) {
-  if (skill === SKILL.LISTENING) return hasPronunciation(sql`AND pr->>'audioUrl' IS NOT NULL`);
-  if (skill === SKILL.SPEAKING) return hasPronunciation();
-  return sql``;
+// Only filters when every chosen skill needs a pronunciation: other skills can still use a word without one.
+function skillFilter(skills?: Skill[]) {
+  if (!skills?.length || skills.some((s) => s !== SKILL.LISTENING && s !== SKILL.SPEAKING)) return sql``;
+  if (skills.every((s) => s === SKILL.LISTENING)) return hasPronunciation(sql`AND pr->>'audioUrl' IS NOT NULL`);
+  return hasPronunciation();
 }
 
 @Injectable()
@@ -93,13 +94,13 @@ export class PlannerRepository {
       LIMIT ${goal}::int`)).rows);
   }
 
-  async randomTargets(userId: string, locale: string, limit: number, skill?: Skill) {
+  async randomTargets(userId: string, locale: string, limit: number, skills?: Skill[]) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       SELECT p.snapshot
       FROM user_meaning_progress ump
       JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
-      WHERE ump.user_id = ${userId}::uuid ${skillFilter(skill)}
+      WHERE ump.user_id = ${userId}::uuid ${skillFilter(skills)}
       ORDER BY ump.last_reviewed_at NULLS FIRST, ump.meaning_id
       LIMIT ${limit}`)).rows);
   }

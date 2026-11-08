@@ -43,6 +43,9 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 | `POST /v1/auth/signup` | `{email, password}` | `201 {session, confirmationRequired}` |
 | `POST /v1/auth/login` | `{email, password}` | `200 session` |
 | `POST /v1/auth/google` | `{idToken, nonce?}` | `200 session` |
+| `POST /v1/auth/apple` | `{idToken, nonce?}` | `200 session` |
+| `POST /v1/auth/recover` | `{email}` | `200 {sent: true}` |
+| `POST /v1/auth/recover/verify` | `{email, code, password}` | `200 session` |
 | `POST /v1/auth/refresh` | `{refreshToken}` | `200 session` |
 
 ```jsonc
@@ -50,9 +53,12 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 { "accessToken": "...", "refreshToken": "...", "expiresIn": 3600, "user": { "id": "<supabase user id>", "email": "a@b.com" } }
 ```
 
-- Password 8–72 ký tự. Email được backend trim và lowercase.
+- Password 8–72 ký tự. Mật khẩu tạo mới (`signup`, `recover/verify`, `PUT /me/password`) còn phải có ít nhất một chữ cái và một chữ số, nếu không trả `400 VALIDATION_FAILED`. `login` chỉ kiểm tra độ dài. Email được backend trim và lowercase.
 - **Signup:** nếu project bật xác nhận email, response là `{session: null, confirmationRequired: true}`. Hiện màn "kiểm tra email", sau khi xác nhận thì gọi `login`.
 - **Google:** dùng Google Sign-In SDK trên iOS lấy ID token, gửi `idToken`. Nếu SDK yêu cầu nonce, gửi nonce **gốc** (chưa hash) vào `nonce`. Không có redirect OAuth.
+- **Apple:** Sign in with Apple trên iOS lấy `identityToken`, gửi vào `idToken`. Gửi SHA-256 của nonce cho Apple, nonce **gốc** vào `nonce`. Supabase phải bật provider Apple với bundle ID của app làm client ID.
+- **Quên mật khẩu:** `recover` gửi email chứa mã (template "Reset Password" của Supabase phải có `{{ .Token }}`). Luôn trả `200` dù email có tài khoản hay không. App hỏi mã + mật khẩu mới rồi gọi `recover/verify`: đúng mã thì đặt mật khẩu mới và trả session (đăng nhập luôn). Sai hoặc hết hạn: `400 RESET_CODE_INVALID`.
+- **Đổi mật khẩu:** `PUT /v1/me/password` (bearer) body `{currentPassword, newPassword}` trả `200 {changed: true}`. Sai mật khẩu hiện tại: `403 WRONG_PASSWORD` (không dùng 401 để client không đăng xuất). Tài khoản chỉ đăng nhập bằng Google/Apple chưa có mật khẩu: dùng "Quên mật khẩu" để tạo.
 - **Lưu token:** Keychain. Refresh token dùng một lần, mỗi lần refresh nhận cặp token mới và phải thay cả hai.
 - **Refresh:** gọi khi `expiresIn` sắp hết, hoặc khi bất kỳ request nào nhận `401 UNAUTHORIZED`: refresh một lần rồi retry request gốc một lần. Nếu refresh cũng `401` thì đăng xuất.
 - Lỗi: `401 UNAUTHORIZED` (sai thông tin/token hỏng), `409 EMAIL_ALREADY_REGISTERED`, `400 VALIDATION_FAILED`, `503 AUTH_PROVIDER_UNAVAILABLE` (retryable).
@@ -151,7 +157,8 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   "mode": "daily" | "checkpoint_challenge" | "random_practice" | "weak_words_practice",
   "capabilities": { "audioPlayback": true, "microphone": true },
   "challengeId": "uuid",  // chỉ cho checkpoint_challenge, tuỳ chọn, mặc định thử thách cũ nhất còn available
-  "skill": "listening" | "speaking" | "reading" | "writing"   // chỉ cho random_practice, tuỳ chọn
+  "skills": ["listening", "reading"]   // chỉ cho random_practice, tuỳ chọn; 1–4 kỹ năng, không trùng
+  // "skill": "listening"              // dạng cũ một kỹ năng, vẫn nhận; không gửi kèm "skills"
 }
 ```
 
@@ -159,12 +166,12 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 |---|---|
 | `daily` | Ôn các Meaning đến hạn (tối đa 10) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
 | `checkpoint_challenge` | Ôn lại các Meaning đã học trong 7 session đó, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
-| `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skill` là practice tổng hợp; gửi `skill` là practice theo kỹ năng |
+| `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
 
 `capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì task `recording` **vẫn được phát hành**, client gửi event `unavailable` (xem 7.7).
 
-**Practice theo kỹ năng:** mỗi từ đúng một task, mọi task đều luyện kỹ năng đã chọn. Commit như session thường.
+**Practice theo kỹ năng:** mỗi từ đúng một task, mọi task đều luyện một trong các kỹ năng đã chọn. Chọn nhiều kỹ năng thì các kỹ năng chia lượt đều giữa các từ; từ không luyện được kỹ năng tới lượt (vd. không có audio cho `listening`) dùng kỹ năng khác đã chọn. Commit như session thường.
 
 | `skill` | Task có thể nhận |
 |---|---|
@@ -173,7 +180,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 | `listening` | `select/gloss` (audio), `typing/transcription`; `phonetic_choice`, `stress_choice` nếu có nội dung Curated. Chỉ dùng từ có audio |
 | `speaking` | `recording` |
 
-Trả plan rỗng (`sessionId: null`) khi không có gì để luyện: `speaking` với `microphone=false`, `listening` với `audioPlayback=false`, hoặc chưa có từ đã học phù hợp (nhiều từ catalog chưa có audio). Gửi `skill` với mode khác `random_practice` nhận `400`.
+Kỹ năng thiết bị không luyện được bị bỏ: `speaking` với `microphone=false`, `listening` với `audioPlayback=false`. Trả plan rỗng (`sessionId: null`) khi không còn kỹ năng nào, hoặc chưa có từ đã học phù hợp (nhiều từ catalog chưa có audio). Gửi `skills`/`skill` với mode khác `random_practice`, `skills` rỗng hoặc trùng, hay gửi cả hai trường nhận `400`.
 
 Response:
 
@@ -351,10 +358,11 @@ Events: `{seq, action:"submit", value:"clarify"}` (`value` tối đa 200 ký t�
   "evaluation": { "wrongGraphemeIndex": 4, "replacement": "" } }
 ```
 
-- Hiển thị `word`, người dùng chọn **một** ký tự sai và nhập ký tự thay thế. `replacement` rỗng nghĩa là xóa ký tự đó.
-- `graphemeIndex` đếm theo grapheme cluster của chuỗi đã NFC, bắt đầu từ 0.
-- Event: `{seq, action:"submit", graphemeIndex: 4, replacement: ""}` (`replacement` tối đa 32 ký tự; nếu bỏ qua thì coi là rỗng).
-- Chấm đúng khi đúng cả vị trí và ký tự thay (so khớp như typing).
+- Hiển thị `word`, người dùng sửa **một hoặc nhiều** ký tự (thay hoặc xóa) rồi bấm kiểm tra. `replacement` rỗng nghĩa là xóa ký tự đó.
+- `graphemeIndex` đếm theo grapheme cluster của chuỗi đã NFC, bắt đầu từ 0, trên `word` gốc (không dịch theo các ký tự đã xóa).
+- Event: `{seq, action:"submit", edits: [{graphemeIndex: 4, replacement: ""}, ...]}`: 1–64 edits, mỗi `graphemeIndex` xuất hiện một lần và nhỏ hơn số grapheme của `word`, `replacement` tối đa 32 ký tự. Gửi `edits` thì không gửi kèm `graphemeIndex`/`replacement`.
+- Dạng cũ `{seq, action:"submit", graphemeIndex: 4, replacement: ""}` vẫn được nhận, tương đương một edit.
+- Chấm đúng khi từ sau khi áp các edit khớp với từ đúng (so khớp như typing). Vì vậy cách sửa khác nhưng ra cùng từ vẫn đúng (xóa `r` nào trong `clarrify` cũng được), còn sửa thêm ký tự không cần sửa thì sai.
 
 ### 7.6 `cloze_select`
 

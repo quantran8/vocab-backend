@@ -8,7 +8,7 @@ describe('Auth', () => {
   afterAll(() => h.close());
 
   it('signs up and returns a session, normalizing the email', async () => {
-    const { body } = await post('signup', { email: ' New@Example.com ', password: 'correct-horse' }).expect(201);
+    const { body } = await post('signup', { email: ' New@Example.com ', password: 'correct-horse-1' }).expect(201);
     expect(body).toEqual({
       confirmationRequired: false,
       session: { accessToken: 'access-new@example.com', refreshToken: 'refresh-new@example.com', expiresIn: 3600, user: { id: 'uid-new@example.com', email: 'new@example.com' } },
@@ -16,19 +16,24 @@ describe('Auth', () => {
   });
 
   it('signup without a session means email confirmation is pending', async () => {
-    const { body } = await post('signup', { email: 'confirm@example.com', password: 'correct-horse' }).expect(201);
+    const { body } = await post('signup', { email: 'confirm@example.com', password: 'correct-horse-1' }).expect(201);
     expect(body).toEqual({ session: null, confirmationRequired: true });
   });
 
   it('rejects a duplicate email with 409', async () => {
-    const { body } = await post('signup', { email: 'taken@example.com', password: 'correct-horse' }).expect(409);
+    const { body } = await post('signup', { email: 'taken@example.com', password: 'correct-horse-1' }).expect(409);
     expect(body.code).toBe('EMAIL_ALREADY_REGISTERED');
   });
 
   it('rejects malformed input with 400', async () => {
-    await post('signup', { email: 'not-an-email', password: 'correct-horse' }).expect(400);
+    await post('signup', { email: 'not-an-email', password: 'correct-horse-1' }).expect(400);
     await post('login', { email: 'a@example.com', password: 'short' }).expect(400);
     await post('login', { email: 'a@example.com', password: 'correct-horse', extra: 1 }).expect(400);
+  });
+
+  it('requires a new password to have a letter and a number', async () => {
+    await post('signup', { email: 'rules@example.com', password: 'correct-horse' }).expect(400);
+    await post('signup', { email: 'rules@example.com', password: '12345678' }).expect(400);
   });
 
   it('logs in with email and password', async () => {

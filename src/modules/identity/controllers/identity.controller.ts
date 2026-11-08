@@ -2,13 +2,19 @@ import { Body, Controller, Delete, Get, Put } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthUser, CurrentUser } from '../../../common/auth/auth.decorators';
 import { ZodPipe } from '../../../common/http/zod.pipe';
+import { changePasswordSchema } from '../../auth/dto/auth.schemas';
+import { AuthService } from '../../auth/services/auth.service';
 import { levelsSchema, scopeSchema, settingsSchema } from '../dto/identity.schemas';
 import { AccountDeletionService } from '../services/account-deletion.service';
 import { IdentityService } from '../services/identity.service';
 
 @Controller('v1/me')
 export class IdentityController {
-  constructor(private readonly identity: IdentityService, private readonly accounts: AccountDeletionService) {}
+  constructor(
+    private readonly identity: IdentityService,
+    private readonly accounts: AccountDeletionService,
+    private readonly auth: AuthService,
+  ) {}
 
   @Get()
   me(@CurrentUser() user: AuthUser) {
@@ -18,6 +24,11 @@ export class IdentityController {
   @Delete()
   remove(@CurrentUser() user: AuthUser) {
     return this.accounts.deleteAccount(user);
+  }
+
+  @Put('password')
+  password(@CurrentUser() user: AuthUser, @Body(new ZodPipe(changePasswordSchema)) body: z.infer<typeof changePasswordSchema>) {
+    return this.auth.changePassword(user.subject, body);
   }
 
   @Put('levels')

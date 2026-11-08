@@ -1,6 +1,9 @@
 export const ERROR = {
   UNAUTHORIZED: { status: 401, retryable: false },
   FORBIDDEN: { status: 403, retryable: false },
+  // Not 401: the client treats 401 as an expired session and would sign the learner out.
+  WRONG_PASSWORD: { status: 403, retryable: false },
+  RESET_CODE_INVALID: { status: 400, retryable: false },
   SESSION_NOT_OWNED: { status: 403, retryable: false },
   NOT_FOUND: { status: 404, retryable: false },
   EMAIL_ALREADY_REGISTERED: { status: 409, retryable: false },

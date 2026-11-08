@@ -19,6 +19,13 @@ describe('practice by skill', () => {
   const planBody = (skill?: string, capabilities = CAPS, mode = 'random_practice') => ({ mode, capabilities, ...(skill && { skill }) });
   const plan = async (skill?: string, capabilities = CAPS) =>
     (await api('post', '/v1/sessions/plan').send(planBody(skill, capabilities)).expect(200)).body;
+  const planSkills = async (skills: string[], capabilities = CAPS) =>
+    (await api('post', '/v1/sessions/plan').send({ mode: 'random_practice', capabilities, skills }).expect(200)).body;
+  const skillsOf = async (sessionId: string) =>
+    (await stored(sessionId)).map((t) => {
+      const { intent, promptIsTargetAudio } = t.serverEvaluation as ServerEvaluation;
+      return skillOf(intent, promptIsTargetAudio);
+    });
   const commit = (p: { sessionId: string }, body: object) => api('post', `/v1/sessions/${p.sessionId}/commit`).send(body);
   const stored = async (sessionId: string) => (await h.first(learningSessions, eq(learningSessions.id, sessionId))).plan!.tasks;
 
@@ -71,7 +78,7 @@ describe('practice by skill', () => {
 
   it('keeps the skill in the session scope', async () => {
     const p = await plan(SKILL.READING);
-    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skill: SKILL.READING });
+    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.READING] });
   });
 
   it('returns an empty plan when the device cannot train the skill', async () => {
@@ -87,6 +94,38 @@ describe('practice by skill', () => {
   it('without a skill stays mixed practice', async () => {
     const p = await plan();
     expect(tasksOf(p).length).toBeGreaterThan(0);
-    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).not.toHaveProperty('skill');
+    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).not.toHaveProperty('skills');
+  });
+
+  it('several skills: one task per word, only the chosen skills, each one used', async () => {
+    const p = await planSkills([SKILL.READING, SKILL.WRITING]);
+    const skills = await skillsOf(p.sessionId);
+    expect(skills).toHaveLength(LEARNED);
+    expect(new Set(skills)).toEqual(new Set([SKILL.READING, SKILL.WRITING]));
+    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.READING, SKILL.WRITING] });
+    await commit(p, answers(p)).expect(200);
+  });
+
+  it('several skills: a word without audio trains another chosen skill instead of listening', async () => {
+    const p = await planSkills([SKILL.LISTENING, SKILL.READING]);
+    const skills = await skillsOf(p.sessionId);
+    expect(skills).toHaveLength(LEARNED);
+    expect(skills.filter((s) => s === SKILL.LISTENING).length).toBeLessThanOrEqual(WITH_AUDIO);
+    expect(skills.every((s) => s === SKILL.LISTENING || s === SKILL.READING)).toBe(true);
+  });
+
+  it('several skills: drops the ones the device cannot train', async () => {
+    const p = await planSkills([SKILL.SPEAKING, SKILL.WRITING], { ...CAPS, microphone: false });
+    expect(new Set(await skillsOf(p.sessionId))).toEqual(new Set([SKILL.WRITING]));
+    expect(await planSkills([SKILL.SPEAKING, SKILL.LISTENING], { audioPlayback: false, microphone: false }))
+      .toEqual({ sessionId: null, mode: 'random_practice', steps: [] });
+  });
+
+  it('rejects empty, duplicate or mixed skill fields', async () => {
+    const send = (body: object) => api('post', '/v1/sessions/plan').send({ mode: 'random_practice', capabilities: CAPS, ...body });
+    await send({ skills: [] }).expect(400);
+    await send({ skills: [SKILL.READING, SKILL.READING] }).expect(400);
+    await send({ skill: SKILL.READING, skills: [SKILL.WRITING] }).expect(400);
+    await api('post', '/v1/sessions/plan').send({ mode: 'daily', capabilities: CAPS, skills: [SKILL.READING] }).expect(400);
   });
 });

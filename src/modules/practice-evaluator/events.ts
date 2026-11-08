@@ -14,6 +14,8 @@ export const eventSchema = z.discriminatedUnion('action', [
     tileIds: z.array(id).max(64).optional(),
     graphemeIndex: id.optional(),
     replacement: z.string().max(32).optional(),
+    // surgery: every fix the learner made, in place of the single graphemeIndex/replacement pair.
+    edits: z.array(z.strictObject({ graphemeIndex: id, replacement: z.string().max(32) })).min(1).max(64).optional(),
   }),
   z.strictObject({ ...base, action: z.literal(EVENT_ACTION.PAIR), leftId: id, rightId: id }),
   z.strictObject({ ...base, action: z.literal(EVENT_ACTION.TAP_TILE), tileId: id }),
