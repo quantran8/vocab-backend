@@ -182,6 +182,40 @@ export type ItemStatus = (typeof ITEM_STATUS)[keyof typeof ITEM_STATUS];
 export const CHECKPOINT_STATE = { AVAILABLE: 'available', COMPLETED: 'completed' } as const;
 export type CheckpointState = (typeof CHECKPOINT_STATE)[keyof typeof CHECKPOINT_STATE];
 
+export const JOURNEY_NODE_TYPE = { LEARNING: 'learning', REVIEW: 'review' } as const;
+export type JourneyNodeType = (typeof JOURNEY_NODE_TYPE)[keyof typeof JOURNEY_NODE_TYPE];
+export const JOURNEY_NODE_STATE = { LOCKED: 'locked', CURRENT: 'current', COMPLETED: 'completed' } as const;
+export type JourneyNodeState = (typeof JOURNEY_NODE_STATE)[keyof typeof JOURNEY_NODE_STATE];
+export const JOURNEY_SEGMENT_STATUS = { COMPLETED: 'completed', ACTIVE: 'active', PREVIEW: 'preview' } as const;
+export type JourneySegmentStatus = (typeof JOURNEY_SEGMENT_STATUS)[keyof typeof JOURNEY_SEGMENT_STATUS];
+
+export const GAME_MODE = { MATCH_MADNESS: 'match_madness' } as const;
+export type GameMode = (typeof GAME_MODE)[keyof typeof GAME_MODE];
+export const CHALLENGE_ROLE = { CORE: 'core', REVIEW: 'review' } as const;
+export type ChallengeRole = (typeof CHALLENGE_ROLE)[keyof typeof CHALLENGE_ROLE];
+export const CHALLENGE_RUN_STATUS = {
+  ISSUED: 'issued', STARTED: 'started', COMMITTED: 'committed', ABANDONED: 'abandoned', EXPIRED: 'expired',
+} as const;
+export type ChallengeRunStatus = (typeof CHALLENGE_RUN_STATUS)[keyof typeof CHALLENGE_RUN_STATUS];
+export const CHALLENGE_OPEN_STATUSES = [CHALLENGE_RUN_STATUS.ISSUED, CHALLENGE_RUN_STATUS.STARTED] as const;
+export const CHALLENGE_ENDED_REASON = { GOAL_REACHED: 'goal_reached', TIME_UP: 'time_up', QUIT: 'quit' } as const;
+export type ChallengeEndedReason = (typeof CHALLENGE_ENDED_REASON)[keyof typeof CHALLENGE_ENDED_REASON];
+export const CHALLENGE_EVENT_TYPE = { MATCH: 'match' } as const;
+export const CHALLENGE_OUTCOME = { CLEARED: 'cleared', FAILED: 'failed', QUIT: 'quit' } as const;
+export type ChallengeOutcome = (typeof CHALLENGE_OUTCOME)[keyof typeof CHALLENGE_OUTCOME];
+export const CHALLENGE_CHAPTER_STATE = { ACTIVE: 'active', COMPLETED: 'completed', CONTENT_UNAVAILABLE: 'content_unavailable' } as const;
+export type ChallengeChapterState = (typeof CHALLENGE_CHAPTER_STATE)[keyof typeof CHALLENGE_CHAPTER_STATE];
+export const CHALLENGE_NEXT_CHAPTER_STATE = { LOCKED: 'locked', NEEDS_VOCABULARY: 'needs_vocabulary', READY: 'ready' } as const;
+export type ChallengeNextChapterState = (typeof CHALLENGE_NEXT_CHAPTER_STATE)[keyof typeof CHALLENGE_NEXT_CHAPTER_STATE];
+export const CHALLENGE_LEVEL_STATE = { LOCKED: 'locked', AVAILABLE: 'available', CLEARED: 'cleared' } as const;
+export type ChallengeLevelState = (typeof CHALLENGE_LEVEL_STATE)[keyof typeof CHALLENGE_LEVEL_STATE];
+export const CHALLENGE_UNLOCK = { LEVEL: 'level', CHAPTER_READY: 'chapter_ready', NEEDS_VOCABULARY: 'needs_vocabulary', NONE: 'none' } as const;
+export type ChallengeUnlock = (typeof CHALLENGE_UNLOCK)[keyof typeof CHALLENGE_UNLOCK];
+export const CHALLENGE_NEXT_ACTION = { PLAY_NEXT_LEVEL: 'play_next_level', OPEN_MAP: 'open_map', LEARN_MORE: 'learn_more', RETRY: 'retry' } as const;
+export type ChallengeNextAction = (typeof CHALLENGE_NEXT_ACTION)[keyof typeof CHALLENGE_NEXT_ACTION];
+export const TILE_SIDE = { WORD: 'word', MEANING: 'meaning' } as const;
+export type TileSide = (typeof TILE_SIDE)[keyof typeof TILE_SIDE];
+
 export const ADMIN_ROLE = { EDITOR: 'editor', ADMIN: 'admin' } as const;
 export const ADMIN_ROLES = [ADMIN_ROLE.EDITOR, ADMIN_ROLE.ADMIN] as const;
 export const ASSIGNABLE_ROLES = [ADMIN_ROLE.EDITOR] as const;

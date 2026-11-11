@@ -79,7 +79,7 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 ```jsonc
 {
   "id": "...", "proficiencyLevel": "B1" | null,
-  "settings": { "explanationLocale": "vi-VN", "uiLocale": "vi-VN", "timeZone": "...", "dailyNewWordGoal": 5, "...": "..." },
+  "settings": { "explanationLocale": "vi-VN", "uiLocale": "vi-VN", "timeZone": "...", "dailyNewWordGoal": 5, "weeklySessionGoal": 7, "...": "..." },
   "scope": { "collectionId": "...", "topicIds": ["..."] } | null
 }
 ```
@@ -92,10 +92,11 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 | Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
 | Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,topics:[{id,slug,title,description}]}]}`, đã localize theo `uiLocale` |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
-| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30) |
+| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7) |
 
 - `explanationLocale` quyết định ngôn ngữ của nghĩa, câu hỏi và nội dung trong task. Đổi locale ảnh hưởng đến session sau đó, không ảnh hưởng session đã plan.
 - `dailyNewWordGoal` là số từ mới **mỗi session** daily, không phải mỗi ngày: hoàn tất một session thì luôn có thể plan session tiếp theo.
+- `weeklySessionGoal` là số buổi học mỗi tuần user chọn (mặc định 7). Chỉ dùng để hiển thị (`checkpointSessionsRequired`, độ dài chặng Journey cũ): không còn mở challenge, và không ảnh hưởng Challenge Map. `dailyNewWordGoal` cũng không ảnh hưởng Challenge Map.
 
 ### Bài test xếp level
 
@@ -131,8 +132,29 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 ## 4. Màn hình Home và tiến độ
 
-- `GET /v1/me/learn-home` → `{dueCount, checkpointAvailable, checkpointSessionsDone, checkpointSessionsRequired, learnedTotal}`. Một request cho cả Home. Tiến độ tới challenge kế tiếp = `checkpointSessionsDone / checkpointSessionsRequired`; chỉ session có học từ mới mới được đếm, và số này về 0 khi challenge mở.
-- `GET /v1/me/checkpoint-challenges` → `{challenges:[{id, sequence, state:"available", createdAt, meaningCount}]}`. Mở một challenge sau mỗi 7 session có học từ mới, nên có thể nhiều challenge trong một ngày.
+- `GET /v1/me/learn-home` → `{dueCount, checkpointAvailable, checkpointSessionsDone, checkpointSessionsRequired, learnedTotal}`. Một request cho cả Home. Các trường `checkpoint*` là **legacy**: không còn challenge mới nên `checkpointSessionsDone` dừng ở `checkpointSessionsRequired`. Phần Challenge Map trên Home lấy từ `GET /v1/me/challenge-map` (mục 12).
+- **Deprecated** `GET /v1/me/checkpoint-challenges` → `{challenges:[{id, sequence, state:"available", createdAt, meaningCount}]}`. Backend không tạo challenge mới nữa; chỉ còn các challenge đã mở trước đây, vẫn chơi được một lần bằng mode `checkpoint_challenge`.
+- **Không còn khoá từ mới:** challenge đang chờ không chặn plan `daily`. Challenge Map cũng không bao giờ chặn Daily.
+- **Deprecated** (thay bằng Challenge Map, xoá khi client cũ hết hỗ trợ) `GET /v1/me/journey?historyLimit=2&futureLimit=1&before=` → Journey: mỗi chặng (segment) là N session học từ mới + 1 Tổng ôn (chính là checkpoint challenge, `segmentNo` = `sequence`). Backend quyết định mọi trạng thái; client chỉ vẽ.
+  ```jsonc
+  { "currentSegmentNo": 2, "focusNodeId": "segment:2:learning:1", "completedReviewCount": 1,
+    "segments": [ // chặng tương lai trên cùng → chặng hiện tại → chặng cũ
+      { "segmentNo": 2, "status": "active", "completedLearningCount": 0, "nodes": [
+        { "id": "segment:2:learning:1", "segmentNo": 2, "type": "learning", "ordinal": 1, "state": "current" },
+        // ... learning 2–7 "locked"
+        { "id": "segment:2:review", "segmentNo": 2, "type": "review", "ordinal": 8, "state": "locked" } ] },
+      { "segmentNo": 1, "status": "completed", "completedLearningCount": 7, "nodes": [
+        { "id": "segment:1:learning:1", "segmentNo": 1, "type": "learning", "ordinal": 1, "state": "completed", "sessionId": "..." },
+        // ...
+        { "id": "segment:1:review", "segmentNo": 1, "type": "review", "ordinal": 8, "state": "completed", "reviewId": "<challengeId>",
+          "result": { "reviewedCount": 7, "unaidedRecalledCount": 4, "needsReviewCount": 3 } } ] } ],
+    "hasMoreHistory": false, "nextHistoryCursor": null }
+  ```
+  - Số node mỗi chặng = số session + 1 (review luôn cuối, `ordinal` = số session + 1). Chặng đã có challenge giữ số session nó đã lấy; chặng hiện tại và tương lai theo `weeklySessionGoal` hiện tại, nên các chặng có thể dài khác nhau. `checkpointSessionsRequired` trong learn-home cũng theo giá trị này. `id` không đổi khi node đổi trạng thái. `state`: `locked | current | completed`; cả hệ thống chỉ có một node `current`.
+  - `status`: `completed` (đã Tổng ôn), `active` (chặng hiện tại), `preview` (chặng sau, chưa mở).
+  - Node `review` có `reviewId` (= challenge id) khi challenge đã mở: plan `checkpoint_challenge` với `challengeId` này. `result` chỉ có khi đã hoàn thành.
+  - `historyLimit` 0–10, `futureLimit` 0–3. Trang lịch sử tiếp theo: `before=nextHistoryCursor`, chỉ trả các chặng cũ hơn.
+  - Chỉ session `daily` có học từ mới mới chiếm một slot; ôn tập, Random/Weak practice và commit gửi lại thì không.
 - `GET /v1/me/words?limit=50&offset=0&q=` (limit 1–100): từ đã học, mới học nhất trước. Trang ngắn hơn `limit` là hết.
   - `q` (tuỳ chọn, tối đa 64 ký tự) tìm trên từ tiếng Anh và nghĩa, không phân biệt hoa thường và dấu tiếng Việt.
   - Mỗi meaning có `meaningId`, `learnedAt`, `nextReviewAt` và `meaning: {partOfSpeech, text, ipa?, definition, audio?, examples}`, cùng dữ liệu với learn card (đã áp bản sửa của user). `audio` vắng khi không phát được.
@@ -165,7 +187,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 | Mode | Nội dung |
 |---|---|
 | `daily` | Ôn các Meaning đến hạn (tối đa 10) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
-| `checkpoint_challenge` | Ôn lại các Meaning đã học trong 7 session đó, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
+| `checkpoint_challenge` | **Deprecated.** Ôn lại các Meaning của một challenge cũ còn `available`, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
 | `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
 
@@ -435,6 +457,8 @@ Response `200`:
   "summary": { "newWordGoalSlots": 5, "reviewedMeanings": 8, "practiceTasks": 30 } }
 ```
 
+Session `checkpoint_challenge` có thêm `summary.checkpoint: {reviewedCount, unaidedRecalledCount, needsReviewCount}`. Chỉ trả lời tự nhớ (không hint, không phải chọn đáp án) mới tính vào `unaidedRecalledCount`. Không có ngưỡng đạt: làm xong là challenge hoàn thành.
+
 **Idempotent:** commit lại cùng một body (giống từng byte sau khi chuẩn hoá JSON) trả về đúng response cũ. Vì vậy khi mất mạng hoặc không chắc đã commit, **retry nguyên body** an toàn. Body khác cho session đã commit → `409 SESSION_PAYLOAD_CONFLICT`.
 
 `GET /v1/sessions/{sessionId}/commit-status` → `{sessionId, status: "issued"|"committed"|"expired", committedAt, expiresAt, response}`. Gọi khi không chắc commit trước đó đã thành công.
@@ -445,7 +469,7 @@ Bỏ session giữa chừng: không gọi gì. Không có kết quả nào đư�
 
 ## 9. Lỗi
 
-Mọi lỗi có dạng `{code, message, retryable, requestId}`. Gửi `requestId` khi báo lỗi.
+Mọi lỗi có dạng `{code, message, retryable, requestId}`, một số lỗi có thêm `details` (xem mục 12.7). Gửi `requestId` khi báo lỗi.
 
 | HTTP | code | Xử lý ở client |
 |---|---|---|
@@ -722,3 +746,126 @@ Các số trên là giá trị thử nghiệm và có thể đổi. Không hardc
 6. Màn "Từ của tôi": danh sách, xoá, sửa, khôi phục bản gốc, các trạng thái `translationPending` và `recalled`.
 7. `409` và `422 CUSTOM_WORD_INVALID`: tự lookup lại, không báo lỗi cho user.
 8. Sau khi thêm từ, làm mới `GET /me/learn-home`.
+
+## 12. Challenge Map (Match Madness)
+
+Màn chơi tuỳ chọn, tách hẳn khỏi Daily. Chỉ dùng từ **đã học** trong Daily. Không bao giờ chặn từ mới, không đổi lịch ôn (SRS), không tính bằng chứng kỹ năng: thắng hay thua đều không ảnh hưởng `dueCount`, `nextReviewAt` hay `skills`. Mọi con số dưới đây là giá trị thử nghiệm (`POLICY.challenge`), đọc từ response, không hardcode.
+
+- **Chapter** = 12 nghĩa mới ("core") + tối đa 3 nghĩa ôn lại từ các chapter trước (chapter 1 không có). Mỗi chapter có 3 level, chơi liền nhau được, không cần quay về Daily.
+- Một nghĩa chỉ làm core cho đúng một chapter. Trong một chapter, không có 2 thẻ trùng chữ tiếng Anh hoặc trùng nghĩa hiển thị (so sánh không phân biệt hoa thường/khoảng trắng). Vì vậy học 12 từ nhưng có thể chỉ đủ 11 nghĩa hợp lệ.
+- Chapter được tạo (đóng băng nội dung) khi user **bắt đầu run đầu tiên** của nó, theo `explanationLocale` lúc đó. Đổi ngôn ngữ sau đó không đổi chapter cũ (`explanationLocale` trong response cho biết ngôn ngữ của chapter).
+- Chỉ chapter/level sớm nhất chưa qua là mở. Level đã qua chơi lại được; sao và điểm cao nhất chỉ tăng, không bao giờ giảm.
+
+```
+GET /me/challenge-map ──► currentNode
+        │
+POST /challenge/chapters/{c}/levels/{l}/runs ──► plan (status issued, 15 phút để start)
+        │
+POST /challenge/runs/{id}/start ──► startedAt (bắt đầu đếm 90 s SAU response này)
+        │   client chơi, chấm tại máy, ghi events
+POST /challenge/runs/{id}/commit ──► result, unlock, nextAction
+```
+
+### 12.1 `GET /v1/me/challenge-map`
+
+Chỉ đọc, không tạo gì.
+
+```jsonc
+{ "configVersion": "match-madness-trial-v1", "gameMode": "match_madness",
+  "chapters": [
+    { "id": "...", "chapterNo": 1, "state": "active", "titleKey": "challenge.chapter.1", "explanationLocale": "vi-VN",
+      "coreMeaningCount": 12, "reviewMeaningCount": 0, "starsEarned": 2, "maxStars": 9,
+      "levels": [
+        { "levelNo": 1, "state": "cleared", "bestStars": 2, "bestScore": 1020,
+          "goalMatches": 8, "visiblePairs": 3, "timeLimitMs": 90000,
+          "starCriteria": { "two": { "maxElapsedMs": 80000, "maxMistakes": 2 }, "three": { "maxElapsedMs": 60000, "maxMistakes": 0 } } },
+        { "levelNo": 2, "state": "available", "bestStars": 0, "bestScore": 0, "goalMatches": 12, ... },
+        { "levelNo": 3, "state": "locked", "bestStars": 0, "bestScore": 0, "goalMatches": 16, ... } ] } ],
+  "nextChapter": { "chapterNo": 2, "state": "locked", "eligibleNewCount": 5, "requiredNewCount": 12 },
+  "currentNode": { "chapterNo": 1, "levelNo": 2 } }
+```
+
+- `chapters[].state`: `active` (đang chơi), `completed` (level 3 có ≥ 1 sao), `content_unavailable` (một số từ đã bị gỡ và không còn từ đã học nào thay thế được: hướng user về Daily).
+- `levels[].state`: `locked | available | cleared` (cleared = có ≥ 1 sao).
+- `levels[]` có sẵn mục tiêu của level (`goalMatches`, `visiblePairs`, `timeLimitMs`, `starCriteria`) theo policy hiện tại, để sheet của level hiện trước khi tạo run. Run đã tạo thì dùng số trong plan (12.2).
+- `nextChapter.state`: `locked` (chapter hiện tại chưa qua), `needs_vocabulary` (hiện `eligibleNewCount / requiredNewCount`, CTA về Daily), `ready` (bấm vào là tạo chapter khi start run).
+- Chưa có chapter nào: `chapters: []`, `nextChapter.chapterNo = 1`.
+- `currentNode`: node cần focus, `null` khi không có gì chơi được.
+
+### 12.2 Tạo run: `POST /v1/challenge/chapters/{chapterNo}/levels/{levelNo}/runs`
+
+Body `{}`. Response `201`:
+
+```jsonc
+{ "runId": "...", "status": "issued", "gameMode": "match_madness", "chapterNo": 1, "levelNo": 2,
+  "policyVersion": "match-madness-trial-v1", "contentVersion": 1, "explanationLocale": "vi-VN",
+  "goalMatches": 12, "visiblePairs": 4, "timeLimitMs": 90000, "minMatchesBetweenRepeats": 3,
+  "starCriteria": { "two": { "maxElapsedMs": 80000, "maxMistakes": 3 }, "three": { "maxElapsedMs": 60000, "maxMistakes": 1 } },
+  "score": { "match": 100, "streakStep": 10, "maxStreakSteps": 5, "mistake": 20, "perSecondLeft": 5 },
+  "boardSeed": "9f2c...", "expiresAt": "2026-11-10T14:45:00.000Z",
+  "pairs": [ { "pairId": "...", "wordTileId": "...", "meaningTileId": "...", "word": "reimburse", "meaning": "hoàn trả chi phí" } ] }
+```
+
+- `pairs` có đúng `goalMatches` phần tử, theo **thứ tự hàng đợi**. Level 3 có 16 lượt từ 12–15 nghĩa: một nghĩa có thể xuất hiện 2 lần, mỗi lần một `pairId`/tile id riêng, cùng `word`/`meaning`.
+- Mỗi user chỉ có **một** run đang mở (issued hoặc started). Tạo run khi đã có run mở → `409 CHALLENGE_RUN_ACTIVE` với `details.runId`: cho user tiếp tục (`status`) hoặc bỏ (`quit`).
+- Run `issued` hết hạn sau 15 phút nếu chưa start.
+- 1 sao = qua màn trong 90 s. 2 và 3 sao cần cả điều kiện thời gian và số lần sai của `starCriteria`. Không hardcode ngưỡng.
+
+### 12.3 Luật bàn chơi (client phải làm giống hệt server)
+
+Server chấm lại bằng đúng các luật này, nên client lệch luật sẽ bị `422`.
+
+1. **Thẻ đang hiện:** ban đầu lấy từ hàng đợi tối đa `visiblePairs` cặp. Sau mỗi cặp **đúng**: bỏ cặp đó khỏi bàn, rồi lấp chỗ trống bằng cặp **đầu tiên còn trong hàng đợi** thoả cả hai điều kiện: (a) nghĩa của nó không đang hiện trên bàn, (b) nghĩa đó chưa được nối đúng trong `minMatchesBetweenRepeats` lần nối đúng gần nhất. Cặp không thoả thì giữ nguyên vị trí trong hàng đợi. Nếu không cặp nào thoả và bàn trống thì lấy cặp đầu hàng đợi. "Cùng nghĩa" = cùng `word` (một chapter không có 2 nghĩa trùng `word`).
+2. **Thứ tự cột** (tính lại lúc đầu và sau mỗi cặp đúng; sai thì không đổi): với mỗi tile đang hiện, `h = lowercase hex SHA256(UTF8(boardSeed + "|" + correctCount + "|" + side + "|" + tileId))`, `side` là `word` hoặc `meaning`; xếp tăng dần theo `h` (trùng thì theo `tileId`). Hai cột xếp độc lập. Test vector (seed `00112233445566778899aabbccddeeff`, tileId `018f0000-0000-7000-8000-000000000001`, count 0, side `word`) → `a1eedcdd4a2b5f8ffd4f2133437cc340a0fcb76214ccc2dd789dbc2aac1a8158`. Có thể animate ≤ 200 ms; reduce-motion thì đổi ngay.
+3. **Nối:** chạm một thẻ word + một thẻ meaning, thứ tự nào cũng được; chạm thẻ khác cùng cột thì đổi lựa chọn. Đúng khi cả hai thẻ cùng `pairId`. Sai: hai thẻ vẫn ở lại, combo về 0. Không có hint, check hay reveal.
+4. **Điểm** (chỉ để vui, không dùng mở khoá), theo `score` của plan: mỗi cặp đúng `match + streakStep × min(combo, maxStreakSteps)` với combo tính cả cặp vừa nối; mỗi lần sai `−mistake`; qua màn cộng `perSecondLeft × floor((timeLimitMs − elapsedMs) / 1000)`; tổng không âm (chỉ kẹp ở cuối, không kẹp từng bước). Luật điểm đóng băng trong plan lúc tạo run. Client hiện điểm tạm thời; điểm chính thức là `result.score` sau commit.
+
+### 12.4 Start, commit, quit, status
+
+- `POST /v1/challenge/runs/{runId}/start` body `{}` → `200 {runId, status: "started", startedAt, timeLimitMs}`. Gọi lại trả đúng `startedAt` cũ. Chỉ bắt đầu đếm giờ **sau** khi có response. Từ lúc start có 15 phút để commit (kể cả retry).
+- `POST /v1/challenge/runs/{runId}/commit`:
+  ```jsonc
+  { "events": [
+      { "seq": 1, "type": "match", "elapsedMs": 1840, "wordTileId": "...", "meaningTileId": "..." },
+      { "seq": 2, "type": "match", "elapsedMs": 3020, "wordTileId": "...", "meaningTileId": "..." } ],
+    "endedReason": "quit", "endedElapsedMs": 3020 }
+  ```
+  - Mỗi lần nối (đúng hoặc sai) là một event. `seq` liên tiếp từ 1. `elapsedMs` = thời gian monotonic từ lúc nhận response start, số nguyên, tăng ngặt, ≤ 90000. Tối đa 200 events.
+  - `goal_reached`: event cuối là cặp đúng thứ `goalMatches`, `endedElapsedMs` = `elapsedMs` của event đó. `time_up`: chưa đủ, `endedElapsedMs = 90000`. `quit`: chưa đủ, `lastEvent.elapsedMs ≤ endedElapsedMs < 90000`.
+  - Đồng hồ không dừng khi app vào background: quay lại mà quá hạn thì commit `time_up`.
+  - Response `200`:
+    ```jsonc
+    { "runId": "...", "status": "committed",
+      "result": { "outcome": "cleared", "starsThisRun": 2, "bestStars": 2, "correctMatches": 12, "mistakes": 1,
+                  "longestCombo": 8, "elapsedMs": 68600, "score": 1685, "bestScore": 1685 },
+      "unlock": { "kind": "level", "chapterNo": 1, "levelNo": 3 }, "nextAction": "play_next_level" }
+    ```
+  - `outcome`: `cleared | failed | quit`. `failed`/`quit` luôn 0 sao.
+  - `unlock.kind`: `level` (qua level lần đầu, mở level sau), `chapter_ready` (qua level 3 lần đầu và đã đủ từ cho chapter sau), `needs_vocabulary` (qua level 3 nhưng thiếu từ; có `eligibleNewCount`, `requiredNewCount`), `none` (chơi lại, thua hoặc bỏ).
+  - `nextAction`: `play_next_level | open_map | learn_more | retry`.
+  - **Idempotent:** retry nguyên body trả đúng response cũ. Body khác → `409 CHALLENGE_COMMIT_CONFLICT`.
+- `POST /v1/challenge/runs/{runId}/quit` body `{}`: dùng khi **mất events** (crash, đổi máy). Run `issued` → `{runId, status: "abandoned"}`, không tính lượt chơi. Run `started` → kết thúc với 0 sao, trả `{runId, status: "committed", response}` (cùng dạng response commit). Còn events thì nên commit với `endedReason: "quit"`. Gọi lại trả trạng thái cuối.
+- `GET /v1/challenge/runs/{runId}/status` → `{runId, status, chapterNo, levelNo, startedAt, expiresAt, response, run}`. `status`: `issued | started | committed | abandoned | expired`. `response` là response commit khi đã commit. `run` là plan (cùng dạng 12.2) khi run còn mở, để khôi phục sau khi app bị tắt.
+
+### 12.5 Nội dung thay đổi
+
+- Từ bị admin gỡ, hoặc từ riêng bị user xoá khỏi danh sách, không xuất hiện trong run tạo sau đó. Lần tạo run tiếp theo, backend thay đúng các ô đó bằng từ đã học sớm nhất còn hợp lệ, tăng `contentVersion`; sao và mở khoá giữ nguyên. Run đang chơi vẫn chơi hết được.
+- Không đủ từ thay thế: map hiện `content_unavailable`, tạo run trả `409 CHALLENGE_CONTENT_UNAVAILABLE`. Học thêm trong Daily là mở lại.
+
+### 12.6 Home
+
+`learn-home` chưa có tóm tắt Challenge Map: gọi `GET /v1/me/challenge-map` (một request) và hiện `currentNode`, `starsEarned` hoặc tiến độ `nextChapter`.
+
+### 12.7 Lỗi
+
+| HTTP | `code` | Client xử lý |
+|---|---|---|
+| 403 | `CHALLENGE_LEVEL_LOCKED` | Level/chapter chưa mở. Về map |
+| 404 | `CHALLENGE_RUN_NOT_FOUND` | Run không tồn tại hoặc của user khác. Về map |
+| 409 | `CHALLENGE_RUN_ACTIVE` | Còn run đang mở, `details.runId`. Tiếp tục hoặc `quit` |
+| 409 | `CHALLENGE_RUN_NOT_STARTED` | Commit khi chưa start. Gọi start |
+| 409 | `CHALLENGE_COMMIT_CONFLICT` | Run đã kết thúc với body khác. Gọi `status`, không tạo lại body |
+| 409 | `CHALLENGE_NOT_ENOUGH_VOCABULARY` | `details: {eligibleNewCount, requiredNewCount}`. CTA về Daily |
+| 409 | `CHALLENGE_CONTENT_UNAVAILABLE` | Học thêm từ rồi thử lại |
+| 410 | `CHALLENGE_RUN_EXPIRED` | Run hết hạn hoặc đã bỏ. Tạo run mới |
+| 422 | `CHALLENGE_INVALID_EVENTS` | Events không khớp luật 12.3 hoặc `elapsedMs` dài hơn thời gian thực từ lúc start. Bỏ run, log `requestId` |

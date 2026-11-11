@@ -29,12 +29,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
       message: body.message,
       retryable: body.retryable,
       requestId: request.id,
+      ...(body.details && { details: body.details }),
     });
   }
 
-  private toBody(error: unknown) {
+  private toBody(error: unknown): { status: number; code: string; message: string; retryable: boolean; details?: Record<string, unknown> } {
     if (error instanceof ApiError) {
-      return { status: error.status, code: error.code, message: error.message, retryable: error.retryable };
+      return { status: error.status, code: error.code, message: error.message, retryable: error.retryable, details: error.details };
     }
     if (error instanceof ZodError) {
       const message = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');

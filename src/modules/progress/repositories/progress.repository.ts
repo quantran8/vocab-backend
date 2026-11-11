@@ -45,8 +45,10 @@ export class ProgressRepository {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   // Single statement: the home screen never needs more than one round trip.
-  async learnHomeCounts(userId: string, now: Date, required: number) {
-    const { rows: [row] } = await this.db.execute<{ dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; learnedTotal: number }>(sql`
+  async learnHomeCounts(userId: string, now: Date) {
+    const { rows: [row] } = await this.db.execute<{
+      dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; checkpointSessionsRequired: number; learnedTotal: number;
+    }>(sql`
       SELECT
         (SELECT count(*)::int
          FROM user_meaning_progress ump
@@ -60,14 +62,15 @@ export class ProgressRepository {
              WHERE tm.meaning_id = ump.meaning_id)) AS "dueCount",
         (SELECT count(*)::int FROM checkpoint_challenges
          WHERE user_id = ${userId}::uuid AND state = ${CHECKPOINT_STATE.AVAILABLE}) AS "checkpointAvailable",
-        -- Same pending set as CheckpointService.generateFor.
-        (SELECT LEAST(count(DISTINCT p.learned_session_id), ${required}::int)::int
+        -- Legacy counter: no challenge is generated any more, so it stops at the goal.
+        (SELECT LEAST(count(DISTINCT p.learned_session_id), (SELECT weekly_session_goal FROM user_settings WHERE user_id = ${userId}::uuid))::int
          FROM user_meaning_progress p
          WHERE p.user_id = ${userId}::uuid AND p.learned_session_id IS NOT NULL
            AND NOT EXISTS (
              SELECT 1 FROM checkpoint_challenge_meanings m
              JOIN checkpoint_challenges c ON c.id = m.challenge_id
              WHERE c.user_id = p.user_id AND m.meaning_id = p.meaning_id)) AS "checkpointSessionsDone",
+        (SELECT weekly_session_goal::int FROM user_settings WHERE user_id = ${userId}::uuid) AS "checkpointSessionsRequired",
         (SELECT count(*)::int FROM user_meaning_progress WHERE user_id = ${userId}::uuid) AS "learnedTotal"`);
     return row;
   }

@@ -5,12 +5,14 @@ import {
   boolean, char, date, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
 } from 'drizzle-orm/pg-core';
 import {
-  CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE,
+  CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
+  type ChallengeRole, type ChallengeRunStatus, type GameMode,
   type LexicalDraftKind, type MeaningOrigin, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
 import type { SessionPlan } from '../modules/session-planner/domain/session-plan';
+import type { RunPlan } from '../modules/challenge/domain/match-madness';
 
 const id = () => uuid('id').primaryKey().$defaultFn(newId);
 const ts = (name: string) => timestamp(name, { withTimezone: true, precision: 6 });
@@ -36,6 +38,8 @@ export const userSettings = pgTable('user_settings', {
   uiLocale: varchar('ui_locale', { length: 32 }).notNull().default('vi-VN'),
   timeZone: varchar('time_zone', { length: 64 }).notNull().default('Asia/Ho_Chi_Minh'),
   dailyNewWordGoal: smallint('daily_new_word_goal').notNull().default(5),
+  /** Sessions the learner plans per week; a checkpoint challenge opens after this many. */
+  weeklySessionGoal: smallint('weekly_session_goal').notNull().default(7),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 
@@ -337,6 +341,68 @@ export const checkpointChallengeMeanings = pgTable('checkpoint_challenge_meaning
   challengeId: uuid('challenge_id').notNull(),
   meaningId: uuid('meaning_id').notNull(),
 }, (t) => [primaryKey({ columns: [t.challengeId, t.meaningId] })]);
+
+// G. Challenge Map: per-learner chapters of frozen word/gloss slots, level bests and Match Madness runs
+export const challengeChapters = pgTable('challenge_chapters', {
+  id: id(),
+  userId: uuid('user_id').notNull(),
+  chapterNo: integer('chapter_no').notNull(),
+  explanationLocale: varchar('explanation_locale', { length: 32 }).notNull(),
+  contentVersion: integer('content_version').notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('challenge_chapters_user_id_chapter_no_key').on(t.userId, t.chapterNo),
+  unique('challenge_chapters_id_user_id_key').on(t.id, t.userId),
+]);
+
+export const challengeChapterMeanings = pgTable('challenge_chapter_meanings', {
+  id: id(),
+  chapterId: uuid('chapter_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  meaningId: uuid('meaning_id'),
+  role: varchar('role', { length: 8 }).$type<ChallengeRole>().notNull(),
+  sortIndex: smallint('sort_index').notNull(),
+  lemma: text('lemma').notNull(),
+  gloss: text('gloss').notNull(),
+  wordKey: text('word_key').notNull(),
+  glossKey: text('gloss_key').notNull(),
+  contentVersion: integer('content_version').notNull(),
+  retiredInVersion: integer('retired_in_version'),
+  createdAt: createdAt(),
+});
+
+export const challengeLevelProgress = pgTable('challenge_level_progress', {
+  userId: uuid('user_id').notNull(),
+  chapterId: uuid('chapter_id').notNull(),
+  levelNo: smallint('level_no').notNull(),
+  bestStars: smallint('best_stars').notNull().default(0),
+  bestScore: integer('best_score').notNull().default(0),
+  bestCompletionMs: integer('best_completion_ms'),
+  firstClearedAt: ts('first_cleared_at'),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.chapterId, t.levelNo] })]);
+
+export const challengeRuns = pgTable('challenge_runs', {
+  id: id(),
+  userId: uuid('user_id').notNull(),
+  chapterId: uuid('chapter_id').notNull(),
+  levelNo: smallint('level_no').notNull(),
+  gameMode: varchar('game_mode', { length: 24 }).$type<GameMode>().notNull(),
+  policyVersion: varchar('policy_version', { length: 40 }).notNull(),
+  contentVersion: integer('content_version').notNull(),
+  status: varchar('status', { length: 16 }).$type<ChallengeRunStatus>().notNull().default(CHALLENGE_RUN_STATUS.ISSUED),
+  plan: jsonb('plan').$type<RunPlan>(),
+  issuedAt: ts('issued_at').notNull().defaultNow(),
+  startedAt: ts('started_at'),
+  expiresAt: ts('expires_at').notNull(),
+  committedAt: ts('committed_at'),
+  events: jsonb('events'),
+  commitRequestSha256: char('commit_request_sha256', { length: 64 }),
+  commitResponse: jsonb('commit_response'),
+  result: jsonb('result'),
+});
 
 // Relations are only declared for the nested reads that use `db.query`.
 export const appUsersRelations = relations(appUsers, ({ one, many }) => ({

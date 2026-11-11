@@ -59,13 +59,20 @@ import { AzureRestSpeechProvider, SpeechProvider } from './modules/speech/provid
 import { SpeechService } from './modules/speech/services/speech.service';
 import { CheckpointController } from './modules/checkpoint/controllers/checkpoint.controller';
 import { CheckpointService } from './modules/checkpoint/services/checkpoint.service';
+import { JourneyController } from './modules/journey/controllers/journey.controller';
+import { JourneyRepository } from './modules/journey/repositories/journey.repository';
+import { JourneyService } from './modules/journey/services/journey.service';
+import { ChallengeController } from './modules/challenge/controllers/challenge.controller';
+import { ChallengeRepository } from './modules/challenge/repositories/challenge.repository';
+import { ChallengeMapService } from './modules/challenge/services/challenge-map.service';
+import { ChallengeRunService } from './modules/challenge/services/challenge-run.service';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, CustomWordsController, AdminController,
+    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController,
     HealthController,
   ],
@@ -78,10 +85,10 @@ import { HealthController } from './modules/health/health.controller';
     { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
     { provide: AudioStorage, useClass: SupabaseAudioStorage },
     AuthProvider, AuthService, IdentityService, PlacementRepository, PlacementService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
-    SpeechService, CheckpointService, MaintenanceService, AdminService, PublicationService,
+    SpeechService, CheckpointService, JourneyService, ChallengeMapService, ChallengeRunService, ChallengeRepository, MaintenanceService, AdminService, PublicationService,
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,
-    CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, MaintenanceRepository, CatalogRepository,
+    CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker,
   ],
 })

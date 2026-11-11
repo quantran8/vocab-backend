@@ -120,6 +120,7 @@ export class PlannerService {
     const locale = settings.explanationLocale;
 
     if (mode === SESSION_MODE.DAILY) {
+      // Nothing gates new words: the Challenge Map is optional.
       const [reviewTargets, newTargets] = await Promise.all([
         this.repository.dueTargets(userId, locale, now, reviewCap),
         this.repository.newTargets(userId, locale, learner.proficiencyLevel, settings.dailyNewWordGoal),

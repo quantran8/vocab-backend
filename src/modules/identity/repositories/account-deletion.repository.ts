@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, notExists, or } from 'drizzle-orm';
 import { DB, Db } from '../../../db/db';
 import {
-  activeMeaningPublications, appUsers, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations,
+  activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations,
   learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations,
   skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userMeaningOverrides,
   userMeaningProgress,
@@ -22,6 +22,10 @@ export class AccountDeletionRepository {
       const challenges = tx.select({ id: checkpointChallenges.id }).from(checkpointChallenges).where(eq(checkpointChallenges.userId, userId));
       await tx.delete(skillEvidence).where(eq(skillEvidence.userId, userId));
       await tx.delete(memoryObservations).where(eq(memoryObservations.userId, userId));
+      await tx.delete(challengeRuns).where(eq(challengeRuns.userId, userId));
+      await tx.delete(challengeLevelProgress).where(eq(challengeLevelProgress.userId, userId));
+      await tx.delete(challengeChapterMeanings).where(eq(challengeChapterMeanings.userId, userId));
+      await tx.delete(challengeChapters).where(eq(challengeChapters.userId, userId));
       await tx.delete(checkpointChallengeMeanings).where(inArray(checkpointChallengeMeanings.challengeId, challenges));
       await tx.delete(checkpointChallenges).where(eq(checkpointChallenges.userId, userId));
       await tx.delete(userMeaningProgress).where(eq(userMeaningProgress.userId, userId));

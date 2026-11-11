@@ -3,7 +3,6 @@ import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AppConfig } from '../../../config/app-config';
-import { POLICY } from '../../../config/policy';
 import { toDate } from '../../../db/db';
 import { resolveAudioUrl } from '../../practice-resolver/asset-url';
 import { applyOverride } from '../../practice-resolver/meaning-override';
@@ -101,10 +100,8 @@ const wordSummary = (rows: MeaningRow[], meaningCount: number, allowPlaceholderA
 export class ProgressService {
   constructor(private readonly repository: ProgressRepository, private readonly clock: Clock, private readonly config: AppConfig) {}
 
-  async learnHome(userId: string) {
-    const required = POLICY.checkpoint.sessionsPerChallenge;
-    const row = await this.repository.learnHomeCounts(userId, this.clock.now(), required);
-    return { ...row, checkpointSessionsRequired: required };
+  learnHome(userId: string) {
+    return this.repository.learnHomeCounts(userId, this.clock.now());
   }
 
   async words(userId: string, limit: number, offset: number, query?: string) {

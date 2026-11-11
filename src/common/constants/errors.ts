@@ -26,6 +26,15 @@ export const ERROR = {
   AUTH_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   LEXICAL_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   TTS_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
+  CHALLENGE_LEVEL_LOCKED: { status: 403, retryable: false },
+  CHALLENGE_RUN_NOT_FOUND: { status: 404, retryable: false },
+  CHALLENGE_RUN_ACTIVE: { status: 409, retryable: false },
+  CHALLENGE_RUN_NOT_STARTED: { status: 409, retryable: false },
+  CHALLENGE_COMMIT_CONFLICT: { status: 409, retryable: false },
+  CHALLENGE_NOT_ENOUGH_VOCABULARY: { status: 409, retryable: false },
+  CHALLENGE_CONTENT_UNAVAILABLE: { status: 409, retryable: false },
+  CHALLENGE_RUN_EXPIRED: { status: 410, retryable: false },
+  CHALLENGE_INVALID_EVENTS: { status: 422, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;

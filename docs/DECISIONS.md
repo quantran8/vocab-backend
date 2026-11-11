@@ -38,6 +38,26 @@ Spec v0.4 leaves these points open or undefined. Each default below is what the 
 | Retention                                          | `plan` and `raw_events` cleared 30 days after expiry or commit. `result` and the session row kept                                                                                                                                                                                                                                                                                                                                                                                                                                                            | §12 `[OPEN]`                                                                          | Legal/product input needed                                                                                                                                                                  |
 | Cron                                               | In-process hourly job; assumes one running instance or tolerates a failed retry                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | §1.1                                                                                  | Run with `ENABLE_CRON=false` on extra replicas                                                                                                                                              |
 
+## Challenge Map (Match Madness)
+
+Built from `SYLL_MATCH_MADNESS_BACKEND_SPEC.md` v1.0 (proposed, not approved). Points that spec left open:
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Checkpoint gate **Learning** | Removed. Daily never gates new words, commits no longer open `checkpoint_challenges`, and `weeklySessionGoal` no longer resizes a challenge. Old challenges stay playable once; `/me/checkpoint-challenges` and `/me/journey` are deprecated, not removed | Spec §8.1–8.3 |
+| Repeated Meaning on the board **iOS** | A queued pair is skipped while its Meaning is on the board or was matched in the last `minMatchesBetweenRepeats` correct matches; an empty board takes the head of the queue anyway. The client must mirror this rule | The spec's "never twice at once, 3 matches apart" can't be guaranteed by queue order alone, because the player picks which pair to match |
+| Queue layout | Seeded SHA-256 shuffle. Level 1 takes 8 of the 12 core. Level 3 repeats the earliest queued Meanings, placed in the back half two slots apart | Deterministic and reproducible from `boardSeed` |
+| Review picks | Up to 3 prior-chapter core Meanings in an order seeded by the new chapter id, skipping word/gloss collisions | Spreads review over all earlier chapters |
+| Gloss | The published `meaningText` in the chapter locale, replaced by the learner's own override when present | A learner's edit stays in their own pool |
+| Valid slot | Meaning has a live, unrecalled publication in the chapter locale, and is shared or still in the owner's personal list | Checked lazily on run issue. No trigger on recall or delete |
+| `unlock` | Only reports a **first** clear. Replays report `none` + `open_map`; quit is `none` + `open_map`; fail is `none` + `retry` | Avoids re-announcing unlocks on replays |
+| `chapter_ready` | Computed after the first clear of level 3, from the learner's current locale | Spec §6.4 |
+| Expired runs | Not persisted mid-request (that would need a write outside the rolled-back transaction). Expiry follows `expires_at`; the next issue or the hourly job marks the row | Same rule as `learning_sessions` |
+| Timing sanity | `endedElapsedMs` may exceed server time since `start` by at most `clockSlackMs` (5 s). No minimum gap between taps | Best effort only (spec §4) |
+| `quit` endpoint on a started run | Settles as `committed` with outcome `quit`, empty events and no request hash, so a later commit conflicts | Spec §7 lists only `issued → abandoned` |
+| Retention | `plan` and `events` cleared `eventsRetentionDays` (90) after commit or expiry; `result` and `commit_response` kept | Spec §5 default |
+| Not implemented | `CHALLENGE_RATE_LIMITED` (no rate limiting yet), the start-from-another-device check (the API has no device id), redacting a just-deleted custom word from a live run's `status` payload, the `learn-home` challenge summary (the client calls `/me/challenge-map`), editorial pair blocklist, telemetry events | Out of scope or no infrastructure yet |
+
 ## Not implemented
 
 - **Curation admin:** closed. `/admin/collections`, `/admin/topics` and `/admin/topics/:id/meanings` manage the catalog; see "Admin CRUD" below.
