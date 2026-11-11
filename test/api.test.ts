@@ -3,7 +3,7 @@ import { EVIDENCE_REASON, MEMORY_SIGNAL, SKILL, TEMPLATE, VALIDITY } from '../sr
 import { ApiError } from '../src/common/http/api-error';
 import { POLICY } from '../src/config/policy';
 import {
-  appUsers, learningSessions, meaningLocalizations, meaningPublications, memoryObservations, practiceItems,
+  appUsers, checkpointChallengeMeanings, checkpointChallenges, learningSessions, meaningLocalizations, meaningPublications, memoryObservations, practiceItems,
   skillEvidence, speechAssessmentReceipts, topicMeanings, topics, userMeaningProgress, userSettings, words as wordsTable,
 } from '../src/db/schema';
 import { AdminService } from '../src/modules/admin/services/admin.service';
@@ -915,7 +915,7 @@ describe('Vocab Flow API', () => {
   });
 
   describe('checkpoint', () => {
-    const SESSIONS = POLICY.checkpoint.sessionsPerChallenge;
+    const SESSIONS = POLICY.checkpoint.defaultSessionsPerChallenge;
     const challenges = async () => (await api('get', '/v1/me/checkpoint-challenges').expect(200)).body.challenges;
     const learnSessions = async (n: number) => { for (let i = 0; i < n; i += 1) await learnOne(); };
 
@@ -926,45 +926,83 @@ describe('Vocab Flow API', () => {
       expect(await challenges()).toEqual([]);
     });
 
-    it('learn-home counts sessions towards the next challenge and restarts after unlock', async () => {
-      const progress = async () => {
-        const { checkpointSessionsDone, checkpointSessionsRequired } = (await api('get', '/v1/me/learn-home').expect(200)).body;
-        return [checkpointSessionsDone, checkpointSessionsRequired];
-      };
+    // Legacy challenges opened before the Challenge Map: still playable once, never a gate.
+    const legacyChallenge = async () => {
+      const [user] = await h.db.select({ id: appUsers.id }).from(appUsers);
+      const learned = await progressRows();
+      const [row] = await h.db.insert(checkpointChallenges).values({ userId: user.id, sequence: 1 }).returning({ id: checkpointChallenges.id });
+      await h.db.insert(checkpointChallengeMeanings).values(learned.map((p) => ({ challengeId: row.id, meaningId: p.meaningId })));
+      return row.id;
+    };
+
+    it('learning sessions open no challenge any more, so learn-home stops at the goal', async () => {
       await onboard(words(SESSIONS + 2));
-      expect(await progress()).toEqual([0, SESSIONS]);
-      await learnSessions(SESSIONS - 1);
-      expect(await progress()).toEqual([SESSIONS - 1, SESSIONS]);
-      await learnSessions(1);
-      expect(await progress()).toEqual([0, SESSIONS]);
-      await learnSessions(1);
-      expect(await progress()).toEqual([1, SESSIONS]);
+      await learnSessions(SESSIONS + 1);
+      expect(await challenges()).toEqual([]);
+      expect((await api('get', '/v1/me/learn-home').expect(200)).body).toMatchObject({
+        checkpointAvailable: 0, checkpointSessionsDone: SESSIONS, checkpointSessionsRequired: SESSIONS,
+      });
     });
 
-    it('C26 unlocks after N sessions on one day and completes once', async () => {
-      await onboard(words(SESSIONS * 2 + 1));
-      await learnSessions(SESSIONS);
+    const journey = async (query = '') => (await api('get', `/v1/me/journey${query}`).expect(200)).body;
+    const segment = (j: { segments: { segmentNo: number; nodes: { state: string }[] }[] }, n: number) =>
+      j.segments.find((s) => s.segmentNo === n)!.nodes.map((node) => ({ completed: 'x', current: 'o', locked: '-' })[node.state]).join('');
 
-      const [challenge, ...rest] = await challenges();
-      expect(rest).toEqual([]);
-      expect(challenge).toMatchObject({ sequence: 1, meaningCount: SESSIONS });
-      expect((await api('get', '/v1/me/learn-home').expect(200)).body.checkpointAvailable).toBe(1);
+    it('journey: a new learner starts on segment 1 session 1', async () => {
+      await onboard(words(3));
+      const j = await journey();
+      expect(j).toMatchObject({ currentSegmentNo: 1, focusNodeId: 'segment:1:learning:1', completedReviewCount: 0, hasMoreHistory: false });
+      expect(segment(j, 1)).toBe('o-------');
+      expect(segment(j, 2)).toBe('--------');
+    });
 
-      const p = await plan('checkpoint_challenge');
-      expect(tasksOf(p).length).toBeGreaterThan(0);
-      for (const task of tasksOf(p).filter((t) => t.template !== TEMPLATE.RECORDING)) {
-        expect([TEMPLATE.TYPING, TEMPLATE.FLY_REORDER, TEMPLATE.SELECT, TEMPLATE.CLOZE_SELECT, TEMPLATE.SURGERY]).toContain(task.template);
-      }
-      await commit(p, answers(p)).expect(200);
+    it('a waiting legacy challenge never gates new words, and still completes once', async () => {
+      await onboard(words(6));
+      await learnSessions(2);
+      const id = await legacyChallenge();
+      expect((await challenges()).map((c: { id: string }) => c.id)).toEqual([id]);
+
+      await goal(1);
+      const daily = await plan();
+      expect(learnIds(daily)).toHaveLength(1);
+      await commit(daily, answers(daily)).expect(200);
+
+      const review = await plan('checkpoint_challenge');
+      const done = (await commit(review, answers(review)).expect(200)).body;
+      expect(done.summary.checkpoint).toMatchObject({ reviewedCount: 2 });
       expect(await challenges()).toEqual([]);
       await api('post', '/v1/sessions/plan').send({ mode: 'checkpoint_challenge', capabilities: CAPS }).expect(404);
-
-      // Meanings already in a challenge do not count towards the next one.
-      await learnSessions(SESSIONS - 1);
       expect(await challenges()).toEqual([]);
-      await learnSessions(1);
-      expect((await challenges())[0]).toMatchObject({ sequence: 2, meaningCount: SESSIONS });
     });
+
+    const weeklyGoal = (n: number) => api('put', '/v1/me/settings').send({ weeklySessionGoal: n }).expect(200);
+
+    it('raising the goal mid-segment just lengthens it', async () => {
+      await onboard(words(8));
+      await weeklyGoal(3);
+      await learnSessions(2);
+      await weeklyGoal(5);
+      await learnSessions(1);
+      expect(await challenges()).toEqual([]);
+      expect(segment(await journey(), 1)).toBe('xxxo--');
+    });
+
+    it('rejects a weekly goal outside 1–7', async () => {
+      await onboard(words(3));
+      await api('put', '/v1/me/settings').send({ weeklySessionGoal: 0 }).expect(400);
+      await api('put', '/v1/me/settings').send({ weeklySessionGoal: 8 }).expect(400);
+    });
+
+    it('journey: a replayed commit and review-only sessions take no slot', async () => {
+      await onboard(words(4));
+      const p = await learnOne();
+      await commit(p, answers(p)).expect(200);
+      expect(segment(await journey(), 1)).toBe('xo------');
+      await api('post', '/v1/sessions/plan').send({ mode: 'random_practice', capabilities: CAPS }).expect(200)
+        .then(async ({ body }) => { if (body.sessionId) await commit(body, answers(body)).expect(200); });
+      expect(segment(await journey(), 1)).toBe('xo------');
+    });
+
   });
 
   describe('timestamps', () => {
@@ -1013,10 +1051,11 @@ describe('Vocab Flow API', () => {
       const committed = await h.countQueries(() => commit(planned.result, body).expect(200));
       const home = await h.countQueries(() => api('get', '/v1/me/learn-home').expect(200));
       const list = await h.countQueries(() => api('get', '/v1/me/words').expect(200));
-      return { plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries };
+      const path = await h.countQueries(() => api('get', '/v1/me/journey').expect(200));
+      return { plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries };
     };
 
-    it('plan, commit, learn-home and me/words stay constant from 1 to 20 Meanings', async () => {
+    it('plan, commit, learn-home, me/words and me/journey stay constant from 1 to 20 Meanings', async () => {
       const small = await measure(1);
       const large = await measure(20);
       if (process.env.PRINT_QUERY_COUNTS) console.error('QUERY_COUNTS', JSON.stringify({ small, large }));

@@ -20,8 +20,8 @@ export interface PlanInput {
   pool: DistractorView[];
   curated: CuratedItem[];
   proficiency: string | null;
-  // Set: one task per target, all training this skill. Unset: mixed practice.
-  skill?: Skill;
+  // Set: one task per target, each training one of these skills. Unset: mixed practice.
+  skills?: Skill[];
   ctx: ResolveContext;
   rng: Rng;
 }
@@ -163,9 +163,21 @@ function skillTask(target: MeaningSnapshot, skill: Skill, input: PlanInput) {
   );
 }
 
+// Skills take turns across targets so each gets a fair share; a target that cannot train its turn's skill tries the others.
+function skillTasks(input: PlanInput, skills: Skill[]) {
+  const order = shuffle(skills, input.rng);
+  return input.reviewTargets.flatMap((target, i) => {
+    for (let k = 0; k < order.length; k++) {
+      const task = skillTask(target, order[(i + k) % order.length], input);
+      if (task) return [task];
+    }
+    return [];
+  });
+}
+
 function reviewTasks(input: PlanInput): ResolvedTask[] {
-  const { mode, reviewTargets, rng, ctx, skill, focusSkills } = input;
-  if (skill) return shuffle(reviewTargets.flatMap((target) => skillTask(target, skill, input) ?? []), rng);
+  const { mode, reviewTargets, rng, ctx, skills, focusSkills } = input;
+  if (skills?.length) return shuffle(skillTasks(input, skills), rng);
   if (focusSkills?.size) return focusedTasks(input, focusSkills);
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {

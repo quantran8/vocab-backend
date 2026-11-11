@@ -136,6 +136,21 @@ describe('evaluators', () => {
     expect(run({ ...input, events: events({ action: 'submit', graphemeIndex: 3 }) })[0].outcome).toBe(OUTCOME.INCORRECT);
   });
 
+  it('surgery scores the repaired word from a list of edits', () => {
+    const input = { template: TEMPLATE.SURGERY, body: { word: 'clarrify' }, key: { wrongGraphemeIndex: 4, replacement: '' } };
+    const submit = (...edits: object[]) => run({ ...input, events: events({ action: 'submit', edits }) })[0].outcome;
+    expect(submit({ graphemeIndex: 4, replacement: '' })).toBe(OUTCOME.CORRECT);
+    // Deleting the other "r" spells the same word.
+    expect(submit({ graphemeIndex: 3, replacement: '' })).toBe(OUTCOME.CORRECT);
+    // An edit that puts the letter back is harmless; a real extra change is wrong.
+    expect(submit({ graphemeIndex: 4, replacement: '' }, { graphemeIndex: 0, replacement: 'C' })).toBe(OUTCOME.CORRECT);
+    expect(submit({ graphemeIndex: 4, replacement: '' }, { graphemeIndex: 0, replacement: 'k' })).toBe(OUTCOME.INCORRECT);
+    expect(run({ ...input, events: events({ action: 'submit', graphemeIndex: 3 }) })[0].outcome).toBe(OUTCOME.CORRECT);
+    expect(() => submit({ graphemeIndex: 4, replacement: '' }, { graphemeIndex: 4, replacement: 'r' })).toThrow(ApiError);
+    expect(() => submit({ graphemeIndex: 8, replacement: '' })).toThrow(ApiError);
+    expect(() => run({ ...input, events: events({ action: 'submit', graphemeIndex: 4, edits: [{ graphemeIndex: 4, replacement: '' }] }) })).toThrow(ApiError);
+  });
+
   it('C20 C32 recording terminal outcomes', () => {
     const id = '0190b0a0-0000-7000-8000-000000000001';
     const base = { template: TEMPLATE.RECORDING };

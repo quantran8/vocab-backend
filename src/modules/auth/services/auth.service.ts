@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ApiError } from '../../../common/http/api-error';
 import { AppConfig } from '../../../config/app-config';
 import { AuthProvider, ProviderSession, SignupResponse } from '../providers/auth.provider';
-import { credentialsSchema, googleSchema, loginSchema } from '../dto/auth.schemas';
+import { changePasswordSchema, credentialsSchema, idTokenSchema, loginSchema, recoverSchema, recoverVerifySchema } from '../dto/auth.schemas';
 
 const toSession = (s: ProviderSession) => ({
   accessToken: s.access_token,
@@ -32,8 +32,45 @@ export class AuthService {
     return toSession(await this.provider.password(email.data, password));
   }
 
-  async google({ idToken, nonce }: z.infer<typeof googleSchema>) {
-    return toSession(await this.provider.googleIdToken(idToken, nonce));
+  async google({ idToken, nonce }: z.infer<typeof idTokenSchema>) {
+    return toSession(await this.provider.idToken('google', idToken, nonce));
+  }
+
+  async apple({ idToken, nonce }: z.infer<typeof idTokenSchema>) {
+    return toSession(await this.provider.idToken('apple', idToken, nonce));
+  }
+
+  async recover({ email }: z.infer<typeof recoverSchema>) {
+    await this.provider.recover(email);
+    return { sent: true };
+  }
+
+  // Signs the learner in: the code proves they own the address.
+  async recoverVerify({ email, code, password }: z.infer<typeof recoverVerifySchema>) {
+    let session: ProviderSession;
+    try {
+      session = await this.provider.verifyRecovery(email, code);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'AUTH_PROVIDER_UNAVAILABLE') throw error;
+      throw new ApiError('RESET_CODE_INVALID', 'Reset code is wrong or expired');
+    }
+    await this.provider.updatePassword(session.access_token, password);
+    return toSession(session);
+  }
+
+  // Re-checks the current password so a borrowed unlocked phone can't take over the account.
+  async changePassword(subject: string, { currentPassword, newPassword }: z.infer<typeof changePasswordSchema>) {
+    const { email } = await this.provider.getUser(subject);
+    if (!email) throw new ApiError('WRONG_PASSWORD', 'Account has no password');
+    let session: ProviderSession;
+    try {
+      session = await this.provider.password(email, currentPassword);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'UNAUTHORIZED') throw new ApiError('WRONG_PASSWORD', 'Current password is wrong');
+      throw error;
+    }
+    await this.provider.updatePassword(session.access_token, newPassword);
+    return { changed: true };
   }
 
   async refresh(refreshToken: string) {

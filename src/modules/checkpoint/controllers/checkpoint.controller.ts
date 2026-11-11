@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { AuthUser, CurrentUser } from '../../../common/auth/auth.decorators';
 import { CheckpointService } from '../services/checkpoint.service';
 
+/** Deprecated: superseded by the Challenge Map; kept until old clients are retired. */
 @Controller('v1/me/checkpoint-challenges')
 export class CheckpointController {
   constructor(private readonly checkpoints: CheckpointService) {}

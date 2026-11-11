@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
-import { SESSION_MODE, SESSION_STATUS } from '../../../common/constants/domain';
+import { MEMORY_SIGNAL, SESSION_MODE, SESSION_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { newId } from '../../../common/ids';
 import { Tx } from '../../../db/db';
-import { CheckpointService } from '../../checkpoint/services/checkpoint.service';
+import { reviewResult } from '../../journey/domain/journey';
 import { MemoryDraft } from '../../memory-srs/memory-reducer';
 import { applyDailyDue, applyNonDaily, initialState, SrsState } from '../../memory-srs/srs';
 import { CommitBody } from '../../practice-evaluator/events';
@@ -17,7 +17,6 @@ export class CommitService {
   constructor(
     private readonly repository: CommitRepository,
     private readonly clock: Clock,
-    private readonly checkpoints: CheckpointService,
   ) {}
 
   commit(userId: string, sessionId: string, body: CommitBody) {
@@ -38,7 +37,7 @@ export class CommitService {
     };
   }
 
-  // Round trips are the commit's cost: lock, one read, one write (plus the challenge update for checkpoint, and challenge generation after Daily new words).
+  // Round trips are the commit's cost: lock, one read, one write (plus the challenge update for a legacy checkpoint session).
   private async run(tx: Tx, userId: string, sessionId: string, body: CommitBody, requestHash: string) {
     await this.repository.lockUser(tx, userId);
     const now = this.clock.now();
@@ -72,11 +71,14 @@ export class CommitService {
       newWordGoalSlots: steps.length,
       reviewedMeanings: session.mode === SESSION_MODE.DAILY ? memory.length - steps.length : 0,
       practiceTasks: tasks.length,
+      // No pass mark: the counts only show what came back unaided; SRS already took every answer.
+      ...(session.mode === SESSION_MODE.CHECKPOINT_CHALLENGE && {
+        checkpoint: reviewResult(memory.length, memory.filter((m) => m.signal === MEMORY_SIGNAL.UNAIDED_RECALL).length),
+      }),
     };
     const response = { sessionId, status: SESSION_STATUS.COMMITTED, committedAt: now.toISOString(), summary };
 
     await this.write(tx, { userId, sessionId, now, requestHash, response, evaluated, memory, newStates, newMeaningIds, targets, receiptMap });
-    if (newMeaningIds.length > 0) await this.checkpoints.generateFor(tx, userId);
     return response;
   }
 

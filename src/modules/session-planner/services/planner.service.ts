@@ -19,15 +19,23 @@ export const planRequestSchema = z
     mode: z.enum(SESSION_MODES),
     capabilities: z.strictObject({ audioPlayback: z.boolean(), microphone: z.boolean() }),
     challengeId: z.uuid().optional(),
+    // `skill` is the single-skill form older clients send.
     skill: z.enum(SKILLS).optional(),
+    skills: z.array(z.enum(SKILLS)).min(1).refine((s) => new Set(s).size === s.length, 'skills must be unique').optional(),
   })
-  .refine(({ mode, skill }) => !skill || mode === SESSION_MODE.RANDOM_PRACTICE, { path: ['skill'], message: 'skill requires random_practice' });
+  .refine(({ skill, skills }) => !(skill && skills), { path: ['skills'], message: 'send skill or skills, not both' })
+  .refine(({ mode, skill, skills }) => !(skill || skills) || mode === SESSION_MODE.RANDOM_PRACTICE, {
+    path: ['skills'],
+    message: 'skills require random_practice',
+  });
 export type PlanRequest = z.infer<typeof planRequestSchema>;
 
 const { reviewCap, practiceTaskCap, ttlHours, distractorPoolSize } = POLICY.session;
 
-const cannotTrain = ({ skill, capabilities }: PlanRequest) =>
-  (skill === SKILL.SPEAKING && !capabilities.microphone) || (skill === SKILL.LISTENING && !capabilities.audioPlayback);
+const requestedSkills = ({ skill, skills }: PlanRequest): Skill[] | undefined => skills ?? (skill ? [skill] : undefined);
+
+const canTrain = (skill: Skill, { capabilities }: PlanRequest) =>
+  !(skill === SKILL.SPEAKING && !capabilities.microphone) && !(skill === SKILL.LISTENING && !capabilities.audioPlayback);
 
 @Injectable()
 export class PlannerService {
@@ -44,13 +52,15 @@ export class PlannerService {
   }
 
   async plan(userId: string, request: PlanRequest) {
-    if (cannotTrain(request)) return { sessionId: null, mode: request.mode, steps: [] };
+    // A skill the device cannot train is dropped; the plan is empty only when none is left.
+    const skills = requestedSkills(request)?.filter((s) => canTrain(s, request));
+    if (skills?.length === 0) return { sessionId: null, mode: request.mode, steps: [] };
     const now = this.clock.now();
     const learner = await this.repository.loadLearner(userId);
     const settings = learner.settings!;
     const locale = settings.explanationLocale;
 
-    const selected = await this.selectTargets(userId, request, learner, now);
+    const selected = await this.selectTargets(userId, request, learner, now, skills);
     const { challengeId } = selected;
     if (selected.reviewTargets.length + selected.newTargets.length === 0) return { sessionId: null, mode: request.mode, steps: [] };
 
@@ -76,7 +86,7 @@ export class PlannerService {
       pool,
       curated,
       proficiency: learner.proficiencyLevel,
-      skill: request.skill,
+      skills,
       rng: this.rng,
       ctx: {
         locale,
@@ -94,21 +104,23 @@ export class PlannerService {
       topicIds: learner.activeTopics.map((t) => t.topicId),
       capabilities: request.capabilities,
       ...(challengeId && { challengeId }),
-      ...(request.skill && { skill: request.skill }),
+      ...(skills && { skills }),
     });
     return { sessionId, mode: request.mode, expiresAt, steps: steps.map(toClientStep) };
   }
 
   private async selectTargets(
     userId: string,
-    { mode, challengeId, skill }: PlanRequest,
+    { mode, challengeId }: PlanRequest,
     learner: Awaited<ReturnType<PlannerRepository['loadLearner']>>,
     now: Date,
+    skills?: Skill[],
   ): Promise<{ reviewTargets: MeaningSnapshot[]; newTargets: MeaningSnapshot[]; challengeId?: string; focusSkills?: Map<string, Skill[]> }> {
     const settings = learner.settings!;
     const locale = settings.explanationLocale;
 
     if (mode === SESSION_MODE.DAILY) {
+      // Nothing gates new words: the Challenge Map is optional.
       const [reviewTargets, newTargets] = await Promise.all([
         this.repository.dueTargets(userId, locale, now, reviewCap),
         this.repository.newTargets(userId, locale, learner.proficiencyLevel, settings.dailyNewWordGoal),
@@ -116,7 +128,7 @@ export class PlannerService {
       return { reviewTargets, newTargets };
     }
     if (mode === SESSION_MODE.RANDOM_PRACTICE) {
-      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier, skill);
+      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier, skills);
       return { reviewTargets: shuffle(pool, this.rng).slice(0, practiceTaskCap), newTargets: [] };
     }
     if (mode === SESSION_MODE.WEAK_WORDS_PRACTICE) {

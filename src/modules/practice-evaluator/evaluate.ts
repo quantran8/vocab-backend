@@ -1,7 +1,7 @@
 import { EVENT_ACTION, OUTCOME, Outcome, TEMPLATE, Template, VALIDITY } from '../../common/constants/domain';
 import { ApiError } from '../../common/http/api-error';
 import { TaskEvent } from './events';
-import { normalizeAnswer } from './normalizer';
+import { normalizeAnswer, splitGraphemes } from './normalizer';
 import { transcriptMatches } from './transcript';
 
 export interface Option { id: number; text: string }
@@ -11,6 +11,7 @@ export interface ClientBody {
   options?: Option[];
   tiles?: Option[];
   pairs?: { left: Option[]; right: Option[] };
+  word?: string;
   // Absent on snapshots issued before the limit existed: those stay unlimited.
   maxRetries?: number;
 }
@@ -130,11 +131,37 @@ function evaluateTyping({ body, key, targetOrdinals, events }: EvaluateInput) {
   return singleTarget(targetOrdinals, tally);
 }
 
+interface GraphemeEdit { graphemeIndex: number; replacement: string }
+
+function surgeryEdits(event: SubmitEvent): GraphemeEdit[] {
+  if (event.edits) {
+    if (event.graphemeIndex !== undefined || event.replacement !== undefined) throw invalid('Send edits or graphemeIndex, not both');
+    if (new Set(event.edits.map((e) => e.graphemeIndex)).size !== event.edits.length) throw invalid('Duplicate graphemeIndex in edits');
+    return event.edits;
+  }
+  if (event.graphemeIndex === undefined) throw invalid('Submit needs edits or graphemeIndex');
+  return [{ graphemeIndex: event.graphemeIndex, replacement: event.replacement ?? '' }];
+}
+
+const applyEdits = (graphemes: string[], edits: GraphemeEdit[]) => {
+  const byIndex = new Map(edits.map((e) => [e.graphemeIndex, e.replacement]));
+  return graphemes.map((g, i) => byIndex.get(i) ?? g).join('');
+};
+
+// Scores the repaired word, so any fix that spells it right counts (e.g. deleting either "r" of "clarrify").
 function evaluateSurgery({ body, key, targetOrdinals, events }: EvaluateInput) {
-  const expected = normalizeAnswer(key.replacement ?? '');
+  const fix = { graphemeIndex: key.wrongGraphemeIndex ?? -1, replacement: key.replacement ?? '' };
+  const graphemes = body.word === undefined ? undefined : splitGraphemes(body.word);
+  const expected = graphemes && normalizeAnswer(applyEdits(graphemes, [fix]));
   const tally = tallyAttempts(body, events, (event) => {
-    if (event.graphemeIndex === undefined) throw invalid('Submit needs graphemeIndex');
-    return event.graphemeIndex === key.wrongGraphemeIndex && normalizeAnswer(event.replacement ?? '') === expected;
+    const edits = surgeryEdits(event);
+    if (!graphemes) {
+      // Without the word, only the single expected fix can be checked.
+      return edits.length === 1 && edits[0].graphemeIndex === fix.graphemeIndex
+        && normalizeAnswer(edits[0].replacement) === normalizeAnswer(fix.replacement);
+    }
+    if (edits.some((e) => e.graphemeIndex >= graphemes.length)) throw invalid('graphemeIndex out of range');
+    return normalizeAnswer(applyEdits(graphemes, edits)) === expected;
   });
   return singleTarget(targetOrdinals, tally);
 }

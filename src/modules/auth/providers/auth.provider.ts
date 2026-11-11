@@ -54,8 +54,22 @@ export class AuthProvider {
     return this.call<ProviderSession>('token?grant_type=password', { email, password });
   }
 
-  googleIdToken(idToken: string, nonce?: string) {
-    return this.call<ProviderSession>('token?grant_type=id_token', { provider: 'google', id_token: idToken, nonce });
+  idToken(provider: 'google' | 'apple', idToken: string, nonce?: string) {
+    return this.call<ProviderSession>('token?grant_type=id_token', { provider, id_token: idToken, nonce });
+  }
+
+  // GoTrue answers 200 whether or not the address has an account, so this can't probe for users.
+  // The "Reset Password" email template must show {{ .Token }}: the app asks for that code.
+  async recover(email: string) {
+    await this.call<object>('recover', { email });
+  }
+
+  verifyRecovery(email: string, code: string) {
+    return this.call<ProviderSession>('verify', { type: 'recovery', email, token: code });
+  }
+
+  async updatePassword(accessToken: string, password: string) {
+    await this.call<object>('user', { password }, { method: 'PUT', bearer: accessToken });
   }
 
   refresh(refreshToken: string) {
@@ -113,12 +127,16 @@ export class AuthProvider {
     throw new ApiError('AUTH_PROVIDER_UNAVAILABLE', 'Auth provider rejected the admin request');
   }
 
-  private async call<T>(path: string, body: object): Promise<T> {
+  private async call<T>(path: string, body: object, options: { method?: string; bearer?: string } = {}): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.config.jwtIssuer}/${path}`, {
-        method: 'POST',
-        headers: { apikey: this.config.supabaseAnonKey, 'Content-Type': 'application/json' },
+        method: options.method ?? 'POST',
+        headers: {
+          apikey: this.config.supabaseAnonKey,
+          'Content-Type': 'application/json',
+          ...(options.bearer && { Authorization: `Bearer ${options.bearer}` }),
+        },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

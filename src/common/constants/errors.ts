@@ -1,6 +1,9 @@
 export const ERROR = {
   UNAUTHORIZED: { status: 401, retryable: false },
   FORBIDDEN: { status: 403, retryable: false },
+  // Not 401: the client treats 401 as an expired session and would sign the learner out.
+  WRONG_PASSWORD: { status: 403, retryable: false },
+  RESET_CODE_INVALID: { status: 400, retryable: false },
   SESSION_NOT_OWNED: { status: 403, retryable: false },
   NOT_FOUND: { status: 404, retryable: false },
   EMAIL_ALREADY_REGISTERED: { status: 409, retryable: false },
@@ -23,6 +26,15 @@ export const ERROR = {
   AUTH_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   LEXICAL_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
   TTS_PROVIDER_UNAVAILABLE: { status: 503, retryable: true },
+  CHALLENGE_LEVEL_LOCKED: { status: 403, retryable: false },
+  CHALLENGE_RUN_NOT_FOUND: { status: 404, retryable: false },
+  CHALLENGE_RUN_ACTIVE: { status: 409, retryable: false },
+  CHALLENGE_RUN_NOT_STARTED: { status: 409, retryable: false },
+  CHALLENGE_COMMIT_CONFLICT: { status: 409, retryable: false },
+  CHALLENGE_NOT_ENOUGH_VOCABULARY: { status: 409, retryable: false },
+  CHALLENGE_CONTENT_UNAVAILABLE: { status: 409, retryable: false },
+  CHALLENGE_RUN_EXPIRED: { status: 410, retryable: false },
+  CHALLENGE_INVALID_EVENTS: { status: 422, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;
