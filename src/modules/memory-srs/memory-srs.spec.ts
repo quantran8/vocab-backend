@@ -79,6 +79,24 @@ describe('SRS', () => {
     expect(capped.intervalHours).toBe(POLICY.srs.maxIntervalHours);
   });
 
+  it('a late unaided recall grows from the real gap, not the planned interval', () => {
+    const late = state({ intervalHours: 48, unaidedStreak: 1, lastReviewedAt: addHours(AT, -10 * 24), nextReviewAt: addHours(AT, -8 * 24) });
+    expect(applyDailyDue(late, { signal: MEMORY_SIGNAL.UNAIDED_RECALL, ...clean }, AT).intervalHours).toBeCloseTo(240 * 1.75);
+    const onTime = state({ intervalHours: 48, unaidedStreak: 1, lastReviewedAt: addHours(AT, -48) });
+    expect(applyDailyDue(onTime, { signal: MEMORY_SIGNAL.UNAIDED_RECALL, ...clean }, AT).intervalHours).toBeCloseTo(48 * 1.75);
+    // A late failure still resets: only success earns the gap.
+    expect(applyDailyDue(late, { signal: MEMORY_SIGNAL.FAILED_RECALL, ...clean }, AT).intervalHours).toBe(12);
+  });
+
+  it('non-Daily: an unaided recall of a due word counts as its due review', () => {
+    const due = state({ intervalHours: 48, unaidedStreak: 1, nextReviewAt: AT });
+    const next = applyNonDaily(due, { signal: MEMORY_SIGNAL.UNAIDED_RECALL, ...clean }, AT);
+    expect(next).toEqual(applyDailyDue(due, { signal: MEMORY_SIGNAL.UNAIDED_RECALL, ...clean }, AT));
+    expect(next.nextReviewAt > AT).toBe(true);
+    expect(applyNonDaily(due, { signal: MEMORY_SIGNAL.UNAIDED_RECALL, isPrimed: true }, AT).nextReviewAt).toEqual(AT);
+    expect(applyNonDaily(due, { signal: MEMORY_SIGNAL.RECOGNITION_SUCCESS, ...clean }, AT).nextReviewAt).toEqual(AT);
+  });
+
   it('C23 recognition grace applies once, then due stays', () => {
     const due = state({ nextReviewAt: AT });
     const first = applyDailyDue(due, { signal: MEMORY_SIGNAL.RECOGNITION_SUCCESS, ...clean }, AT);

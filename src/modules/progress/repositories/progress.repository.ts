@@ -1,12 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, or, sql, SQL } from 'drizzle-orm';
-import { CHECKPOINT_STATE, DEFAULT_ACCENT, Skill, VALIDITY } from '../../../common/constants/domain';
+import { CHECKPOINT_STATE, DEFAULT_ACCENT, NewWordOverrideMode, Skill, VALIDITY } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
 import { skillEvidence } from '../../../db/schema';
 import { MeaningOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { EvidenceRow } from '../../skill-verification/skill-evidence';
 import { openSkillIssuesSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
+import { backlogSql, pendingCustomSql, remainingNewSql, scopeMembershipSql, unlearnedSql } from '../../review-load/repositories/review-scope.sql';
+
+export type LearnHomeRow = {
+  dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; checkpointSessionsRequired: number; learnedTotal: number;
+  remaining: number; pendingCustom: number; topics: { topicId: string; remainingNewMeanings: number; totalMeanings: number }[];
+  dailyNewWordGoal: number; autoBalanceNewWords: boolean;
+  overrideValue: number | null; overrideMode: NewWordOverrideMode | null; overrideUntil: string | null;
+  lastPromptedBacklog: number | null;
+};
 
 export type RawMeaningRow = {
   wordId: string;
@@ -46,20 +55,10 @@ export class ProgressRepository {
 
   // Single statement: the home screen never needs more than one round trip.
   async learnHomeCounts(userId: string, now: Date) {
-    const { rows: [row] } = await this.db.execute<{
-      dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; checkpointSessionsRequired: number; learnedTotal: number;
-    }>(sql`
+    const locale = sql`(SELECT explanation_locale FROM user_settings WHERE user_id = ${userId}::uuid)`;
+    const { rows: [row] } = await this.db.execute<LearnHomeRow>(sql`
       SELECT
-        (SELECT count(*)::int
-         FROM user_meaning_progress ump
-         JOIN user_settings s ON s.user_id = ump.user_id
-         JOIN active_meaning_publications a
-           ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale AND a.recalled_at IS NULL
-         WHERE ump.user_id = ${userId}::uuid AND ump.next_review_at <= ${now}::timestamptz
-           AND EXISTS (
-             SELECT 1 FROM topic_meanings tm
-             JOIN user_active_topics uat ON uat.topic_id = tm.topic_id AND uat.user_id = ump.user_id
-             WHERE tm.meaning_id = ump.meaning_id)) AS "dueCount",
+        ${backlogSql(userId, locale, now)} AS "dueCount",
         (SELECT count(*)::int FROM checkpoint_challenges
          WHERE user_id = ${userId}::uuid AND state = ${CHECKPOINT_STATE.AVAILABLE}) AS "checkpointAvailable",
         -- Legacy counter: no challenge is generated any more, so it stops at the goal.
@@ -70,8 +69,22 @@ export class ProgressRepository {
              SELECT 1 FROM checkpoint_challenge_meanings m
              JOIN checkpoint_challenges c ON c.id = m.challenge_id
              WHERE c.user_id = p.user_id AND m.meaning_id = p.meaning_id)) AS "checkpointSessionsDone",
-        (SELECT weekly_session_goal::int FROM user_settings WHERE user_id = ${userId}::uuid) AS "checkpointSessionsRequired",
-        (SELECT count(*)::int FROM user_meaning_progress WHERE user_id = ${userId}::uuid) AS "learnedTotal"`);
+        us.weekly_session_goal::int AS "checkpointSessionsRequired",
+        (SELECT count(*)::int FROM user_meaning_progress WHERE user_id = ${userId}::uuid) AS "learnedTotal",
+        ${remainingNewSql(userId, locale)} AS remaining,
+        ${pendingCustomSql(userId, locale)} AS "pendingCustom",
+        (SELECT COALESCE(json_agg(json_build_object('topicId', x.topic_id, 'remainingNewMeanings', x.remaining, 'totalMeanings', x.total)
+            ORDER BY x.topic_id), '[]'::json)
+         FROM (
+           SELECT sm.topic_id, count(DISTINCT sm.meaning_id)::int AS total,
+             (count(DISTINCT sm.meaning_id) FILTER (WHERE ${unlearnedSql(userId, sql`sm.meaning_id`)}))::int AS remaining
+           FROM (${scopeMembershipSql(userId, locale)}) sm
+           GROUP BY sm.topic_id) x) AS topics,
+        us.daily_new_word_goal::int AS "dailyNewWordGoal", us.auto_balance_new_words AS "autoBalanceNewWords",
+        us.new_word_override::int AS "overrideValue", us.new_word_override_mode AS "overrideMode", us.new_word_override_until AS "overrideUntil",
+        (SELECT last_prompted_backlog FROM user_review_load_prompts WHERE user_id = ${userId}::uuid) AS "lastPromptedBacklog"
+      FROM user_settings us
+      WHERE us.user_id = ${userId}::uuid`);
     return row;
   }
 

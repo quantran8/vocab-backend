@@ -132,7 +132,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 ## 4. Màn hình Home và tiến độ
 
-- `GET /v1/me/learn-home` → `{dueCount, checkpointAvailable, checkpointSessionsDone, checkpointSessionsRequired, learnedTotal}`. Một request cho cả Home. Các trường `checkpoint*` là **legacy**: không còn challenge mới nên `checkpointSessionsDone` dừng ở `checkpointSessionsRequired`. Phần Challenge Map trên Home lấy từ `GET /v1/me/challenge-map` (mục 12).
+- `GET /v1/me/learn-home` → `{dueCount, checkpointAvailable, checkpointSessionsDone, checkpointSessionsRequired, learnedTotal}`. Một request cho cả Home. Các trường `checkpoint*` là **legacy**: không còn challenge mới nên `checkpointSessionsDone` dừng ở `checkpointSessionsRequired`. Phần Challenge Map trên Home lấy từ `GET /v1/me/challenge-map` (mục 12). Hai khối `scope` và `reviewLoad`: xem §13.
 - **Deprecated** `GET /v1/me/checkpoint-challenges` → `{challenges:[{id, sequence, state:"available", createdAt, meaningCount}]}`. Backend không tạo challenge mới nữa; chỉ còn các challenge đã mở trước đây, vẫn chơi được một lần bằng mode `checkpoint_challenge`.
 - **Không còn khoá từ mới:** challenge đang chờ không chặn plan `daily`. Challenge Map cũng không bao giờ chặn Daily.
 - **Deprecated** (thay bằng Challenge Map, xoá khi client cũ hết hỗ trợ) `GET /v1/me/journey?historyLimit=2&futureLimit=1&before=` → Journey: mỗi chặng (segment) là N session học từ mới + 1 Tổng ôn (chính là checkpoint challenge, `segmentNo` = `sequence`). Backend quyết định mọi trạng thái; client chỉ vẽ.
@@ -869,3 +869,70 @@ Server chấm lại bằng đúng các luật này, nên client lệch luật s�
 | 409 | `CHALLENGE_CONTENT_UNAVAILABLE` | Học thêm từ rồi thử lại |
 | 410 | `CHALLENGE_RUN_EXPIRED` | Run hết hạn hoặc đã bỏ. Tạo run mới |
 | 422 | `CHALLENGE_INVALID_EVENTS` | Events không khớp luật 12.3 hoặc `elapsedMs` dài hơn thời gian thực từ lúc start. Bỏ run, log `requestId` |
+
+## 13. Hết từ mới, nợ ôn và "Tôi biết từ này"
+
+Theo spec "Scope Completion & Review Load" v1.0. Mọi ngưỡng nằm trong `POLICY.reviewLoad` và đang là giá trị thử nghiệm.
+
+### 13.1 Nguồn từ
+- Scope (Collection + các Topic đã chọn) chỉ quyết định **từ mới**. Phần ôn của daily, Random "Tất cả" và Weak lấy mọi nghĩa đã học, trừ nghĩa chỉ thuộc Collection đang tạm dừng (§13.5).
+- Đổi scope không đổi tiến trình. Nghĩa đã học ở chỗ khác không bị dạy lại.
+
+### 13.2 `GET /v1/me/learn-home`: thêm hai khối
+```jsonc
+"scope": { "status": "ok | low | exhausted", "remainingNewMeanings": 14, "pendingCustomMeanings": 0, "sessionsLeftEstimate": 3,
+           "topics": [{ "topicId": "...", "remainingNewMeanings": 0, "totalMeanings": 120 }] },
+"reviewLoad": { "backlog": 34, "dueCap": 10, "effectiveNewPerSession": 2,
+                "newWordReason": "goal | user_override | auto_balanced | checkpoint_gate | scope_limited | scope_exhausted",
+                "override": { "value": 2, "mode": "until_date", "until": "2026-11-15T16:59:59.000Z" } /* hoặc null */,
+                "autoBalance": false, "promptChoice": true }
+```
+- `dueCount` bằng `reviewLoad.backlog`: chỉ đếm nghĩa thuộc diện ôn.
+- `low` nghĩa là còn ít hơn một chặng (`weeklySessionGoal` buổi). `sessionsLeftEstimate` chỉ là ước lượng, null khi không có từ mới mỗi buổi.
+- `promptChoice: true` thì hiện màn Review Load Choice, nhưng **không** hiện giữa session và tối đa một lần mỗi lần mở app. Chọn bất kỳ lựa chọn nào thì gọi `POST /v1/me/review-load/ack {backlog}` (trả `{backlog}`), sau đó `promptChoice` thành false trên mọi thiết bị.
+- `checkpoint_gate` được giữ chỗ và hiện không bao giờ xuất hiện.
+
+### 13.3 Plan daily
+- Body nhận thêm:
+  - `reviewOnly: true`: chỉ ôn, không từ mới, không chiếm slot Journey;
+  - `knownCheck: true` (§13.6).
+
+  Gửi các trường này với mode khác daily thì trả 400.
+- Response daily có thêm `newWords: {requested, issued, withheldReason}`, kể cả khi plan rỗng (`sessionId: null`).
+  - `withheldReason` là `null | review_only | user_override | auto_balanced | scope_limited | scope_exhausted | checkpoint_gate`.
+  - **Client chỉ tự plan tiếp daily khi `withheldReason == null`.** Mọi lý do khác thì đi thẳng tới màn kết quả.
+- Step ôn (`phase: "due_review"`) có thêm `sourceTopic: {id, name}`, tên đã localize. Từ tự thêm có tên "Từ của bạn" / "Your words".
+- Plan daily có thêm `reviewWords: [{wordId, meaningId, lemma, sourceTopic}]`, gồm đúng các từ plan này ôn, dùng cho màn "Ôn từ bạn đã học".
+
+### 13.4 Commit
+- Response có thêm `scopeEvents: {completedTopicIds, scopeExhausted, collectionCompleted}`. Trường này chỉ có giá trị ở commit làm số từ mới về 0. Retry trả đúng sự kiện cũ.
+- `summary.knownMeanings` là số từ qua "Tôi biết từ này".
+
+### 13.5 Settings, giảm tạm thời, tạm dừng ôn
+- `PUT /v1/me/settings` nhận thêm `autoBalanceNewWords`. Đổi `dailyNewWordGoal` thì override bị hủy. `GET /v1/me` trả các cột mới trong `settings` và `reviewPauses: [{collectionId, pausedAt}]`.
+- `PUT /v1/me/new-word-override {value, mode, until?}` trả `{override}`:
+  - `value` từ 1 đến goal − 1, ngoài khoảng thì trả 400;
+  - `mode` là `until_date` hoặc `until_backlog_clear`;
+  - với `until_date`, thiếu `until` thì server đặt đến hết Chủ Nhật tuần này theo `timeZone`; `until` ở quá khứ thì trả 400.
+
+  `DELETE /v1/me/new-word-override` để hủy. `until_backlog_clear` tự hết ở commit đầu tiên còn ≤ 10 từ chờ ôn.
+- `PUT|DELETE /v1/me/review-pauses/{collectionId}`:
+  - collection không tồn tại hoặc chưa publish: 404;
+  - là active collection: `422 REVIEW_PAUSE_ACTIVE_COLLECTION`.
+
+  Nghĩa thuộc cả Collection tạm dừng và active collection vẫn được ôn. Từ tự thêm không bao giờ bị tạm dừng.
+- Random practice nhận `filter`: `{collectionId}`, `{topicIds: [...]}` (1–100) hoặc `{customOnly: true}`.
+  - Collection hoặc Topic không tồn tại: 404. Mảng rỗng: 400.
+  - Không có nghĩa nào khớp thì trả plan rỗng.
+  - Lọc theo đúng Collection đang tạm dừng vẫn lấy được từ của nó.
+- `GET /v1/catalog/collections`: mỗi Collection và Topic có thêm `learnedMeanings` và `totalMeanings`.
+- `GET /v1/me/journey` và `GET /v1/me/challenge-map` có thêm `newWordsBlockedReason`: `scope_exhausted` hoặc null.
+
+### 13.6 "Tôi biết từ này" (thử nghiệm, bật bằng `knownCheck: true`)
+- Ngay trước mỗi Learn card có một task `typing` với `phase: "known_check"`. Learn step có thêm `knownCheckTaskId` và `skippableTaskIds`.
+- Hỏi người dùng trước khi hiện card:
+  - **Chọn "Học":** bỏ qua task check (không gửi kết quả), học như bình thường.
+  - **Chọn "Tôi biết từ này":** hiện task check.
+    - Đúng ngay lần đầu, không gợi ý: bỏ qua card và các task trong `skippableTaskIds`. Không cần gửi chúng, cũng không cần đưa learn step vào `learnStepsCompleted`. Từ được tính là đã học, lần ôn đầu sau 7 ngày.
+    - Sai: hiện card và học như bình thường. Lần sai này không bị tính là quên.
+- Task nối cặp (match) có cả từ khác vẫn phải làm. Server tự kiểm: check sai mà bỏ task thì trả `422 INVALID_SUBMISSION`.

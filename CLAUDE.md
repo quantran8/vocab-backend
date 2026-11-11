@@ -35,5 +35,8 @@ NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open 
 - Never select `plan`, `raw_events` or `result` unless the request uses them.
 - `words` is unique on language + `lower(btrim(lemma))` + `homograph_key`; never insert a word without searching that key first. A pool write takes content from `lexical_drafts`, never from the request.
 - Non-negotiable: what a learner writes stays in their own pool and never changes shared content. An edit goes to `user_meaning_overrides`; a meaning generated from their `context` has `meanings.owner_user_id` set, and only an admin approving its stored AI text may share it. Edits are never approved or shown to reviewers. Any query that lists a word's meanings must filter `owner_user_id IS NULL OR = user`.
+- R (new words left in scope), C (own words left) and B (review backlog) come only from `src/modules/review-load/repositories/review-scope.sql.ts`. Planner, learn-home, commit, journey and challenge map must share them, or Home and the plan disagree. Review takes every learned Meaning except those only in a paused collection (`reviewableSql`), not just the active topics.
+- A commit's `scopeEvents` is computed inside `writeCommit`, from the pre-write snapshot, and stored in `commit_response`. Never compute it after the write: a retry must replay the first answer.
+- A `known_check` task and the tasks in a learn step's `skippableTaskIds` may be missing from a commit only as `evaluateBatch` allows. A failed check is neither a memory signal nor evidence (`countedTasks`).
 - Keep pure logic (evaluators, reducer, SRS, skills, interleaver) free of Nest and Drizzle.
 - Run seeds through the Nest build: `tsx`/esbuild does not emit decorator metadata.

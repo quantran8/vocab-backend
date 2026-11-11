@@ -7,7 +7,7 @@ import {
 import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
-  type LexicalDraftKind, type MeaningOrigin, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
+  type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
@@ -41,6 +41,10 @@ export const userSettings = pgTable('user_settings', {
   /** Sessions the learner plans per week; a checkpoint challenge opens after this many. */
   weeklySessionGoal: smallint('weekly_session_goal').notNull().default(7),
   updatedAt: ts('updated_at').notNull().defaultNow(),
+  autoBalanceNewWords: boolean('auto_balance_new_words').notNull().default(false),
+  newWordOverride: smallint('new_word_override'),
+  newWordOverrideMode: varchar('new_word_override_mode', { length: 32 }).$type<NewWordOverrideMode>(),
+  newWordOverrideUntil: ts('new_word_override_until'),
 });
 
 export const collections = pgTable('collections', {
@@ -83,6 +87,18 @@ export const userActiveTopics = pgTable('user_active_topics', {
   userId: uuid('user_id').notNull(),
   topicId: uuid('topic_id').notNull(),
 }, (t) => [primaryKey({ columns: [t.userId, t.topicId] })]);
+
+export const userCollectionReviewPauses = pgTable('user_collection_review_pauses', {
+  userId: uuid('user_id').notNull(),
+  collectionId: uuid('collection_id').notNull(),
+  pausedAt: ts('paused_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.collectionId] })]);
+
+export const userReviewLoadPrompts = pgTable('user_review_load_prompts', {
+  userId: uuid('user_id').primaryKey(),
+  lastPromptedBacklog: integer('last_prompted_backlog'),
+  lastPromptedAt: ts('last_prompted_at'),
+});
 
 // B. Canonical vocabulary data
 export const words = pgTable('words', {
@@ -290,6 +306,7 @@ export const userMeaningProgress = pgTable('user_meaning_progress', {
   recognitionGraceUsed: boolean('recognition_grace_used').notNull().default(false),
   schedulerVersion: varchar('scheduler_version', { length: 40 }).notNull(),
   version: integer('version').notNull().default(1),
+  learnedViaTopicId: uuid('learned_via_topic_id'),
 }, (t) => [
   primaryKey({ columns: [t.userId, t.meaningId] }),
   index('idx_progress_due').on(t.userId, t.nextReviewAt),
@@ -409,6 +426,10 @@ export const appUsersRelations = relations(appUsers, ({ one, many }) => ({
   settings: one(userSettings, { fields: [appUsers.id], references: [userSettings.userId] }),
   learningScope: one(userLearningScope, { fields: [appUsers.id], references: [userLearningScope.userId] }),
   activeTopics: many(userActiveTopics),
+  reviewPauses: many(userCollectionReviewPauses),
+}));
+export const userCollectionReviewPausesRelations = relations(userCollectionReviewPauses, ({ one }) => ({
+  user: one(appUsers, { fields: [userCollectionReviewPauses.userId], references: [appUsers.id] }),
 }));
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(appUsers, { fields: [userSettings.userId], references: [appUsers.id] }),

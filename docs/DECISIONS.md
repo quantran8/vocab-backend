@@ -58,6 +58,24 @@ Built from `SYLL_MATCH_MADNESS_BACKEND_SPEC.md` v1.0 (proposed, not approved). P
 | Retention | `plan` and `events` cleared `eventsRetentionDays` (90) after commit or expiry; `result` and `commit_response` kept | Spec §5 default |
 | Not implemented | `CHALLENGE_RATE_LIMITED` (no rate limiting yet), the start-from-another-device check (the API has no device id), redacting a just-deleted custom word from a live run's `status` payload, the `learn-home` challenge summary (the client calls `/me/challenge-map`), editorial pair blocklist, telemetry events | Out of scope or no infrastructure yet |
 
+## Scope completion and review load
+
+Built from "Syll — Scope Completion & Review Load" v1.0, plus the follow-ups A, C and D from the same review. Every value is `[TRIAL]` in `POLICY.reviewLoad` / `POLICY.newLearning` / `POLICY.srs`.
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| LP | Not implemented anywhere, so `due_review` LP, LP for review-only, practice-as-review (C) and the known check (D) are all open. | The LP spec must settle these before LP ships; D in particular could be farmed if it earned the full new-word LP. |
+| Checkpoint gate | `checkpoint_gate` exists in `NEW_WORD_REASON` / `NEW_WORDS_BLOCKED_REASON` but is never emitted. | Nothing gates Daily since the Challenge Map; the value keeps the client contract stable. |
+| Review source (D2) | Daily review, backlog, Random "all" and Weak take every learned Meaning, minus paused collections. Before this, review was limited to active topics. | Spec D2; replaces the old C04 test. |
+| Pause on active collection | `422 REVIEW_PAUSE_ACTIVE_COLLECTION`, not `422 VALIDATION_FAILED`. | An error code has one status; `VALIDATION_FAILED` is 400. |
+| `until_date` default | When `until` is omitted the server sets the end of the learner's local Sunday (23:59:59). | Keeps time-zone math in one place. |
+| Scope "low" | Compared against E before the scope cap (the learner's chosen count). | E after the cap would make "low" depend on itself. |
+| Auto-balance | `max(min(goal, 2), round(goal × 10 / B))` when B > 10. | Spec §7.5; check against the simulation. |
+| Late recall credit (A) | An unaided due recall grows from `max(interval, real gap since last review)`. `SCHEDULER_VERSION` is now `srs-trial-v0.5`. | Recalling a word after a longer gap shows it holds that long, so a backlog spreads itself out. |
+| Practice as review (C) | In Checkpoint, Random and Weak, an unaided, unprimed recall of a word already due is applied as a Daily due review. Words not yet due keep their schedule. | Uses practice to clear review debt without stretching words that are not due. The Challenge Map is recognition only and is unaffected. |
+| Known check (D) | Opt-in via `knownCheck: true`. A typing recall before the card; passed first try without hints, the word is learned with a 168 h first interval and its single-meaning tasks may be skipped. Failed checks are neither memory signals nor evidence. | Product experiment for learners who already know English. |
+| Simulation (§13) | Not run. `routineEstimateTable` is empty, so the goal hint is off. | Separate follow-up; its results settle the thresholds above. |
+
 ## Not implemented
 
 - **Curation admin:** closed. `/admin/collections`, `/admin/topics` and `/admin/topics/:id/meanings` manage the catalog; see "Admin CRUD" below.

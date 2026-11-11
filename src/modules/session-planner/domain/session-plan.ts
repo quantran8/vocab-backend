@@ -15,6 +15,8 @@ export interface PlanTask {
   serverEvaluation: unknown;
   evaluatorVersion: string;
   targets: PlanTarget[];
+  /** Daily review only: the topic label shown with the reviewed word. */
+  sourceTopic?: { id: string; name: string };
 }
 
 export interface PlanLearnStep {
@@ -23,6 +25,10 @@ export interface PlanLearnStep {
   ordinal: number;
   clientCard: unknown;
   firstRecallTaskId: string;
+  /** Topic the Meaning was planned from; absent on plans issued before it existed. */
+  viaTopicId?: string | null;
+  knownCheckTaskId?: string;
+  skippableTaskIds?: string[];
 }
 
 /** Immutable snapshot of one issued session, stored whole on `learning_sessions.plan`. */

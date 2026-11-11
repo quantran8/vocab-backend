@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, getTableColumns, inArray, notInArray } from 'drizzle-orm';
+import { and, count, eq, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm';
 import { CONTENT_STATUS } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
 import { appUsers, collections, topics, userActiveTopics, userLearningScope, userSettings } from '../../../db/schema';
@@ -19,6 +19,7 @@ export class IdentityRepository {
       with: {
         settings: { columns: { userId: false } },
         learningScope: { columns: { collectionId: true } },
+        reviewPauses: { columns: { collectionId: true, pausedAt: true }, orderBy: (p) => p.pausedAt },
         // The personal topic is not a catalog choice; clients echo this list back to setScope.
         activeTopics: { columns: { topicId: true }, where: (t) => notInArray(t.topicId, this.personalTopics(userId)) },
       },
@@ -29,8 +30,16 @@ export class IdentityRepository {
     await this.db.update(appUsers).set({ proficiencyLevel }).where(eq(appUsers.id, userId));
   }
 
+  // A new goal cancels the temporary override (§7.4); SET reads the old goal.
   async updateSettings(userId: string, patch: SettingsPatch) {
-    const [row] = await this.db.update(userSettings).set(patch).where(eq(userSettings.userId, userId)).returning(settingsView);
+    const goal = patch.dailyNewWordGoal;
+    const keepIfSameGoal = <T>(column: T) => sql`CASE WHEN ${userSettings.dailyNewWordGoal} = ${goal}::smallint THEN ${column} END`;
+    const cancel = goal === undefined ? {} : {
+      newWordOverride: keepIfSameGoal(userSettings.newWordOverride),
+      newWordOverrideMode: keepIfSameGoal(userSettings.newWordOverrideMode),
+      newWordOverrideUntil: keepIfSameGoal(userSettings.newWordOverrideUntil),
+    };
+    const [row] = await this.db.update(userSettings).set({ ...patch, ...cancel }).where(eq(userSettings.userId, userId)).returning(settingsView);
     return row;
   }
 

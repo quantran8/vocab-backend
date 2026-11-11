@@ -76,6 +76,8 @@ export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS]
 export const TASK_PHASE = {
   DUE_REVIEW: 'due_review',
   NEW_PRACTICE: 'new_practice',
+  // Optional recall before a Learn card: answered unaided, the word is learned without teaching.
+  KNOWN_CHECK: 'known_check',
   CHECKPOINT_CHALLENGE: 'checkpoint_challenge',
   RANDOM_PRACTICE: 'random_practice',
   WEAK_WORDS_PRACTICE: 'weak_words_practice',
@@ -241,9 +243,32 @@ export type AiMeaningScope = (typeof AI_MEANING_SCOPE)[keyof typeof AI_MEANING_S
 
 export const PERSONAL_COLLECTION_SLUG = 'personal';
 
+export const SCOPE_STATUS = { OK: 'ok', LOW: 'low', EXHAUSTED: 'exhausted' } as const;
+export type ScopeStatus = (typeof SCOPE_STATUS)[keyof typeof SCOPE_STATUS];
+
+/** Why a daily session has fewer new words than the goal. CHECKPOINT_GATE is reserved: nothing gates Daily yet. */
+export const NEW_WORD_REASON = {
+  GOAL: 'goal',
+  USER_OVERRIDE: 'user_override',
+  AUTO_BALANCED: 'auto_balanced',
+  CHECKPOINT_GATE: 'checkpoint_gate',
+  SCOPE_LIMITED: 'scope_limited',
+  SCOPE_EXHAUSTED: 'scope_exhausted',
+  REVIEW_ONLY: 'review_only',
+} as const;
+export type NewWordReason = (typeof NEW_WORD_REASON)[keyof typeof NEW_WORD_REASON];
+export type WithheldReason = Exclude<NewWordReason, typeof NEW_WORD_REASON.GOAL>;
+
+export const NEW_WORD_OVERRIDE_MODE = { UNTIL_DATE: 'until_date', UNTIL_BACKLOG_CLEAR: 'until_backlog_clear' } as const;
+export type NewWordOverrideMode = (typeof NEW_WORD_OVERRIDE_MODE)[keyof typeof NEW_WORD_OVERRIDE_MODE];
+export const NEW_WORD_OVERRIDE_MODES = Object.values(NEW_WORD_OVERRIDE_MODE);
+
+export const NEW_WORDS_BLOCKED_REASON = { SCOPE_EXHAUSTED: 'scope_exhausted', CHECKPOINT_GATE: 'checkpoint_gate' } as const;
+export type NewWordsBlockedReason = (typeof NEW_WORDS_BLOCKED_REASON)[keyof typeof NEW_WORDS_BLOCKED_REASON];
+
 export const PLAN_VERSION = 'plan-v0.4';
 export const EVALUATOR_VERSION = 'eval-v0.4';
-export const SCHEDULER_VERSION = 'srs-trial-v0.4';
+export const SCHEDULER_VERSION = 'srs-trial-v0.5';
 export const EVENT_SCHEMA_VERSION = 1;
 
 export const DEFAULT_LOCALE = 'vi-VN';

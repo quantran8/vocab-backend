@@ -63,6 +63,9 @@ import { JourneyController } from './modules/journey/controllers/journey.control
 import { JourneyRepository } from './modules/journey/repositories/journey.repository';
 import { JourneyService } from './modules/journey/services/journey.service';
 import { ChallengeController } from './modules/challenge/controllers/challenge.controller';
+import { ReviewLoadController } from './modules/review-load/controllers/review-load.controller';
+import { ReviewLoadRepository } from './modules/review-load/repositories/review-load.repository';
+import { ReviewLoadService } from './modules/review-load/services/review-load.service';
 import { ChallengeRepository } from './modules/challenge/repositories/challenge.repository';
 import { ChallengeMapService } from './modules/challenge/services/challenge-map.service';
 import { ChallengeRunService } from './modules/challenge/services/challenge-run.service';
@@ -72,7 +75,7 @@ import { HealthController } from './modules/health/health.controller';
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, CustomWordsController, AdminController,
+    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController,
     HealthController,
   ],
@@ -89,7 +92,7 @@ import { HealthController } from './modules/health/health.controller';
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
-    CustomWordsRepository, CustomWordsService, CustomWordsWorker,
+    CustomWordsRepository, CustomWordsService, CustomWordsWorker, ReviewLoadRepository, ReviewLoadService,
   ],
 })
 export class AppModule {}

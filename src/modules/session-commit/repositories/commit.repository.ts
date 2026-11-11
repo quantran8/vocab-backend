@@ -1,15 +1,52 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
-import { CHECKPOINT_STATE, SCHEDULER_VERSION, SESSION_STATUS } from '../../../common/constants/domain';
+import { CHECKPOINT_STATE, CONTENT_STATUS, NEW_WORD_OVERRIDE_MODE, SCHEDULER_VERSION, SESSION_STATUS } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate, Tx } from '../../../db/db';
 import { checkpointChallenges, learningSessions } from '../../../db/schema';
 import { SrsState } from '../../memory-srs/srs';
+import { backlogSql, scopeMembershipSql } from '../../review-load/repositories/review-scope.sql';
 import { SessionPlan } from '../../session-planner/domain/session-plan';
 import { TargetRow } from '../domain/commit-evaluator';
 
 export interface ProgressRow extends SrsState { meaningId: string }
 type SrsDates = Pick<SrsState, 'learnedAt' | 'lastReviewedAt' | 'nextReviewAt'>;
+
+export interface ScopeEvents { completedTopicIds: string[]; scopeExhausted: boolean; collectionCompleted: boolean }
+export const NO_SCOPE_EVENTS: ScopeEvents = { completedTopicIds: [], scopeExhausted: false, collectionCompleted: false };
+
+const settingsLocale = (userId: string) => sql`(SELECT explanation_locale FROM user_settings WHERE user_id = ${userId}::uuid)`;
+
+// Reads the pre-write snapshot: "before" is what was unlearned, and a transition is when everything left was learned now.
+function scopeEventsSql(userId: string) {
+  const locale = settingsLocale(userId);
+  return sql`(
+    WITH learned_now AS (
+      SELECT (x->>'meaning_id')::uuid AS meaning_id FROM p, jsonb_array_elements(p.d->'progress') x
+      WHERE x->>'learned_session_id' IS NOT NULL
+    ), collection_m AS (
+      SELECT tm.topic_id, tm.meaning_id
+      FROM user_learning_scope s
+      JOIN topics t ON t.collection_id = s.collection_id AND t.owner_user_id IS NULL AND t.status = ${CONTENT_STATUS.PUBLISHED}
+      JOIN topic_meanings tm ON tm.topic_id = t.id
+      JOIN meanings m ON m.id = tm.meaning_id AND m.owner_user_id IS NULL
+      JOIN active_meaning_publications a ON a.meaning_id = tm.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
+      WHERE s.user_id = ${userId}::uuid
+    ), pending AS (
+      SELECT x.topic_id, x.meaning_id, x.in_scope, x.meaning_id IN (SELECT meaning_id FROM learned_now) AS learned
+      FROM (
+        SELECT c.topic_id, c.meaning_id, false AS in_scope FROM collection_m c
+        UNION SELECT sm.topic_id, sm.meaning_id, true FROM (${scopeMembershipSql(userId, locale)}) sm
+      ) x
+      WHERE NOT EXISTS (SELECT 1 FROM user_meaning_progress u WHERE u.user_id = ${userId}::uuid AND u.meaning_id = x.meaning_id)
+    ), done AS (
+      SELECT topic_id FROM pending WHERE in_scope GROUP BY topic_id HAVING bool_and(learned) AND bool_or(learned)
+    )
+    SELECT jsonb_build_object(
+      'completedTopicIds', COALESCE((SELECT jsonb_agg(topic_id ORDER BY topic_id) FROM done), '[]'::jsonb),
+      'scopeExhausted', COALESCE((SELECT bool_and(learned) AND bool_or(learned) FROM pending WHERE in_scope), false),
+      'collectionCompleted', COALESCE((SELECT bool_and(learned) AND bool_or(learned) FROM pending WHERE NOT in_scope), false)))`;
+}
 
 @Injectable()
 export class CommitRepository {
@@ -104,9 +141,11 @@ export class CommitRepository {
 
   // One statement writes every commit row; FKs are checked at its end, so CTE order does not matter.
   // learned_at is deliberately never overwritten on conflict.
-  async writeCommit(tx: Tx, input: { userId: string; sessionId: string; now: Date; requestHash: string; response: object; data: string }) {
-    const { userId, sessionId, now, requestHash, response, data } = input;
-    await tx.execute(sql`
+  // Returns the stored response, so the first answer and every retry are the same JSON.
+  async writeCommit(tx: Tx, input: { userId: string; sessionId: string; now: Date; requestHash: string; response: object; data: string; withScopeEvents: boolean }) {
+    const { userId, sessionId, now, requestHash, response, data, withScopeEvents } = input;
+    const events = withScopeEvents ? scopeEventsSql(userId) : sql`${JSON.stringify(NO_SCOPE_EVENTS)}::jsonb`;
+    const { rows: [row] } = await tx.execute<{ response: object }>(sql`
       WITH p AS (SELECT ${data}::jsonb AS d),
       evidence AS (
         INSERT INTO skill_evidence (id, user_id, session_id, task_id, target_ordinal, skill, reasons, validity, passed,
@@ -123,12 +162,12 @@ export class CommitRepository {
       ), progress AS (
         INSERT INTO user_meaning_progress (
           user_id, meaning_id, learned_at, learned_session_id, last_reviewed_at, next_review_at, interval_hours,
-          unaided_streak, lapse_count, recognition_grace_used, scheduler_version)
+          unaided_streak, lapse_count, recognition_grace_used, scheduler_version, learned_via_topic_id)
         SELECT ${userId}::uuid, x.meaning_id, x.learned_at, x.learned_session_id, x.last_reviewed_at, x.next_review_at, x.interval_hours,
-               x.unaided_streak, x.lapse_count, x.recognition_grace_used, ${SCHEDULER_VERSION}::varchar
+               x.unaided_streak, x.lapse_count, x.recognition_grace_used, ${SCHEDULER_VERSION}::varchar, x.learned_via_topic_id
         FROM p, jsonb_to_recordset(p.d->'progress') AS x(
           meaning_id uuid, learned_at timestamptz, learned_session_id uuid, last_reviewed_at timestamptz, next_review_at timestamptz,
-          interval_hours numeric, unaided_streak int, lapse_count int, recognition_grace_used boolean)
+          interval_hours numeric, unaided_streak int, lapse_count int, recognition_grace_used boolean, learned_via_topic_id uuid)
         ON CONFLICT (user_id, meaning_id) DO UPDATE SET
           last_reviewed_at = EXCLUDED.last_reviewed_at,
           next_review_at = EXCLUDED.next_review_at,
@@ -144,9 +183,25 @@ export class CommitRepository {
       )
       UPDATE learning_sessions
       SET status = ${SESSION_STATUS.COMMITTED}, committed_at = ${now}::timestamptz,
-          commit_request_sha256 = ${requestHash}, commit_response = ${JSON.stringify(response)}::jsonb,
+          commit_request_sha256 = ${requestHash},
+          commit_response = ${JSON.stringify(response)}::jsonb || jsonb_build_object('scopeEvents', ${events}),
           raw_events = p.d->'rawEvents', result = p.d->'result'
       FROM p
-      WHERE id = ${sessionId}::uuid`);
+      WHERE id = ${sessionId}::uuid
+      RETURNING learning_sessions.commit_response AS response`);
+    return row.response;
+  }
+
+  // Runs after the write so B counts the new schedule. Ends an until_backlog_clear override and re-arms the prompt (§7.2, §7.4).
+  async settleBacklog(tx: Tx, userId: string, now: Date) {
+    const cleared = sql`${backlogSql(userId, settingsLocale(userId), now)} <= ${POLICY.reviewLoad.backlogStatusThreshold}`;
+    await tx.execute(sql`
+      WITH settings AS (
+        UPDATE user_settings
+        SET new_word_override = NULL, new_word_override_mode = NULL, new_word_override_until = NULL
+        WHERE user_id = ${userId}::uuid AND new_word_override_mode = ${NEW_WORD_OVERRIDE_MODE.UNTIL_BACKLOG_CLEAR} AND ${cleared}
+      )
+      UPDATE user_review_load_prompts SET last_prompted_backlog = NULL
+      WHERE user_id = ${userId}::uuid AND last_prompted_backlog IS NOT NULL AND ${cleared}`);
   }
 }

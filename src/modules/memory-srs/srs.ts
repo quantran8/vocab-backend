@@ -1,5 +1,5 @@
 import { MEMORY_SIGNAL, MemorySignal } from '../../common/constants/domain';
-import { addHours } from '../../common/constants/time';
+import { addHours, MS_PER_HOUR } from '../../common/constants/time';
 import { POLICY } from '../../config/policy';
 
 const SRS = POLICY.srs;
@@ -25,6 +25,12 @@ const effectiveSignal = ({ signal, isPrimed }: Observation) =>
 
 const earlier = (a: Date, b: Date) => (a < b ? a : b);
 
+const hoursBetween = (from: Date, to: Date) => (to.getTime() - from.getTime()) / MS_PER_HOUR;
+
+// Recalling a word unaided after a longer gap than planned shows it holds that long, so growth starts from the real gap.
+const recalledGapHours = (state: SrsState, at: Date) =>
+  Math.max(state.intervalHours, hoursBetween(state.lastReviewedAt ?? state.learnedAt, at));
+
 const weakenedInterval = (hours: number) => Math.max(SRS.failedRecallIntervalHours, hours * SRS.weakenedIntervalFactor);
 
 export function initialState(observation: Observation | undefined, at: Date): SrsState {
@@ -46,12 +52,26 @@ export function initialState(observation: Observation | undefined, at: Date): Sr
   };
 }
 
+/** A word the learner recalled unaided before being taught starts further out. */
+export function initialKnownState(at: Date): SrsState {
+  const intervalHours = POLICY.newLearning.knownInitialHours;
+  return {
+    learnedAt: at,
+    lastReviewedAt: at,
+    nextReviewAt: addHours(at, intervalHours),
+    intervalHours,
+    unaidedStreak: 1,
+    lapseCount: 0,
+    recognitionGraceUsed: false,
+  };
+}
+
 export function applyDailyDue(state: SrsState, observation: Observation, at: Date): SrsState {
   const reviewed = { ...state, lastReviewedAt: at };
   switch (effectiveSignal(observation)) {
     case MEMORY_SIGNAL.UNAIDED_RECALL: {
       const factor = Math.min(SRS.maxGrowth, SRS.baseGrowth + SRS.streakBonus * state.unaidedStreak);
-      const intervalHours = Math.min(SRS.maxIntervalHours, Math.max(SRS.minIntervalHours, state.intervalHours * factor));
+      const intervalHours = Math.min(SRS.maxIntervalHours, Math.max(SRS.minIntervalHours, recalledGapHours(state, at) * factor));
       return {
         ...reviewed,
         intervalHours,
@@ -88,8 +108,12 @@ export function applyDailyDue(state: SrsState, observation: Observation, at: Dat
 
 const FAILURE_SIGNALS: MemorySignal[] = [MEMORY_SIGNAL.FAILED_RECALL, MEMORY_SIGNAL.FAILED_RECOGNITION];
 
-/** Checkpoint/Random/Weak: success never extends the schedule; weak answers only pull it closer. */
+/**
+ * Checkpoint/Random/Weak: weak answers only pull the schedule closer. Success extends it only for a word already due:
+ * an unaided recall then counts as its due review, so practice spends review debt without stretching words not yet due.
+ */
 export function applyNonDaily(state: SrsState, observation: Observation, at: Date): SrsState {
+  if (effectiveSignal(observation) === MEMORY_SIGNAL.UNAIDED_RECALL && state.nextReviewAt <= at) return applyDailyDue(state, observation, at);
   const reviewed = { ...state, lastReviewedAt: at };
   if (observation.signal === MEMORY_SIGNAL.ASSISTED_RECALL) {
     return { ...reviewed, nextReviewAt: earlier(state.nextReviewAt, addHours(at, SRS.assistedFollowUpHours)) };

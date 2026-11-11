@@ -1,4 +1,4 @@
-import { DELIVERY_MODE, DeliveryMode, PROMPT_TYPE, Template, TaskPhase } from '../../../common/constants/domain';
+import { DELIVERY_MODE, DeliveryMode, OUTCOME, PROMPT_TYPE, TASK_PHASE, Template, TaskPhase } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AnswerKey, ClientBody, evaluateTask, ReceiptView, TargetOutcome } from '../../practice-evaluator/evaluate';
 import { CommitBody } from '../../practice-evaluator/events';
@@ -16,7 +16,7 @@ export interface TargetRow {
   pronunciationId: string | null;
 }
 
-export type LearnStepRow = Pick<PlanLearnStep, 'id' | 'meaningId' | 'firstRecallTaskId'>;
+export type LearnStepRow = Pick<PlanLearnStep, 'id' | 'meaningId' | 'firstRecallTaskId' | 'knownCheckTaskId' | 'skippableTaskIds'>;
 
 export interface EvaluatedTask {
   task: TaskRow;
@@ -38,26 +38,31 @@ function resolveDelivery(prompt: Prompt | undefined, claimed: DeliveryMode | und
   return DELIVERY_MODE.NONE;
 }
 
+/** Meanings whose optional known check came back correct, first try and without hints. */
+export function knownMeanings(steps: LearnStepRow[], byTask: Map<string, EvaluatedTask>) {
+  return new Set(steps.flatMap((step) => {
+    const check = step.knownCheckTaskId && byTask.get(step.knownCheckTaskId);
+    const passed = check && check.targets.length > 0 && check.targets.every((t) => t.outcome === OUTCOME.CORRECT && t.hintCount === 0);
+    return passed ? [step.meaningId] : [];
+  }));
+}
+
 export function evaluateBatch(
   body: CommitBody,
   tasks: TaskRow[],
   targets: TargetRow[],
   steps: LearnStepRow[],
   receipts: Map<string, ReceiptView & { taskId: string }>,
-): EvaluatedTask[] {
+): { evaluated: EvaluatedTask[]; known: Set<string> } {
   const submitted = new Map(body.taskResults.map((r) => [r.taskId, r]));
   if (submitted.size !== body.taskResults.length) throw invalid('Duplicate taskId');
-  if (submitted.size !== tasks.length) throw invalid('Every issued task needs a result');
-
-  const stepIds = new Set(steps.map((s) => s.id));
-  const completed = new Set(body.learnStepsCompleted);
-  if (completed.size !== stepIds.size || steps.some((s) => !completed.has(s.id))) throw invalid('Every Learn step must be completed');
+  const issued = new Set(tasks.map((t) => t.id));
+  if (body.taskResults.some((r) => !issued.has(r.taskId))) throw invalid('Result for a task that was not issued');
 
   const ordinalsByTask = Map.groupBy(targets, (t) => t.taskId);
 
-  const evaluated = tasks.map((task): EvaluatedTask => {
-    const result = submitted.get(task.id);
-    if (!result) throw invalid('Result missing for an issued task');
+  const evaluated = tasks.filter((task) => submitted.has(task.id)).map((task): EvaluatedTask => {
+    const result = submitted.get(task.id)!;
     const payload = task.clientPayload as ClientBody & { prompt?: Prompt };
     const taskReceipts = new Map([...receipts].filter(([, r]) => r.taskId === task.id));
     const evaluation = evaluateTask({
@@ -77,11 +82,32 @@ export function evaluateBatch(
   });
 
   const byTask = new Map(evaluated.map((e) => [e.task.id, e]));
-  for (const step of steps) {
+  const known = knownMeanings(steps, byTask);
+  // Known checks are optional; a known word may also drop the tasks that test only it.
+  const optional = new Set(steps.flatMap((s) => [
+    ...(s.knownCheckTaskId ? [s.knownCheckTaskId] : []),
+    ...(known.has(s.meaningId) ? s.skippableTaskIds ?? [] : []),
+  ]));
+  if (tasks.some((t) => !submitted.has(t.id) && !optional.has(t.id))) throw invalid('Every issued task needs a result');
+
+  const stepIds = new Set(steps.map((s) => s.id));
+  const completed = new Set(body.learnStepsCompleted);
+  const taught = steps.filter((s) => !known.has(s.meaningId));
+  if ([...completed].some((id) => !stepIds.has(id)) || taught.some((s) => !completed.has(s.id))) {
+    throw invalid('Every Learn step must be completed');
+  }
+  for (const step of taught) {
     const recall = byTask.get(step.firstRecallTaskId);
     if (!recall?.targets.some((t) => t.attemptCount > 0)) throw invalid('First recall needs a submitted attempt');
   }
-  return evaluated;
+  return { evaluated, known };
+}
+
+/** A failed known check only routes the word to teaching; it is neither a memory signal nor skill evidence. */
+export function countedTasks(evaluated: EvaluatedTask[], targets: TargetRow[], known: Set<string>) {
+  const index = targetIndex(targets);
+  return evaluated.filter((e) => e.task.phase !== TASK_PHASE.KNOWN_CHECK
+    || e.targets.every((o) => known.has(index.get(targetKey(e.task.id, o.ordinal))?.meaningId ?? '')));
 }
 
 const targetKey = (taskId: string, ordinal: number) => `${taskId}:${ordinal}`;

@@ -17,7 +17,8 @@ export const POLICY = {
   // Supabase allows access tokens to live up to a week.
   account: { deletedIdentityRetentionHours: 7 * HOURS_PER_DAY },
   review: { semanticWeight: 2, skillWeight: 1, skillBonusChance: 0.3, audioChance: 0.5, matchChance: 0.3, candidateMultiplier: 3 },
-  newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
+  // knownInitialHours [TRIAL]: first interval of a word passed with "I know this" instead of being taught.
+  newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4, knownInitialHours: 7 * HOURS_PER_DAY },
   practice: {
     // Retries after a wrong answer before the app moves on. match counts per left item; recording counts speech assessments.
     maxRetries: {
@@ -50,6 +51,19 @@ export const POLICY = {
   skill: { requiredSessions: 2, delayedRecheckHours: HOURS_PER_DAY },
   speech: { passAccuracy: 80, receiptTtlHours: 72, maxAudioBytes: 2 * 1024 * 1024 },
   weak: { lookbackDays: 30, minAttempts: 3 },
+  // Scope completion and review load [TRIAL] until the simulation in docs/DECISIONS.md settles them.
+  reviewLoad: {
+    version: 'scope-review-trial-v1',
+    // Above this many due words Home shows the backlog line, and an until_backlog_clear override ends at or below it.
+    backlogStatusThreshold: 10,
+    backlogPromptThreshold: 20,
+    backlogRepromptMultiplier: 2,
+    autoBalanceFloor: 2,
+    // Scope is "low" when it has fewer new words than this many weeks of sessions.
+    scopeLowWeeks: 1,
+    // Goal hint rows from the simulation; empty turns the hint off.
+    routineEstimateTable: [] as readonly { newPerSession: number; daysUntilFullReview: number }[],
+  },
   // Legacy: no new challenges are generated and nothing gates Daily; the Challenge Map replaces them.
   checkpoint: { defaultSessionsPerChallenge: 7, maxSessionsPerChallenge: 7 },
   journey: { defaultHistorySegments: 2, maxHistorySegments: 10, defaultFutureSegments: 1, maxFutureSegments: 3 },

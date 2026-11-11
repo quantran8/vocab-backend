@@ -35,6 +35,7 @@ export const ERROR = {
   CHALLENGE_CONTENT_UNAVAILABLE: { status: 409, retryable: false },
   CHALLENGE_RUN_EXPIRED: { status: 410, retryable: false },
   CHALLENGE_INVALID_EVENTS: { status: 422, retryable: false },
+  REVIEW_PAUSE_ACTIVE_COLLECTION: { status: 422, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;

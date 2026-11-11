@@ -26,7 +26,14 @@ CREATE TABLE user_settings (
     time_zone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
     daily_new_word_goal SMALLINT NOT NULL DEFAULT 5 CHECK (daily_new_word_goal BETWEEN 1 AND 30),
     weekly_session_goal SMALLINT NOT NULL DEFAULT 7 CHECK (weekly_session_goal BETWEEN 1 AND 7), -- sessions per checkpoint challenge
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    auto_balance_new_words BOOLEAN NOT NULL DEFAULT false,
+    -- A temporary lower new-word count the learner chose; below daily_new_word_goal.
+    new_word_override SMALLINT CHECK (new_word_override >= 1),
+    new_word_override_mode VARCHAR(32) CHECK (new_word_override_mode IN ('until_date','until_backlog_clear')),
+    new_word_override_until TIMESTAMPTZ,
+    CHECK ((new_word_override IS NULL) = (new_word_override_mode IS NULL)),
+    CHECK ((new_word_override_until IS NOT NULL) = (new_word_override_mode IS NOT DISTINCT FROM 'until_date'))
 );
 
 CREATE TABLE collections (
@@ -70,6 +77,18 @@ CREATE TABLE user_active_topics (
     user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
     topic_id UUID NOT NULL REFERENCES topics(id),
     PRIMARY KEY (user_id, topic_id)
+);
+-- Learned Meanings of a paused collection leave review unless they are also in the active collection or the learner's own words.
+CREATE TABLE user_collection_review_pauses (
+    user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    collection_id UUID NOT NULL REFERENCES collections(id),
+    paused_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, collection_id)
+);
+CREATE TABLE user_review_load_prompts (
+    user_id UUID PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,
+    last_prompted_backlog INTEGER CHECK (last_prompted_backlog >= 0),
+    last_prompted_at TIMESTAMPTZ
 );
 
 -- B. Canonical vocabulary data (editor may edit drafts; runtime reads published snapshots)
@@ -332,6 +351,7 @@ CREATE TABLE user_meaning_progress (
     recognition_grace_used BOOLEAN NOT NULL DEFAULT false,
     scheduler_version VARCHAR(40) NOT NULL,
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+    learned_via_topic_id UUID REFERENCES topics(id) ON DELETE SET NULL, -- topic the Meaning was first learned from
     PRIMARY KEY (user_id, meaning_id)
 );
 CREATE INDEX idx_progress_due ON user_meaning_progress(user_id, next_review_at);

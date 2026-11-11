@@ -24,6 +24,7 @@ export const settingsSchema = z
     timeZone: z.string().max(64).refine(isTimeZone, 'Unknown time zone').optional(),
     dailyNewWordGoal: z.number().int().min(1).max(30).optional(),
     weeklySessionGoal: z.number().int().min(1).max(POLICY.checkpoint.maxSessionsPerChallenge).optional(),
+    autoBalanceNewWords: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, 'No settings provided');
 

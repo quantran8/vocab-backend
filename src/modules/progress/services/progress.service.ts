@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS } from '../../../common/constants/domain';
+import { POLICY } from '../../../config/policy';
+import { activeOverride, effectiveNewWords, scopeStatus, shouldPromptChoice } from '../../review-load/domain/review-load';
 import { ApiError } from '../../../common/http/api-error';
 import { AppConfig } from '../../../config/app-config';
 import { toDate } from '../../../db/db';
 import { resolveAudioUrl } from '../../practice-resolver/asset-url';
 import { applyOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
-import { EvidenceQueryRow, ProgressRepository, RawMeaningRow } from '../repositories/progress.repository';
+import { EvidenceQueryRow, LearnHomeRow, ProgressRepository, RawMeaningRow } from '../repositories/progress.repository';
 import { deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillState } from '../../skill-verification/skill-evidence';
 
 interface MeaningRow {
@@ -96,12 +98,39 @@ const wordSummary = (rows: MeaningRow[], meaningCount: number, allowPlaceholderA
   })),
 });
 
+function learnHomeView(row: LearnHomeRow, now: Date) {
+  const { remaining, pendingCustom, topics, dailyNewWordGoal, autoBalanceNewWords, overrideValue, overrideMode, overrideUntil, lastPromptedBacklog, ...counts } = row;
+  const backlog = counts.dueCount;
+  const stored = overrideValue === null || overrideMode === null
+    ? null
+    : { value: overrideValue, mode: overrideMode, until: overrideUntil === null ? null : toDate(overrideUntil) };
+  const override = activeOverride(stored, now);
+  const budget = effectiveNewWords({ goal: dailyNewWordGoal, override, autoBalance: autoBalanceNewWords, backlog, remaining, pendingCustom, now });
+  const status = scopeStatus(remaining, budget.chosen, counts.checkpointSessionsRequired);
+  return {
+    ...counts,
+    scope: { ...status, remainingNewMeanings: remaining, pendingCustomMeanings: pendingCustom, topics },
+    reviewLoad: {
+      backlog,
+      dueCap: POLICY.session.reviewCap,
+      effectiveNewPerSession: budget.value,
+      newWordReason: budget.reason,
+      override,
+      autoBalance: autoBalanceNewWords,
+      promptChoice: shouldPromptChoice(backlog, lastPromptedBacklog),
+    },
+  };
+}
+
 @Injectable()
 export class ProgressService {
   constructor(private readonly repository: ProgressRepository, private readonly clock: Clock, private readonly config: AppConfig) {}
 
-  learnHome(userId: string) {
-    return this.repository.learnHomeCounts(userId, this.clock.now());
+  async learnHome(userId: string) {
+    const now = this.clock.now();
+    const row = await this.repository.learnHomeCounts(userId, now);
+    if (!row) throw new ApiError('NOT_FOUND', 'Settings not found');
+    return learnHomeView(row, now);
   }
 
   async words(userId: string, limit: number, offset: number, query?: string) {
