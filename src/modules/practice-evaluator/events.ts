@@ -31,6 +31,8 @@ export type TaskEvent = z.infer<typeof eventSchema>;
 
 export const commitBodySchema = z.strictObject({
   learnStepsCompleted: z.array(z.uuid()).max(POLICY.session.maxTasksPerCommit),
+  /** Learn steps the learner marked "I know this word" without taking the check. */
+  knownLearnSteps: z.array(z.uuid()).max(POLICY.session.maxTasksPerCommit).optional(),
   taskResults: z
     .array(
       z.strictObject({

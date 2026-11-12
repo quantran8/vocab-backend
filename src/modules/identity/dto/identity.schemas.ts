@@ -25,6 +25,9 @@ export const settingsSchema = z
     dailyNewWordGoal: z.number().int().min(1).max(30).optional(),
     weeklySessionGoal: z.number().int().min(1).max(POLICY.checkpoint.maxSessionsPerChallenge).optional(),
     autoBalanceNewWords: z.boolean().optional(),
+    // null goes back to following dailyNewWordGoal.
+    reviewsPerSession: z.number().int().min(POLICY.session.reviewsPerSession.min).max(POLICY.session.reviewsPerSession.max).nullable().optional(),
+    leaderboardVisible: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, 'No settings provided');
 

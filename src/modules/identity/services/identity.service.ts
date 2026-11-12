@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { Clock } from '../../../common/clock';
 import { ApiError } from '../../../common/http/api-error';
 import { IdentityRepository } from '../repositories/identity.repository';
+import { tierKey } from '../../learning-points/domain/tier';
+import { usernameChangeAvailableAt } from '../../ranking/domain/username';
 import { levelsSchema, scopeSchema, settingsSchema } from '../dto/identity.schemas';
 
 @Injectable()
@@ -12,9 +14,14 @@ export class IdentityService {
   async getMe(userId: string) {
     const user = await this.repository.findProfile(userId);
     if (!user) throw new ApiError('NOT_FOUND', 'User not found');
-    const { learningScope, activeTopics, ...profile } = user;
+    const { learningScope, activeTopics, effortTotals, usernameGenerated, usernameChangedAt, ...profile } = user;
+    const tierLevel = effortTotals?.tierLevel ?? 0;
     return {
       ...profile,
+      usernameChangeAvailableAt: usernameChangeAvailableAt({ usernameGenerated, usernameChangedAt }, this.clock.now()),
+      tierSummary: {
+        level: tierLevel, key: tierKey(tierLevel), lifetimeLP: effortTotals?.lifetimeLp ?? 0, lifetimeActiveDays: effortTotals?.lifetimeActiveDays ?? 0,
+      },
       scope: learningScope && { collectionId: learningScope.collectionId, topicIds: activeTopics.map((t) => t.topicId) },
     };
   }

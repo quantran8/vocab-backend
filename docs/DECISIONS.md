@@ -64,7 +64,7 @@ Built from "Syll — Scope Completion & Review Load" v1.0, plus the follow-ups A
 
 | Topic | Current behavior | Why |
 | --- | --- | --- |
-| LP | Not implemented anywhere, so `due_review` LP, LP for review-only, practice-as-review (C) and the known check (D) are all open. | The LP spec must settle these before LP ships; D in particular could be farmed if it earned the full new-word LP. |
+| LP | Implemented from Ranking & Tier v1.2 §2 (`lp_effort_trial_v1`); see "Ranking & Tier" below. Review-only daily earns +4 per due Meaning, practice-as-review (C) earns +4 only for a word due when planned, and a passed known check (D) earns 0. | Settled by v1.2 §2.2 as trial values. |
 | Checkpoint gate | `checkpoint_gate` exists in `NEW_WORD_REASON` / `NEW_WORDS_BLOCKED_REASON` but is never emitted. | Nothing gates Daily since the Challenge Map; the value keeps the client contract stable. |
 | Review source (D2) | Daily review, backlog, Random "all" and Weak take every learned Meaning, minus paused collections. Before this, review was limited to active topics. | Spec D2; replaces the old C04 test. |
 | Pause on active collection | `422 REVIEW_PAUSE_ACTIVE_COLLECTION`, not `422 VALIDATION_FAILED`. | An error code has one status; `VALIDATION_FAILED` is 400. |
@@ -75,6 +75,33 @@ Built from "Syll — Scope Completion & Review Load" v1.0, plus the follow-ups A
 | Practice as review (C) | In Checkpoint, Random and Weak, an unaided, unprimed recall of a word already due is applied as a Daily due review. Words not yet due keep their schedule. | Uses practice to clear review debt without stretching words that are not due. The Challenge Map is recognition only and is unaffected. |
 | Known check (D) | Opt-in via `knownCheck: true`. A typing recall before the card; passed first try without hints, the word is learned with a 168 h first interval and its single-meaning tasks may be skipped. Failed checks are neither memory signals nor evidence. | Product experiment for learners who already know English. |
 | Simulation (§13) | Not run. `routineEstimateTable` is empty, so the goal hint is off. | Separate follow-up; its results settle the thresholds above. |
+
+## Ranking & Tier
+
+Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for the Learning Points spec we do not have. Every number is `[TRIAL]` in `POLICY.lp`, `POLICY.tier` and `POLICY.ranking`; none is approved for launch (gates P1–P8 stay open).
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Launch gate | `RANKING_ENABLED` (default `false`) closes the leaderboard and reports with `403 RANKING_DISABLED`. LP, Tier, `/me/ranking`, history, profile and settings work either way; `ranking.listed` is `false` while the gate is closed | R11, R14: Tier can ship before Ranking |
+| Where LP is earned | Learning-session commits only (`daily`, `random_practice`, `weak_words_practice`, `checkpoint_challenge`). Match Madness runs earn nothing | §2.2 lists only those modes |
+| `genuineAttempt` | A target with at least one submit whose outcome is not `unavailable` or `invalid`. Reveal-only (no submit) does not count. Known-check tasks never count | §2.3 |
+| New award | Daily only, every taught (not known-checked) Meaning, key `new:<meaningId>`. The commit already requires the Learn card and a submitted first recall | §2.2 |
+| Due award | The Meaning's `next_review_at` at commit, under the row lock, is at or before the session's `issued_at`. Key `due:<meaningId>:<next_review_at>`. 20 h gap and 3 per rolling 7 days are checked against the ledger | §2.3 asks for due "at plan and at commit" |
+| Due falls back to extra | In a practice mode, a due Meaning blocked by the gap or the cap can still earn +1 extra | Not stated; it is still a genuine, separate effort |
+| Custom provenance | `custom_owned` only when `meanings.owner_user_id` is the learner. A shared Meaning added through custom words is `catalog` | The spec's quota targets Meanings the learner generated |
+| Active day | `user_effort_days` stores every day with LP; a day counts when it first reaches `minQualifiedDayLP` (5) | §2.4 |
+| Tier never drops | `tier_level = GREATEST(old, eligible)` on every write; a daily job raises learners after a threshold drop (`policy_migration` unlocks) | §3.4 |
+| Reconcile | Daily, read-only: logs totals/days/weekly rows that differ from the ledger. No automatic repair | §3.4: correction is a separate audited process; auto-rewrite could hide a bug |
+| Exact rank | A count of listed learners with more points, bounded at 1 000 rows, so its cost does not grow past that. Outside the top 1 000: estimated "top N%" from the 5-minute histogram if N ≤ 50, else `unranked` | §4.1, §8.2 |
+| `listed` column | Kept on `weekly_lp_scores` and resynced in the same transaction as any opt-in or eligibility change, for every week not yet snapshotted | §8.4 |
+| Week close | Runs at minute 10 of every hour (UTC) and closes every unsnapshotted week that ended at least 10 minutes ago, so a missed Monday run catches up. Snapshots are immutable by trigger | §8.3 |
+| Retention | Live weekly scores and stats are purged after `historyWeeks + 1` weeks once snapshotted; snapshots and the ledger are kept | History needs 8 weeks |
+| Reports | Only against a learner listed this week or last; 10 per UTC day; a repeat of the same pair in the same week is ignored (still `202`); no self-reports | §5.3 |
+| Admin ids | `/admin/users/:id/username/reset` and `/ranking-eligibility` take the `app_user` id (`appUserId` in `GET /admin/users`), not the auth provider id used by `/admin/users/:id/role`. Both need the full admin role | Ranking data is keyed by `app_user` |
+| Resolving a report | Records the decision only; the reset and eligibility endpoints carry it out | Keeps each action audited on its own |
+| Username blocklist | A starter English/Vietnamese list in `ranking/domain/username.ts`. The full multilingual list is part of gate P5 | §5.1 |
+| Existing users | Migration 0017 gives each a generated username and a random avatar; `leaderboard_visible` is `false` for all. No LP is backfilled: there was no ledger | §7.2 |
+| Not implemented | Admin dashboard (P6), LP correction flow, simulation (P3), Tier-unlocked avatars, holding a changed username for 30 days | Open in §12, §14 |
 
 ## Not implemented
 

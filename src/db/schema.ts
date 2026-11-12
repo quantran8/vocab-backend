@@ -2,12 +2,13 @@
 // CHECK constraints, partial indexes, triggers and foreign keys live in the SQL migrations.
 import { relations } from 'drizzle-orm';
 import {
-  boolean, char, date, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
+  bigint, boolean, char, date, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, unique, uuid, varchar,
 } from 'drizzle-orm/pg-core';
 import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
   type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
+  type AvatarKey, type ContentProvenance, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
@@ -24,6 +25,12 @@ export const appUsers = pgTable('app_user', {
   identitySubject: text('identity_subject').notNull().unique('app_user_identity_subject_key'),
   proficiencyLevel: varchar('proficiency_level', { length: 2 }).$type<CefrLevel>(),
   createdAt: createdAt(),
+  username: text('username').notNull().unique('app_user_username_key'),
+  usernameGenerated: boolean('username_generated').notNull().default(true),
+  usernameChangedAt: ts('username_changed_at'),
+  avatarKey: varchar('avatar_key', { length: 32 }).$type<AvatarKey>().notNull(),
+  rankingEligible: boolean('ranking_eligible').notNull().default(true),
+  rankingIntroSeen: boolean('ranking_intro_seen').notNull().default(false),
 });
 
 export const deletedIdentities = pgTable('deleted_identities', {
@@ -45,6 +52,9 @@ export const userSettings = pgTable('user_settings', {
   newWordOverride: smallint('new_word_override'),
   newWordOverrideMode: varchar('new_word_override_mode', { length: 32 }).$type<NewWordOverrideMode>(),
   newWordOverrideUntil: ts('new_word_override_until'),
+  leaderboardVisible: boolean('leaderboard_visible').notNull().default(false),
+  /** Reviews per daily session; null follows the new-word goal (see reviewsPerSession). */
+  reviewsPerSession: smallint('reviews_per_session'),
 });
 
 export const collections = pgTable('collections', {
@@ -422,11 +432,111 @@ export const challengeRuns = pgTable('challenge_runs', {
 });
 
 // Relations are only declared for the nested reads that use `db.query`.
+// G. Ranking & Tier: the LP ledger is the source of truth; totals, days and weekly scores are aggregates of it.
+export const learningPointAwards = pgTable('learning_point_awards', {
+  id: id(),
+  userId: uuid('user_id').notNull(),
+  sessionId: uuid('session_id').notNull(),
+  meaningId: uuid('meaning_id').notNull(),
+  awardType: varchar('award_type', { length: 32 }).$type<LpAwardType>().notNull(),
+  awardKey: text('award_key').notNull(),
+  points: smallint('points').notNull(),
+  awardedAt: ts('awarded_at').notNull(),
+  scoringDay: date('scoring_day').notNull(),
+  weekStart: date('week_start').notNull(),
+  lpPolicyVersion: varchar('lp_policy_version', { length: 40 }).notNull(),
+  contentProvenance: varchar('content_provenance', { length: 16 }).$type<ContentProvenance>().notNull(),
+}, (t) => [
+  unique('learning_point_awards_user_id_award_key_key').on(t.userId, t.awardKey),
+  index('idx_learning_point_awards_user_meaning').on(t.userId, t.meaningId, t.awardedAt),
+  index('idx_learning_point_awards_user_day').on(t.userId, t.scoringDay),
+]);
+
+export const userEffortTotals = pgTable('user_effort_totals', {
+  userId: uuid('user_id').primaryKey(),
+  lifetimeLp: bigint('lifetime_lp', { mode: 'number' }).notNull().default(0),
+  lifetimeActiveDays: integer('lifetime_active_days').notNull().default(0),
+  tierLevel: smallint('tier_level').notNull().default(0),
+  tierPolicyVersion: varchar('tier_policy_version', { length: 40 }).notNull(),
+  lastAwardAt: ts('last_award_at'),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const userEffortDays = pgTable('user_effort_days', {
+  userId: uuid('user_id').notNull(),
+  scoringDay: date('scoring_day').notNull(),
+  earnedLp: integer('earned_lp').notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.scoringDay] })]);
+
+export const userTierUnlocks = pgTable('user_tier_unlocks', {
+  userId: uuid('user_id').notNull(),
+  tierLevel: smallint('tier_level').notNull(),
+  tierKey: varchar('tier_key', { length: 32 }).$type<TierKey>().notNull(),
+  unlockedAt: ts('unlocked_at').notNull(),
+  tierPolicyVersion: varchar('tier_policy_version', { length: 40 }).notNull(),
+  source: varchar('source', { length: 20 }).$type<TierUnlockSource>().notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.tierLevel] })]);
+
+export const weeklyLpScores = pgTable('weekly_lp_scores', {
+  userId: uuid('user_id').notNull(),
+  weekStart: date('week_start').notNull(),
+  points: bigint('points', { mode: 'number' }).notNull(),
+  lastAwardAt: ts('last_award_at').notNull(),
+  listed: boolean('listed').notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.weekStart] })]);
+
+export const weeklyRankStats = pgTable('weekly_rank_stats', {
+  weekStart: date('week_start').primaryKey(),
+  computedAt: ts('computed_at').notNull(),
+  totalListed: integer('total_listed').notNull(),
+  top1000MinPoints: bigint('top1000_min_points', { mode: 'number' }),
+  histogram: jsonb('histogram').$type<Record<string, number>>().notNull(),
+});
+
+export const weeklyRankSnapshots = pgTable('weekly_rank_snapshots', {
+  weekStart: date('week_start').notNull(),
+  userId: uuid('user_id').notNull(),
+  points: bigint('points', { mode: 'number' }).notNull(),
+  rank: bigint('rank', { mode: 'number' }),
+  listedAtClose: boolean('listed_at_close').notNull(),
+  rankingPolicyVersion: varchar('ranking_policy_version', { length: 40 }).notNull(),
+  closedAt: ts('closed_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.weekStart, t.userId] }), index('idx_weekly_rank_snapshots_user').on(t.userId, t.weekStart)]);
+
+export const userReports = pgTable('user_reports', {
+  id: id(),
+  reporterId: uuid('reporter_id').notNull(),
+  targetUserId: uuid('target_user_id').notNull(),
+  reason: varchar('reason', { length: 32 }).$type<ReportReason>().notNull(),
+  weekStart: date('week_start').notNull(),
+  createdAt: ts('created_at').notNull(),
+  resolvedAt: ts('resolved_at'),
+  resolvedBy: uuid('resolved_by'),
+  resolution: varchar('resolution', { length: 32 }).$type<ReportResolution>(),
+});
+
+export const rankingEligibilityAudit = pgTable('ranking_eligibility_audit', {
+  id: id(),
+  userId: uuid('user_id').notNull(),
+  actorId: uuid('actor_id'),
+  eligible: boolean('eligible').notNull(),
+  reason: text('reason').notNull(),
+  createdAt: ts('created_at').notNull(),
+});
+
 export const appUsersRelations = relations(appUsers, ({ one, many }) => ({
   settings: one(userSettings, { fields: [appUsers.id], references: [userSettings.userId] }),
   learningScope: one(userLearningScope, { fields: [appUsers.id], references: [userLearningScope.userId] }),
   activeTopics: many(userActiveTopics),
   reviewPauses: many(userCollectionReviewPauses),
+  effortTotals: one(userEffortTotals, { fields: [appUsers.id], references: [userEffortTotals.userId] }),
+  tierUnlocks: many(userTierUnlocks),
+}));
+export const userEffortTotalsRelations = relations(userEffortTotals, ({ one }) => ({
+  user: one(appUsers, { fields: [userEffortTotals.userId], references: [appUsers.id] }),
+}));
+export const userTierUnlocksRelations = relations(userTierUnlocks, ({ one }) => ({
+  user: one(appUsers, { fields: [userTierUnlocks.userId], references: [appUsers.id] }),
 }));
 export const userCollectionReviewPausesRelations = relations(userCollectionReviewPauses, ({ one }) => ({
   user: one(appUsers, { fields: [userCollectionReviewPauses.userId], references: [appUsers.id] }),

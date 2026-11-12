@@ -53,7 +53,7 @@ export function evaluateBatch(
   targets: TargetRow[],
   steps: LearnStepRow[],
   receipts: Map<string, ReceiptView & { taskId: string }>,
-): { evaluated: EvaluatedTask[]; known: Set<string> } {
+): { evaluated: EvaluatedTask[]; known: Set<string>; declared: Set<string> } {
   const submitted = new Map(body.taskResults.map((r) => [r.taskId, r]));
   if (submitted.size !== body.taskResults.length) throw invalid('Duplicate taskId');
   const issued = new Set(tasks.map((t) => t.id));
@@ -82,7 +82,8 @@ export function evaluateBatch(
   });
 
   const byTask = new Map(evaluated.map((e) => [e.task.id, e]));
-  const known = knownMeanings(steps, byTask);
+  const declared = declaredKnown(body, steps);
+  const known = new Set([...knownMeanings(steps, byTask), ...declared]);
   // Known checks are optional; a known word may also drop the tasks that test only it.
   const optional = new Set(steps.flatMap((s) => [
     ...(s.knownCheckTaskId ? [s.knownCheckTaskId] : []),
@@ -100,7 +101,21 @@ export function evaluateBatch(
     const recall = byTask.get(step.firstRecallTaskId);
     if (!recall?.targets.some((t) => t.attemptCount > 0)) throw invalid('First recall needs a submitted attempt');
   }
-  return { evaluated, known };
+  return { evaluated, known, declared };
+}
+
+/** Meanings of the Learn steps the learner marked known; only steps planned with a known check may be. */
+function declaredKnown(body: CommitBody, steps: LearnStepRow[]) {
+  const ids = new Set(body.knownLearnSteps ?? []);
+  if (ids.size !== (body.knownLearnSteps ?? []).length) throw invalid('Duplicate known Learn step');
+  const completed = new Set(body.learnStepsCompleted);
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  return new Set([...ids].map((id) => {
+    const step = byId.get(id);
+    if (!step?.knownCheckTaskId) throw invalid('Learn step does not offer "I know this"');
+    if (completed.has(id)) throw invalid('A known Learn step cannot also be completed');
+    return step.meaningId;
+  }));
 }
 
 /** A failed known check only routes the word to teaching; it is neither a memory signal nor skill evidence. */

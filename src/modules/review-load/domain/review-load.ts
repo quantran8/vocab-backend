@@ -31,6 +31,11 @@ export interface NewWordBudget {
 
 const { backlogStatusThreshold, autoBalanceFloor, backlogPromptThreshold, backlogRepromptMultiplier, scopeLowWeeks } = POLICY.reviewLoad;
 
+/** Reviews a daily session holds: the learner's choice, else the new-word goal, never below the minimum. */
+export function reviewsPerSession(chosen: number | null, dailyNewWordGoal: number): number {
+  return chosen ?? Math.max(dailyNewWordGoal, POLICY.session.reviewsPerSession.min);
+}
+
 export function activeOverride(override: NewWordOverride | null, now: Date): NewWordOverride | null {
   if (!override) return null;
   if (override.mode === NEW_WORD_OVERRIDE_MODE.UNTIL_DATE && (!override.until || override.until <= now)) return null;

@@ -113,9 +113,33 @@ describe('scope completion and review load', () => {
       await learn(22);
       h.clock.advance(1000);
       const view = await home();
-      expect(view.reviewLoad).toMatchObject({ backlog: 22, dueCap: 10, effectiveNewPerSession: 22, newWordReason: 'goal', promptChoice: true });
+      expect(view.reviewLoad).toMatchObject({ backlog: 22, dueCap: 22, effectiveNewPerSession: 22, newWordReason: 'goal', promptChoice: true });
       await api('post', '/v1/me/review-load/ack').send({ backlog: 22 }).expect(200);
       expect((await home()).reviewLoad.promptChoice).toBe(false);
+    });
+
+    it('reviews per session follow the goal, at least 5, until the learner picks a number', async () => {
+      await onboard(words(30));
+      await learn(12);
+      h.clock.advance(1000);
+      await goal(3);
+      expect((await home()).reviewLoad.dueCap).toBe(5);
+      await goal(8);
+      expect((await home()).reviewLoad.dueCap).toBe(8);
+
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: 6 }).expect(200);
+      expect((await home()).reviewLoad.dueCap).toBe(6);
+      const p = await plan({ reviewOnly: true });
+      await commit(p, answers(p)).expect(200);
+      const reviewed = (await h.db.select().from(userMeaningProgress)).filter((r) => r.nextReviewAt > h.clock.now());
+      expect(reviewed).toHaveLength(6);
+
+      const me = (await api('get', '/v1/me').expect(200)).body;
+      expect(me.settings.reviewsPerSession).toBe(6);
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: null }).expect(200);
+      expect((await home()).reviewLoad.dueCap).toBe(8);
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: 4 }).expect(400);
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: 51 }).expect(400);
     });
 
     it('auto-balance lowers new words only when enabled', async () => {
@@ -301,6 +325,32 @@ describe('scope completion and review load', () => {
       body.taskResults = body.taskResults.filter((r: { taskId: string }) => !step.skippableTaskIds.includes(r.taskId));
       body.learnStepsCompleted = body.learnStepsCompleted.filter((id: string) => id !== step.id);
       await commit(p, body).expect(422);
+    });
+
+    it('a word marked known skips the check and its teaching', async () => {
+      const p = await known();
+      const steps = learnSteps(p);
+      const dropped = new Set(steps.flatMap((s) => [s.knownCheckTaskId, ...s.skippableTaskIds]));
+      const all = answers(p);
+      const body = { learnStepsCompleted: [], taskResults: all.taskResults.filter((r) => !dropped.has(r.taskId)), knownLearnSteps: steps.map((s) => s.id) };
+      expect((await commit(p, body).expect(200)).body.summary.knownMeanings).toBe(2);
+      const rows = await h.db.select().from(userMeaningProgress);
+      expect(rows.map((r) => Number(r.intervalHours))).toEqual([168, 168]);
+    });
+
+    it('a step marked known cannot also be completed, nor come from a plan without checks', async () => {
+      const p = await known();
+      const [step] = learnSteps(p);
+      await commit(p, { ...answers(p), knownLearnSteps: [step.id] }).expect(422);
+
+      await h.reset();
+      auth = await h.token('user-1');
+      await onboard(words(6));
+      await goal(2);
+      const plain = await plan();
+      const [plainStep] = learnSteps(plain);
+      const body = answers(plain);
+      await commit(plain, { ...body, learnStepsCompleted: body.learnStepsCompleted.filter((id: string) => id !== plainStep.id), knownLearnSteps: [plainStep.id] }).expect(422);
     });
   });
 

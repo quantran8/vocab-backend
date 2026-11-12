@@ -12,7 +12,7 @@ import { backlogSql, pendingCustomSql, remainingNewSql, scopeMembershipSql, unle
 export type LearnHomeRow = {
   dueCount: number; checkpointAvailable: number; checkpointSessionsDone: number; checkpointSessionsRequired: number; learnedTotal: number;
   remaining: number; pendingCustom: number; topics: { topicId: string; remainingNewMeanings: number; totalMeanings: number }[];
-  dailyNewWordGoal: number; autoBalanceNewWords: boolean;
+  dailyNewWordGoal: number; reviewsPerSession: number | null; autoBalanceNewWords: boolean;
   overrideValue: number | null; overrideMode: NewWordOverrideMode | null; overrideUntil: string | null;
   lastPromptedBacklog: number | null;
 };
@@ -80,7 +80,7 @@ export class ProgressRepository {
              (count(DISTINCT sm.meaning_id) FILTER (WHERE ${unlearnedSql(userId, sql`sm.meaning_id`)}))::int AS remaining
            FROM (${scopeMembershipSql(userId, locale)}) sm
            GROUP BY sm.topic_id) x) AS topics,
-        us.daily_new_word_goal::int AS "dailyNewWordGoal", us.auto_balance_new_words AS "autoBalanceNewWords",
+        us.daily_new_word_goal::int AS "dailyNewWordGoal", us.reviews_per_session::int AS "reviewsPerSession", us.auto_balance_new_words AS "autoBalanceNewWords",
         us.new_word_override::int AS "overrideValue", us.new_word_override_mode AS "overrideMode", us.new_word_override_until AS "overrideUntil",
         (SELECT last_prompted_backlog FROM user_review_load_prompts WHERE user_id = ${userId}::uuid) AS "lastPromptedBacklog"
       FROM user_settings us

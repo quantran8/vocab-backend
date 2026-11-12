@@ -27,6 +27,7 @@ export interface Learner {
     uiLocale: string;
     dailyNewWordGoal: number;
     weeklySessionGoal: number;
+    reviewsPerSession: number | null;
     autoBalanceNewWords: boolean;
     override: NewWordOverride | null;
   };
@@ -79,12 +80,13 @@ export class PlannerRepository {
           ${backlogSql(userId, locale, now)} AS backlog`
       : sql``;
     const { rows: [row] } = await this.db.execute<{
-      proficiencyLevel: string | null; explanationLocale: string; uiLocale: string; dailyNewWordGoal: number; weeklySessionGoal: number;
+      proficiencyLevel: string | null; explanationLocale: string; uiLocale: string; dailyNewWordGoal: number; weeklySessionGoal: number; reviewsPerSession: number | null;
       autoBalanceNewWords: boolean; overrideValue: number | null; overrideMode: NewWordOverrideMode | null; overrideUntil: string | null;
       topicIds: string[]; remaining?: number; pendingCustom?: number; backlog?: number;
     }>(sql`
       SELECT u.proficiency_level AS "proficiencyLevel", us.explanation_locale AS "explanationLocale", us.ui_locale AS "uiLocale",
         us.daily_new_word_goal AS "dailyNewWordGoal", us.weekly_session_goal AS "weeklySessionGoal",
+        us.reviews_per_session AS "reviewsPerSession",
         us.auto_balance_new_words AS "autoBalanceNewWords", us.new_word_override AS "overrideValue",
         us.new_word_override_mode AS "overrideMode", us.new_word_override_until AS "overrideUntil",
         ARRAY(SELECT uat.topic_id::text FROM user_active_topics uat WHERE uat.user_id = u.id ORDER BY uat.topic_id) AS "topicIds"
@@ -99,6 +101,7 @@ export class PlannerRepository {
         uiLocale: row.uiLocale,
         dailyNewWordGoal: row.dailyNewWordGoal,
         weeklySessionGoal: row.weeklySessionGoal,
+        reviewsPerSession: row.reviewsPerSession,
         autoBalanceNewWords: row.autoBalanceNewWords,
         override: row.overrideValue === null || row.overrideMode === null ? null : {
           value: row.overrideValue, mode: row.overrideMode, until: row.overrideUntil === null ? null : toDate(row.overrideUntil),

@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, count, eq, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm';
 import { CONTENT_STATUS } from '../../../common/constants/domain';
-import { DB, Db } from '../../../db/db';
+import { DB, Db, Tx } from '../../../db/db';
+import { syncListedSql } from '../../ranking/repositories/listing.sql';
 import { appUsers, collections, topics, userActiveTopics, userLearningScope, userSettings } from '../../../db/schema';
 
 const { userId: _userId, ...settingsView } = getTableColumns(userSettings);
@@ -15,8 +16,9 @@ export class IdentityRepository {
   findProfile(userId: string) {
     return this.db.query.appUsers.findFirst({
       where: eq(appUsers.id, userId),
-      columns: { id: true, proficiencyLevel: true },
+      columns: { id: true, proficiencyLevel: true, username: true, avatarKey: true, usernameGenerated: true, usernameChangedAt: true, rankingIntroSeen: true },
       with: {
+        effortTotals: { columns: { lifetimeLp: true, lifetimeActiveDays: true, tierLevel: true } },
         settings: { columns: { userId: false } },
         learningScope: { columns: { collectionId: true } },
         reviewPauses: { columns: { collectionId: true, pausedAt: true }, orderBy: (p) => p.pausedAt },
@@ -39,8 +41,13 @@ export class IdentityRepository {
       newWordOverrideMode: keepIfSameGoal(userSettings.newWordOverrideMode),
       newWordOverrideUntil: keepIfSameGoal(userSettings.newWordOverrideUntil),
     };
-    const [row] = await this.db.update(userSettings).set({ ...patch, ...cancel }).where(eq(userSettings.userId, userId)).returning(settingsView);
-    return row;
+    const update = (db: Db | Tx) => db.update(userSettings).set({ ...patch, ...cancel }).where(eq(userSettings.userId, userId)).returning(settingsView);
+    if (patch.leaderboardVisible === undefined) return (await update(this.db))[0];
+    return this.db.transaction(async (tx) => {
+      const [row] = await update(tx);
+      await tx.execute(syncListedSql(userId));
+      return row;
+    });
   }
 
   async countPublishedTopics(collectionId: string, topicIds: string[]) {

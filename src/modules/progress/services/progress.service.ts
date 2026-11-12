@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS } from '../../../common/constants/domain';
-import { POLICY } from '../../../config/policy';
-import { activeOverride, effectiveNewWords, scopeStatus, shouldPromptChoice } from '../../review-load/domain/review-load';
+import { activeOverride, effectiveNewWords, reviewsPerSession, scopeStatus, shouldPromptChoice } from '../../review-load/domain/review-load';
 import { ApiError } from '../../../common/http/api-error';
 import { AppConfig } from '../../../config/app-config';
 import { toDate } from '../../../db/db';
@@ -99,7 +98,7 @@ const wordSummary = (rows: MeaningRow[], meaningCount: number, allowPlaceholderA
 });
 
 function learnHomeView(row: LearnHomeRow, now: Date) {
-  const { remaining, pendingCustom, topics, dailyNewWordGoal, autoBalanceNewWords, overrideValue, overrideMode, overrideUntil, lastPromptedBacklog, ...counts } = row;
+  const { remaining, pendingCustom, topics, dailyNewWordGoal, reviewsPerSession: chosenReviews, autoBalanceNewWords, overrideValue, overrideMode, overrideUntil, lastPromptedBacklog, ...counts } = row;
   const backlog = counts.dueCount;
   const stored = overrideValue === null || overrideMode === null
     ? null
@@ -112,7 +111,7 @@ function learnHomeView(row: LearnHomeRow, now: Date) {
     scope: { ...status, remainingNewMeanings: remaining, pendingCustomMeanings: pendingCustom, topics },
     reviewLoad: {
       backlog,
-      dueCap: POLICY.session.reviewCap,
+      dueCap: reviewsPerSession(chosenReviews, dailyNewWordGoal),
       effectiveNewPerSession: budget.value,
       newWordReason: budget.reason,
       override,

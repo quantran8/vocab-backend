@@ -61,7 +61,7 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `BUILD_PLATFORM` | `linux/arm64` (default) or `linux/amd64` |
 | `APP_PORT` | loopback port on the VM, default `3001` (money-space uses 3000) |
 | `EDGE_DIR` | money-space's `APP_DIR`, default `/opt/money-space` |
-| optional | `AZURE_SPEECH_REGION`, `SUPABASE_AUDIO_BUCKET`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON` |
+| optional | `AZURE_SPEECH_REGION`, `SUPABASE_AUDIO_BUCKET`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED` |
 | `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` | login name and address of the seeded admin. Without them the admin signs in by email only. The password is not deployed: `pnpm db:seed` reads it from your local `.env` |
 
 An unset optional value is left out of the VM's `.env`, so the defaults in

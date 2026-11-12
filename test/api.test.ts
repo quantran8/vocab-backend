@@ -1071,10 +1071,19 @@ describe('Vocab Flow API', () => {
       const home = await h.countQueries(() => api('get', '/v1/me/learn-home').expect(200));
       const list = await h.countQueries(() => api('get', '/v1/me/words').expect(200));
       const path = await h.countQueries(() => api('get', '/v1/me/journey').expect(200));
-      return { plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries };
+      await api('put', '/v1/me/settings').send({ leaderboardVisible: true }).expect(200);
+      const ranking = await h.countQueries(() => api('get', '/v1/me/ranking').expect(200));
+      const tier = await h.countQueries(() => api('get', '/v1/me/tier').expect(200));
+      const top = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=top').expect(200));
+      const around = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=around').expect(200));
+      const me = await h.countQueries(() => api('get', '/v1/me').expect(200));
+      return {
+        plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries,
+        ranking: ranking.queries, tier: tier.queries, top: top.queries, around: around.queries, me: me.queries,
+      };
     };
 
-    it('plan, commit, learn-home, me/words and me/journey stay constant from 1 to 20 Meanings', async () => {
+    it('plan, commit, learn-home, me/words, me/journey, me, ranking and tier stay constant from 1 to 20 Meanings', async () => {
       const small = await measure(1);
       const large = await measure(20);
       if (process.env.PRINT_QUERY_COUNTS) console.error('QUERY_COUNTS', JSON.stringify({ small, large }));

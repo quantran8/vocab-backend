@@ -274,3 +274,63 @@ export const EVENT_SCHEMA_VERSION = 1;
 export const DEFAULT_LOCALE = 'vi-VN';
 export const DEFAULT_ACCENT = 'en-US';
 export const LEARNING_LANGUAGE = 'en';
+
+// Ranking & Tier v1.2: LP ledger, lifetime Tier, opt-in weekly ranking. See memory ranking-tier.
+export const LP_AWARD_TYPE = {
+  NEW_MEANING_COMPLETED: 'new_meaning_completed',
+  DUE_REVIEW_COMPLETED: 'due_review_completed',
+  EXTRA_PRACTICE_COMPLETED: 'extra_practice_completed',
+} as const;
+export type LpAwardType = (typeof LP_AWARD_TYPE)[keyof typeof LP_AWARD_TYPE];
+
+export const CONTENT_PROVENANCE = { CATALOG: 'catalog', CUSTOM_OWNED: 'custom_owned' } as const;
+export type ContentProvenance = (typeof CONTENT_PROVENANCE)[keyof typeof CONTENT_PROVENANCE];
+
+export const TIER_KEY = {
+  FIRST_STEPS: 'first_steps',
+  IN_MOTION: 'in_motion',
+  BUILDING_UP: 'building_up',
+  STEADY_EFFORT: 'steady_effort',
+  COMMITTED: 'committed',
+  DEDICATED: 'dedicated',
+  LASTING_MARK: 'lasting_mark',
+} as const;
+export type TierKey = (typeof TIER_KEY)[keyof typeof TIER_KEY];
+
+export const TIER_UNLOCK_SOURCE = { LIVE: 'live', BACKFILL: 'backfill', POLICY_MIGRATION: 'policy_migration' } as const;
+export type TierUnlockSource = (typeof TIER_UNLOCK_SOURCE)[keyof typeof TIER_UNLOCK_SOURCE];
+
+export const AVATAR_KEY = {
+  SYLLIE_SUNNY: 'syllie_sunny',
+  SYLLIE_SLEEPY: 'syllie_sleepy',
+  SYLLIE_CURIOUS: 'syllie_curious',
+  SYLLIE_BRAVE: 'syllie_brave',
+  SYLLIE_CALM: 'syllie_calm',
+  SYLLIE_CHEERFUL: 'syllie_cheerful',
+  SYLLIE_THINKER: 'syllie_thinker',
+  SYLLIE_EXPLORER: 'syllie_explorer',
+  SYLLIE_READER: 'syllie_reader',
+  SYLLIE_ARTIST: 'syllie_artist',
+  SYLLIE_SPORTY: 'syllie_sporty',
+  SYLLIE_STARRY: 'syllie_starry',
+} as const;
+export type AvatarKey = (typeof AVATAR_KEY)[keyof typeof AVATAR_KEY];
+export const AVATAR_KEYS = Object.values(AVATAR_KEY);
+
+export const REPORT_REASON = {
+  OFFENSIVE_NAME: 'offensive_name',
+  IMPERSONATION: 'impersonation',
+  SUSPICIOUS_ACTIVITY: 'suspicious_activity',
+  OTHER: 'other',
+} as const;
+export type ReportReason = (typeof REPORT_REASON)[keyof typeof REPORT_REASON];
+export const REPORT_REASONS = Object.values(REPORT_REASON);
+
+export const REPORT_RESOLUTION = { USERNAME_RESET: 'username_reset', RANKING_INELIGIBLE: 'ranking_ineligible', DISMISSED: 'dismissed' } as const;
+export type ReportResolution = (typeof REPORT_RESOLUTION)[keyof typeof REPORT_RESOLUTION];
+export const REPORT_RESOLUTIONS = Object.values(REPORT_RESOLUTION);
+export const REPORT_STATUS = { OPEN: 'open', RESOLVED: 'resolved' } as const;
+
+export const RANKING_POSITION_KIND = { RANK: 'rank', PERCENTILE: 'percentile', UNRANKED: 'unranked' } as const;
+export type RankingPositionKind = (typeof RANKING_POSITION_KIND)[keyof typeof RANKING_POSITION_KIND];
+export const LEADERBOARD_VIEW = { TOP: 'top', AROUND: 'around' } as const;

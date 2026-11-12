@@ -3,9 +3,9 @@ import { and, eq, inArray, notExists, or } from 'drizzle-orm';
 import { DB, Db } from '../../../db/db';
 import {
   activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations,
-  learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations,
-  skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userMeaningOverrides,
-  userMeaningProgress,
+  learningPointAwards, learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations,
+  rankingEligibilityAudit, skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userEffortDays,
+  userEffortTotals, userMeaningOverrides, userMeaningProgress, userReports, userTierUnlocks, weeklyLpScores, weeklyRankSnapshots,
 } from '../../../db/schema';
 
 @Injectable()
@@ -20,6 +20,14 @@ export class AccountDeletionRepository {
 
       const sessions = tx.select({ id: learningSessions.id }).from(learningSessions).where(eq(learningSessions.userId, userId));
       const challenges = tx.select({ id: checkpointChallenges.id }).from(checkpointChallenges).where(eq(checkpointChallenges.userId, userId));
+      await tx.delete(learningPointAwards).where(eq(learningPointAwards.userId, userId));
+      await tx.delete(userEffortDays).where(eq(userEffortDays.userId, userId));
+      await tx.delete(userEffortTotals).where(eq(userEffortTotals.userId, userId));
+      await tx.delete(userTierUnlocks).where(eq(userTierUnlocks.userId, userId));
+      await tx.delete(weeklyLpScores).where(eq(weeklyLpScores.userId, userId));
+      await tx.delete(weeklyRankSnapshots).where(eq(weeklyRankSnapshots.userId, userId));
+      await tx.delete(userReports).where(or(eq(userReports.reporterId, userId), eq(userReports.targetUserId, userId)));
+      await tx.delete(rankingEligibilityAudit).where(eq(rankingEligibilityAudit.userId, userId));
       await tx.delete(skillEvidence).where(eq(skillEvidence.userId, userId));
       await tx.delete(memoryObservations).where(eq(memoryObservations.userId, userId));
       await tx.delete(challengeRuns).where(eq(challengeRuns.userId, userId));

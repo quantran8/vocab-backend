@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
-import { CHECKPOINT_STATE, CONTENT_STATUS, NEW_WORD_OVERRIDE_MODE, SCHEDULER_VERSION, SESSION_STATUS } from '../../../common/constants/domain';
+import { CHECKPOINT_STATE, CONTENT_STATUS, NEW_WORD_OVERRIDE_MODE, SCHEDULER_VERSION, SESSION_STATUS, SessionMode } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate, Tx } from '../../../db/db';
 import { checkpointChallenges, learningSessions } from '../../../db/schema';
 import { SrsState } from '../../memory-srs/srs';
 import { backlogSql, scopeMembershipSql } from '../../review-load/repositories/review-scope.sql';
 import { SessionPlan } from '../../session-planner/domain/session-plan';
+import { lpContextColumnsSql, parseLpContext, RawLpContext } from '../../learning-points/repositories/effort.repository';
 import { TargetRow } from '../domain/commit-evaluator';
 
 export interface ProgressRow extends SrsState { meaningId: string }
@@ -78,16 +79,21 @@ export class CommitRepository {
              (SELECT id FROM app_user WHERE id = ${userId}::uuid FOR UPDATE)`);
   }
 
-  // One statement reads the session and everything it needs. Progress rows are locked here, so no separate lock query.
+  // One statement reads the session and everything it needs, LP history included. Progress rows are locked here, so no separate lock query.
   async loadSession(tx: Tx, userId: string, sessionId: string, now: Date) {
-    const { rows } = await tx.execute<{
-      userId: string; mode: string; status: string; expiresAt: string; scopeSnapshot: { challengeId?: string };
+    const planMeanings = sql`
+      SELECT (g->>'meaningId')::uuid
+      FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
+      WHERE g->>'meaningId' IS NOT NULL
+      UNION SELECT (l->>'meaningId')::uuid FROM jsonb_array_elements(s.plan->'learnSteps') l`;
+    const { rows } = await tx.execute<RawLpContext & {
+      userId: string; mode: SessionMode; status: string; issuedAt: string; expiresAt: string; scopeSnapshot: { challengeId?: string };
       commitRequestSha256: string | null; commitResponse: unknown;
       plan: SessionPlan | null;
       receipts: { id: string; taskId: string; validity: string; passed: boolean | null; accuracyScore: number | null; assessedAt: string }[];
       progress: (Omit<ProgressRow, keyof SrsDates> & Record<keyof SrsDates, string | null>)[];
     }>(sql`
-      SELECT s.user_id AS "userId", s.mode, s.status, s.expires_at AS "expiresAt", s.scope_snapshot AS "scopeSnapshot",
+      SELECT s.user_id AS "userId", s.mode, s.status, s.issued_at AS "issuedAt", s.expires_at AS "expiresAt", s.scope_snapshot AS "scopeSnapshot",
         s.commit_request_sha256 AS "commitRequestSha256", s.commit_response AS "commitResponse",
         s.plan,
         COALESCE((SELECT json_agg(json_build_object(
@@ -101,12 +107,9 @@ export class CommitRepository {
             'recognitionGraceUsed', p.recognition_grace_used))
           FROM (
             SELECT * FROM user_meaning_progress
-            WHERE user_id = ${userId}::uuid AND meaning_id IN (
-              SELECT (g->>'meaningId')::uuid
-              FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
-              WHERE g->>'meaningId' IS NOT NULL
-              UNION SELECT (l->>'meaningId')::uuid FROM jsonb_array_elements(s.plan->'learnSteps') l)
-            FOR UPDATE) p), '[]'::json) AS progress
+            WHERE user_id = ${userId}::uuid AND meaning_id IN (${planMeanings})
+            FOR UPDATE) p), '[]'::json) AS progress,
+        ${lpContextColumnsSql(userId, planMeanings, now)}
       FROM learning_sessions s
       WHERE s.id = ${sessionId}::uuid
       FOR UPDATE OF s`);
@@ -119,8 +122,10 @@ export class CommitRepository {
       tasks,
       targets: tasks.flatMap((t) => t.targets.map((target): TargetRow => ({ taskId: t.id, ...target }))),
       steps: row.plan?.learnSteps ?? [],
+      issuedAt: toDate(row.issuedAt),
       expiresAt: toDate(row.expiresAt),
       receipts: row.receipts.map((r) => ({ ...r, assessedAt: toDate(r.assessedAt) })),
+      lp: parseLpContext(row),
       progress: new Map<string, ProgressRow>(row.progress.map((p) => [p.meaningId, {
         ...p,
         learnedAt: toDate(p.learnedAt!),

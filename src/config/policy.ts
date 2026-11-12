@@ -1,4 +1,4 @@
-import { TEMPLATE } from '../common/constants/domain';
+import { TEMPLATE, TIER_KEY } from '../common/constants/domain';
 import { HOURS_PER_DAY } from '../common/constants/time';
 
 // Every [TRIAL] value from the spec; tune here, not at call sites.
@@ -7,7 +7,8 @@ export const POLICY = {
   session: {
     ttlHours: 72,
     retentionHours: 30 * HOURS_PER_DAY,
-    reviewCap: 10,
+    // Reviews per daily session the learner may choose; unset follows dailyNewWordGoal, never below min.
+    reviewsPerSession: { min: 5, max: 50 },
     practiceTaskCap: 10,
     maxEventsPerTask: 200,
     maxTasksPerCommit: 500,
@@ -96,5 +97,42 @@ export const POLICY = {
   },
   // A level passes at this ratio; the result is the highest level with every level below it passed too.
   placement: { questionsPerLevel: 3, minCorrectRatio: 0.6 },
+  // Ranking & Tier v1.2 [TRIAL]: none of these is approved for launch. Bump a version when its values change.
+  lp: {
+    version: 'lp_effort_trial_v1',
+    newMeaningLP: 5,
+    dueReviewLP: 4,
+    extraPracticeLP: 1,
+    maxNewCustomMeaningsPerUtcDay: 5,
+    minDueAwardGapHours: 20,
+    maxDueAwardsPerMeaningRolling7d: 3,
+    dueAwardWindowDays: 7,
+    maxExtraPracticeLPPerUtcDay: 10,
+    minQualifiedDayLP: 5,
+  },
+  tier: {
+    version: 'tier_lifetime_trial_v1',
+    levels: [
+      { level: 1, key: TIER_KEY.FIRST_STEPS, minLifetimeLP: 40, minActiveDays: 1 },
+      { level: 2, key: TIER_KEY.IN_MOTION, minLifetimeLP: 180, minActiveDays: 7 },
+      { level: 3, key: TIER_KEY.BUILDING_UP, minLifetimeLP: 600, minActiveDays: 30 },
+      { level: 4, key: TIER_KEY.STEADY_EFFORT, minLifetimeLP: 1_500, minActiveDays: 90 },
+      { level: 5, key: TIER_KEY.COMMITTED, minLifetimeLP: 4_000, minActiveDays: 180 },
+      { level: 6, key: TIER_KEY.DEDICATED, minLifetimeLP: 9_000, minActiveDays: 270 },
+      { level: 7, key: TIER_KEY.LASTING_MARK, minLifetimeLP: 20_000, minActiveDays: 365 },
+    ],
+  },
+  ranking: {
+    version: 'ranking_v1',
+    topLimit: 100,
+    aroundRadius: 5,
+    // Exact rank only inside this many; the count that proves it scans at most this many rows.
+    exactRankLimit: 1_000,
+    historyWeeks: 8,
+    histogram: { fineStep: 10, fineUntil: 2_000, coarseStep: 100 },
+    weekCloseDelayMinutes: 10,
+    usernameChangeDays: 30,
+    reportsPerUtcDay: 10,
+  },
   customWords: { maxRoadmapWords: 500, dailyLookups: 30, maxTextLength: 64, maxContextLength: 200, maxMeaningsPerWord: 8, maxSensesPerDraft: 3 },
 } as const;

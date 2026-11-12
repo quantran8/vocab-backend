@@ -9,7 +9,7 @@ import { AppConfig } from '../../../config/app-config';
 import { POLICY } from '../../../config/policy';
 import { copyFor } from '../../practice-resolver/locale-copy';
 import { applyOverride } from '../../practice-resolver/meaning-override';
-import { effectiveNewWords, withheldReason } from '../../review-load/domain/review-load';
+import { effectiveNewWords, reviewsPerSession, withheldReason } from '../../review-load/domain/review-load';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { Rng, shuffle } from '../domain/interleave';
 import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from '../domain/plan-builder';
@@ -44,7 +44,7 @@ export const planRequestSchema = z
   .refine(({ mode, filter }) => !filter || mode === SESSION_MODE.RANDOM_PRACTICE, { path: ['filter'], message: 'filter requires random_practice' });
 export type PlanRequest = z.infer<typeof planRequestSchema>;
 
-const { reviewCap, practiceTaskCap, ttlHours, distractorPoolSize } = POLICY.session;
+const { practiceTaskCap, ttlHours, distractorPoolSize } = POLICY.session;
 
 const requestedSkills = ({ skill, skills }: PlanRequest): Skill[] | undefined => skills ?? (skill ? [skill] : undefined);
 
@@ -191,7 +191,7 @@ export class PlannerService {
         now,
       });
       const [reviewTargets, newTargets] = await Promise.all([
-        this.repository.dueTargets(userId, locale, settings.uiLocale, now, reviewCap),
+        this.repository.dueTargets(userId, locale, settings.uiLocale, now, reviewsPerSession(settings.reviewsPerSession, settings.dailyNewWordGoal)),
         this.repository.newTargets(userId, locale, learner.proficiencyLevel, budget.value),
       ]);
       return { reviewTargets, newTargets, budget };

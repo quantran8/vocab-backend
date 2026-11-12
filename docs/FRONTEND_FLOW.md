@@ -92,10 +92,11 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 | Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
 | Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,topics:[{id,slug,title,description}]}]}`, đã localize theo `uiLocale` |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
-| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7) |
+| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7), `reviewsPerSession` (5–50 hoặc `null`) |
 
 - `explanationLocale` quyết định ngôn ngữ của nghĩa, câu hỏi và nội dung trong task. Đổi locale ảnh hưởng đến session sau đó, không ảnh hưởng session đã plan.
 - `dailyNewWordGoal` là số từ mới **mỗi session** daily, không phải mỗi ngày: hoàn tất một session thì luôn có thể plan session tiếp theo.
+- `reviewsPerSession` là số từ ôn tối đa mỗi session daily (kể cả review-only). `null` (mặc định) nghĩa là theo `dailyNewWordGoal`, nhưng không dưới 5. `GET /me` trả lại giá trị đã chọn; số đang áp dụng là `reviewLoad.dueCap` trong `learn-home`.
 - `weeklySessionGoal` là số buổi học mỗi tuần user chọn (mặc định 7). Chỉ dùng để hiển thị (`checkpointSessionsRequired`, độ dài chặng Journey cũ): không còn mở challenge, và không ảnh hưởng Challenge Map. `dailyNewWordGoal` cũng không ảnh hưởng Challenge Map.
 
 ### Bài test xếp level
@@ -186,7 +187,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 | Mode | Nội dung |
 |---|---|
-| `daily` | Ôn các Meaning đến hạn (tối đa 10) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
+| `daily` | Ôn các Meaning đến hạn (tối đa `reviewLoad.dueCap`, xem `reviewsPerSession`) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
 | `checkpoint_challenge` | **Deprecated.** Ôn lại các Meaning của một challenge cũ còn `available`, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
 | `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
@@ -436,6 +437,7 @@ Lỗi của assess: `422 INVALID_SUBMISSION` (thiếu audio, task không phải 
 ```jsonc
 {
   "learnStepsCompleted": ["<learn step id>", ...],
+  "knownLearnSteps": ["<learn step id>", ...], // tuỳ chọn, §13.6
   "taskResults": [
     { "taskId": "uuid", "deliveryMode": "audio", "events": [ { "seq": 1, "action": "submit", "optionId": 2 } ] }
   ]
@@ -935,4 +937,127 @@ Theo spec "Scope Completion & Review Load" v1.0. Mọi ngưỡng nằm trong `PO
   - **Chọn "Tôi biết từ này":** hiện task check.
     - Đúng ngay lần đầu, không gợi ý: bỏ qua card và các task trong `skippableTaskIds`. Không cần gửi chúng, cũng không cần đưa learn step vào `learnStepsCompleted`. Từ được tính là đã học, lần ôn đầu sau 7 ngày.
     - Sai: hiện card và học như bình thường. Lần sai này không bị tính là quên.
+- **Đánh dấu "Tôi biết từ này", không làm check:** gửi id learn step trong `knownLearnSteps` (commit body). Bỏ qua task check, card và các task trong `skippableTaskIds`; không đưa learn step vào `learnStepsCompleted`. Từ được tính là đã học, lần ôn đầu sau 7 ngày, trừ khi làm sai một task nối cặp có từ đó trong cùng session (khi đó tính như học bình thường). Không được LP cho từ này.
+  - Chỉ learn step có `knownCheckTaskId` mới được đánh dấu; learn step vừa nằm trong `knownLearnSteps` vừa trong `learnStepsCompleted`, hoặc trùng id, trả `422 INVALID_SUBMISSION`.
+  - App VocabFlow dùng cách này: nút "Tôi biết từ này" nằm dưới "Tiếp tục" trên card, bấm là bỏ qua luôn.
 - Task nối cặp (match) có cả từ khác vẫn phải làm. Server tự kiểm: check sai mà bỏ task thì trả `422 INVALID_SUBMISSION`.
+
+## 14. LP, Tier và bảng xếp hạng
+
+Theo "Syll — Ranking & Tier" v1.2. Mọi con số là thử nghiệm và lấy từ `GET /v1/ranking/meta`, đừng hard-code.
+
+- **LP** chỉ backend tính, từ commit session. Client không bao giờ gửi điểm.
+- **Tier** là thành tích trọn đời, không reset theo tuần và không bao giờ giảm. Tier không phải trình độ hay số từ đã thuộc.
+- **Ranking** là LP trong tuần ISO, reset **Thứ Hai 00:00 UTC** (07:00 giờ Việt Nam). Người học phải tự bật mới xuất hiện trên bảng.
+- Bảng xếp hạng có cờ launch. Khi `rankingEnabled = false`, `leaderboard` và `reports` trả `403 RANKING_DISABLED`; LP, Tier, lịch sử và hồ sơ vẫn chạy.
+
+### 14.1 Cách tính LP (để hiển thị, không để client tự tính)
+
+| Loại | LP | Khi nào |
+| --- | --- | --- |
+| `new_meaning_completed` | +5 | Học xong một Meaning mới trong `daily`. Mỗi Meaning chỉ một lần trọn đời. Từ tự tạo: tối đa 5 Meaning/ngày UTC |
+| `due_review_completed` | +4 | Ôn một Meaning đã đến hạn từ lúc plan. Cách lần trước ≥ 20 giờ, tối đa 3 lần/7 ngày |
+| `extra_practice_completed` | +1 | Luyện thêm trong `random_practice`, `weak_words_practice`, `checkpoint_challenge`. Mỗi Meaning 1 lần/ngày, tối đa 10 LP/ngày, không áp dụng cho từ vừa học hôm đó |
+| Known check đúng | 0 | |
+
+- Đúng hay sai không đổi LP; chỉ cần đã thật sự trả lời (có submit). Chỉ reveal hoặc `unavailable` thì không được LP.
+- Một ngày UTC là **ngày học hợp lệ** khi tổng LP ≥ 5 (`minQualifiedDayLP`).
+
+### 14.2 Commit trả thêm
+
+```jsonc
+{ "...": "các field cũ",
+  "lp": { "earned": 18, "breakdown": { "newMeaningLP": 10, "dueReviewLP": 8, "extraPracticeLP": 0 },
+          "lpPolicyVersion": "lp_effort_trial_v1", "weeklyLP": 330, "lifetimeLP": 12468 },
+  "tier": { "level": 6, "key": "dedicated", "lifetimeActiveDays": 300,
+            "tierUps": [ { "level": 6, "key": "dedicated", "unlockedAt": "..." } ],
+            "nextTier": { "level": 7, "key": "lasting_mark", "minLifetimeLP": 20000, "minLifetimeActiveDays": 365 } },
+  "ranking": { "weeklyLP": 330, "listed": true } }
+```
+
+- `tier.level = 0`, `key = null` nghĩa là chưa mở Tier nào. Đừng hiển thị "Tier 0".
+- `tierUps` có thể có nhiều mốc trong một commit. Ăn mừng mốc cao nhất.
+- `nextTier = null` khi đã ở Tier cao nhất.
+- Retry commit trả đúng response cũ và không cộng thêm LP.
+- Màn kết quả session **không** hiển thị thứ hạng.
+
+### 14.3 Hồ sơ và quyền riêng tư
+
+- `GET /v1/me` thêm `username`, `avatarKey`, `usernameChangeAvailableAt`, `rankingIntroSeen`, `settings.leaderboardVisible` và `tierSummary: {level, key, lifetimeLP, lifetimeActiveDays}`.
+  - `usernameChangeAvailableAt = null` nghĩa là đổi tên được ngay.
+  - Tên tự sinh (`adjective_animal_NNNN`) đổi lần đầu được ngay; sau đó 30 ngày một lần.
+- `PUT /v1/me/profile {username?, avatarKey?}` trả `{username, avatarKey, usernameChangeAvailableAt}`.
+  - Username được lưu chữ thường. Hợp lệ khi dài 3–20 ký tự, gồm `a–z 0–9 _ .`, bắt đầu bằng chữ cái và không có `..`.
+  - Lỗi: `409 USERNAME_TAKEN`, `422 USERNAME_INVALID`, `422 USERNAME_NOT_ALLOWED`, `422 AVATAR_INVALID`, `429 USERNAME_CHANGE_TOO_SOON` (`details.availableAt`).
+- `PUT /v1/me/settings {leaderboardVisible: true|false}`.
+  - Chỉ gọi khi người dùng bấm **Tham gia**, hoặc bật/tắt trong Settings. Có hiệu lực ngay trên bảng.
+  - Mặc định là `false`.
+- `POST /v1/me/ranking/intro-seen` chỉ đánh dấu đã xem sheet, **không** bật tham gia.
+
+### 14.4 Tier
+
+`GET /v1/me/tier`:
+
+```jsonc
+{ "level": 3, "key": "building_up", "lifetimeLP": 12450, "lifetimeActiveDays": 86,
+  "nextTier": { "level": 4, "key": "steady_effort", "minLifetimeLP": 1500, "minLifetimeActiveDays": 90, "remainingLP": 0, "remainingActiveDays": 4 },
+  "minQualifiedDayLP": 5,
+  "milestones": [ { "level": 1, "key": "first_steps", "unlockedAt": "...", "source": "live" } ],
+  "tierPolicyVersion": "tier_lifetime_trial_v1" }
+```
+
+- Hiển thị hai thanh tiến độ riêng: LP và ngày. Không gộp thành một phần trăm.
+- Chỉ nói phần còn thiếu, không đếm ngược.
+- Tên, câu chuyện và hình Syllie của mỗi `key` nằm ở client, có bản en/vi.
+
+### 14.5 Bảng xếp hạng
+
+`GET /v1/ranking/meta` trả về:
+
+```jsonc
+{ "weekStart": "2026-11-09", "weekEndsAt": "2026-11-16T00:00:00.000Z", "rankingEnabled": true,
+  "rankingPolicyVersion": "...", "tierPolicyVersion": "...", "lpPolicyVersion": "...",
+  "tiers": [ { "level": 1, "key": "first_steps", "minLifetimeLP": 40, "minLifetimeActiveDays": 1 } ],
+  "minQualifiedDayLP": 5, "avatarKeys": [...], "reportReasons": [...], "usernameChangeDays": 30 }
+```
+
+Countdown reset tính từ `weekEndsAt` theo giờ thiết bị.
+
+`GET /v1/me/ranking` trả `{weekStart, weekEndsAt, weeklyLP, listed, position, tier, rankingPolicyVersion, tierPolicyVersion}`.
+
+- `position = null` khi chưa tham gia, bị ẩn hoặc tuần này chưa có LP.
+- `position.kind = "rank"`: hạng chính xác (`rank`) trong top 1.000.
+- `position.kind = "percentile"`: ước lượng "top `percentile`%", luôn kèm `estimated: true`. Ghi rõ là ước lượng.
+- `position.kind = "unranked"`: ở nửa dưới. Chỉ hiện LP tuần, không gắn nhãn thua kém.
+
+`GET /v1/ranking/leaderboard?view=top|around` trả `{weekStart, weekEndsAt, view, rows}`, mỗi dòng gồm `{rank, username, avatarKey, weeklyLP, lifetimeTier: {level, key}, isMe}`.
+
+- `top`: tối đa 100 dòng.
+- `around`: tối đa 5 dòng trên và 5 dòng dưới mình. Mảng rỗng nếu mình chưa có trên bảng.
+- Cùng điểm thì cùng `rank` (1, 2, 2, 4).
+- `rank = null` ở `around` khi ngoài top 1.000.
+
+`GET /v1/me/ranking/history?weeks=8` trả về:
+
+```jsonc
+{ "currentWeek": { "weekStart": "...", "weeklyLP": 120 },
+  "weeks": [ { "weekStart": "...", "weeklyLP": 300, "rank": 42 } ] }
+```
+
+- `weeks` gồm các tuần đã chốt, mới nhất trước.
+- Tuần không có LP vẫn có mặt, với `weeklyLP: 0`.
+- `rank = null` khi tuần đó không tham gia.
+
+### 14.6 Báo cáo
+
+`POST /v1/ranking/reports {username, reason}` → `202 {received: true}`.
+
+- `reason` là một trong `offensive_name | impersonation | suspicious_activity | other`.
+- Gọi từ thao tác nhấn giữ một dòng trên bảng. Chỉ báo cáo được người đang có trên bảng tuần này hoặc tuần trước; người khác trả `404`.
+- Tối đa 10 báo cáo mỗi ngày UTC (`429 REPORT_LIMIT_REACHED`). Báo cáo lặp lại cùng người trong cùng tuần được bỏ qua.
+
+### 14.7 Không làm
+
+- Không có push về Ranking hay Tier.
+- Không có countdown ranking trên Home.
+- Không đưa thay đổi thứ hạng vào kết quả session.

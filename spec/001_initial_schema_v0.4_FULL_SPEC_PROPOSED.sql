@@ -9,7 +9,14 @@ CREATE TABLE app_user (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     identity_subject TEXT NOT NULL UNIQUE,
     proficiency_level VARCHAR(2) CHECK (proficiency_level IN ('A1','A2','B1','B2','C1','C2')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Public identity for the ranking; generated on provisioning, never derived from the email.
+    username TEXT NOT NULL UNIQUE CHECK (username ~ '^[a-z][a-z0-9_.]{2,19}$' AND position('..' IN username) = 0),
+    username_generated BOOLEAN NOT NULL DEFAULT true,
+    username_changed_at TIMESTAMPTZ,
+    avatar_key VARCHAR(32) NOT NULL,
+    ranking_eligible BOOLEAN NOT NULL DEFAULT true,
+    ranking_intro_seen BOOLEAN NOT NULL DEFAULT false
 );
 
 -- A deleted account's access tokens stay valid until they expire; this stops them provisioning a new user.
@@ -32,6 +39,8 @@ CREATE TABLE user_settings (
     new_word_override SMALLINT CHECK (new_word_override >= 1),
     new_word_override_mode VARCHAR(32) CHECK (new_word_override_mode IN ('until_date','until_backlog_clear')),
     new_word_override_until TIMESTAMPTZ,
+    leaderboard_visible BOOLEAN NOT NULL DEFAULT false,
+    reviews_per_session SMALLINT CHECK (reviews_per_session BETWEEN 5 AND 50), -- NULL follows daily_new_word_goal
     CHECK ((new_word_override IS NULL) = (new_word_override_mode IS NULL)),
     CHECK ((new_word_override_until IS NOT NULL) = (new_word_override_mode IS NOT DISTINCT FROM 'until_date'))
 );
@@ -500,3 +509,112 @@ CREATE UNIQUE INDEX challenge_runs_open_key ON challenge_runs(user_id) WHERE sta
 CREATE INDEX idx_challenge_runs_open_expiry ON challenge_runs(expires_at) WHERE status IN ('issued','started');
 
 COMMIT;
+
+-- Ranking & Tier v1.2: LP ledger (source of truth) and the aggregates rebuilt from it.
+CREATE TABLE learning_point_awards (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    session_id UUID NOT NULL REFERENCES learning_sessions(id),
+    meaning_id UUID NOT NULL,
+    award_type VARCHAR(32) NOT NULL
+       CHECK (award_type IN ('new_meaning_completed','due_review_completed','extra_practice_completed')),
+    award_key TEXT NOT NULL,
+    points SMALLINT NOT NULL CHECK (points > 0),
+    awarded_at TIMESTAMPTZ NOT NULL,
+    scoring_day DATE NOT NULL,
+    week_start DATE NOT NULL,
+    lp_policy_version VARCHAR(40) NOT NULL,
+    content_provenance VARCHAR(16) NOT NULL CHECK (content_provenance IN ('catalog','custom_owned')),
+    UNIQUE (user_id, award_key),
+    CHECK (scoring_day = (awarded_at AT TIME ZONE 'UTC')::date),
+    CHECK (week_start = date_trunc('week', awarded_at AT TIME ZONE 'UTC')::date)
+);
+CREATE INDEX idx_learning_point_awards_user_meaning ON learning_point_awards(user_id, meaning_id, awarded_at);
+CREATE INDEX idx_learning_point_awards_user_day ON learning_point_awards(user_id, scoring_day);
+
+CREATE TABLE user_effort_totals (
+    user_id UUID PRIMARY KEY REFERENCES app_user(id),
+    lifetime_lp BIGINT NOT NULL DEFAULT 0 CHECK (lifetime_lp >= 0),
+    lifetime_active_days INTEGER NOT NULL DEFAULT 0 CHECK (lifetime_active_days >= 0),
+    tier_level SMALLINT NOT NULL DEFAULT 0 CHECK (tier_level BETWEEN 0 AND 7),
+    tier_policy_version VARCHAR(40) NOT NULL,
+    last_award_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Every UTC day with LP, including days below the qualifying threshold.
+CREATE TABLE user_effort_days (
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    scoring_day DATE NOT NULL,
+    earned_lp INTEGER NOT NULL CHECK (earned_lp > 0),
+    PRIMARY KEY (user_id, scoring_day)
+);
+
+CREATE TABLE user_tier_unlocks (
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    tier_level SMALLINT NOT NULL CHECK (tier_level BETWEEN 1 AND 7),
+    tier_key VARCHAR(32) NOT NULL,
+    unlocked_at TIMESTAMPTZ NOT NULL,
+    tier_policy_version VARCHAR(40) NOT NULL,
+    source VARCHAR(20) NOT NULL CHECK (source IN ('live','backfill','policy_migration')),
+    PRIMARY KEY (user_id, tier_level)
+);
+
+CREATE TABLE weekly_lp_scores (
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    week_start DATE NOT NULL CHECK (extract(isodow FROM week_start) = 1),
+    points BIGINT NOT NULL CHECK (points > 0),
+    last_award_at TIMESTAMPTZ NOT NULL,
+    listed BOOLEAN NOT NULL,
+    PRIMARY KEY (user_id, week_start)
+);
+CREATE INDEX idx_weekly_lp_scores_board ON weekly_lp_scores(week_start, points DESC, last_award_at, user_id) WHERE listed;
+
+CREATE TABLE weekly_rank_stats (
+    week_start DATE PRIMARY KEY CHECK (extract(isodow FROM week_start) = 1),
+    computed_at TIMESTAMPTZ NOT NULL,
+    total_listed INTEGER NOT NULL CHECK (total_listed >= 0),
+    top1000_min_points BIGINT,
+    histogram JSONB NOT NULL CHECK (jsonb_typeof(histogram) = 'object')
+);
+
+-- Weekly results only: no Tier column, Tier is lifetime.
+CREATE TABLE weekly_rank_snapshots (
+    week_start DATE NOT NULL CHECK (extract(isodow FROM week_start) = 1),
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    points BIGINT NOT NULL CHECK (points > 0),
+    rank BIGINT CHECK (rank >= 1),
+    listed_at_close BOOLEAN NOT NULL,
+    ranking_policy_version VARCHAR(40) NOT NULL,
+    closed_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (week_start, user_id),
+    CHECK ((rank IS NOT NULL) = listed_at_close)
+);
+CREATE INDEX idx_weekly_rank_snapshots_user ON weekly_rank_snapshots(user_id, week_start);
+
+CREATE TABLE user_reports (
+    id UUID PRIMARY KEY,
+    reporter_id UUID NOT NULL REFERENCES app_user(id),
+    target_user_id UUID NOT NULL REFERENCES app_user(id),
+    reason VARCHAR(32) NOT NULL CHECK (reason IN ('offensive_name','impersonation','suspicious_activity','other')),
+    week_start DATE NOT NULL CHECK (extract(isodow FROM week_start) = 1),
+    created_at TIMESTAMPTZ NOT NULL,
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    resolution VARCHAR(32) CHECK (resolution IN ('username_reset','ranking_ineligible','dismissed')),
+    CHECK (reporter_id <> target_user_id),
+    CHECK ((resolved_at IS NULL) = (resolution IS NULL))
+);
+CREATE UNIQUE INDEX user_reports_once ON user_reports(reporter_id, target_user_id, week_start);
+CREATE INDEX idx_user_reports_open ON user_reports(created_at) WHERE resolved_at IS NULL;
+CREATE INDEX idx_user_reports_reporter ON user_reports(reporter_id, created_at);
+
+CREATE TABLE ranking_eligibility_audit (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES app_user(id),
+    actor_id UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    eligible BOOLEAN NOT NULL,
+    reason TEXT NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 500),
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_ranking_eligibility_audit_user ON ranking_eligibility_audit(user_id, created_at);
