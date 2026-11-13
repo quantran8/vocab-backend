@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, or, sql, SQL } from 'drizzle-orm';
-import { CHECKPOINT_STATE, DEFAULT_ACCENT, NewWordOverrideMode, Skill, VALIDITY } from '../../../common/constants/domain';
+import { CHECKPOINT_STATE, NewWordOverrideMode, Skill, VALIDITY } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
 import { skillEvidence } from '../../../db/schema';
 import { MeaningOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { EvidenceRow } from '../../skill-verification/skill-evidence';
-import { openSkillIssuesSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
+import { learnedWithPronunciationSql, needPracticeWordsSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
 import { backlogSql, pendingCustomSql, remainingNewSql, scopeMembershipSql, unlearnedSql } from '../../review-load/repositories/review-scope.sql';
 
 export type LearnHomeRow = {
@@ -134,22 +134,8 @@ export class ProgressRepository {
   /** Mirrors deriveSkillStatus's needsPractice (latest skill issue not yet recovered) in one statement. */
   async wordStats(userId: string) {
     const { rows: [row] } = await this.db.execute<{ learnedWords: number; needPracticeWords: number }>(sql`
-      WITH learned AS (
-        SELECT wt.word_id, ump.meaning_id,
-          (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e
-           WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) AS pronunciation_id
-        FROM user_meaning_progress ump
-        JOIN meanings m ON m.id = ump.meaning_id
-        JOIN word_types wt ON wt.id = m.type_id
-        JOIN user_settings s ON s.user_id = ump.user_id
-        JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale
-        JOIN meaning_publications p ON p.id = a.publication_id
-        WHERE ump.user_id = ${userId}::uuid
-      ), open_issue AS (${openSkillIssuesSql(userId)})
-      SELECT count(DISTINCT l.word_id)::int AS "learnedWords",
-        count(DISTINCT l.word_id) FILTER (WHERE EXISTS (
-          SELECT 1 FROM open_issue e
-          WHERE e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id))::int AS "needPracticeWords"
+      WITH learned AS (${learnedWithPronunciationSql(userId)})
+      SELECT count(DISTINCT l.word_id)::int AS "learnedWords", ${needPracticeWordsSql(userId)} AS "needPracticeWords"
       FROM learned l`);
     return row;
   }

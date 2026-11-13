@@ -23,13 +23,13 @@ export interface MemoryDraft {
 export const isLightRetry = ({ outcome, attemptCount, hintCount }: Pick<MemoryFact, 'outcome' | 'attemptCount' | 'hintCount'>) =>
   outcome === OUTCOME.CORRECTED_AFTER_RETRY && attemptCount === POLICY.memory.lightRetryAttempts && hintCount === 0;
 
-const recallSignal = (fact: MemoryFact): MemorySignal => {
+const recallSignal = (fact: Pick<MemoryFact, 'outcome' | 'hintCount' | 'attemptCount'>): MemorySignal => {
   if (isLightRetry(fact)) return MEMORY_SIGNAL.ASSISTED_RECALL;
   if (fact.outcome !== OUTCOME.CORRECT) return MEMORY_SIGNAL.FAILED_RECALL;
   return fact.hintCount > 0 ? MEMORY_SIGNAL.ASSISTED_RECALL : MEMORY_SIGNAL.UNAIDED_RECALL;
 };
 
-const recognitionSignal = (fact: MemoryFact): MemorySignal =>
+const recognitionSignal = (fact: Pick<MemoryFact, 'outcome' | 'hintCount'>): MemorySignal =>
   fact.outcome === OUTCOME.CORRECT && fact.hintCount === 0 ? MEMORY_SIGNAL.RECOGNITION_SUCCESS : MEMORY_SIGNAL.FAILED_RECOGNITION;
 
 // Worst first: a wrong recall must not be hidden by a later success.
@@ -41,7 +41,8 @@ const SEVERITY: MemorySignal[] = [
   MEMORY_SIGNAL.RECOGNITION_SUCCESS,
 ];
 
-const signalOf = (fact: MemoryFact) => {
+/** The memory signal one answer gives; null for intents that say nothing about memory. */
+export const signalOf = (fact: Pick<MemoryFact, 'intent' | 'outcome' | 'hintCount' | 'attemptCount'>) => {
   if (fact.intent === ASSESSMENT_INTENT.MEANING_RECALL) return recallSignal(fact);
   return fact.intent === ASSESSMENT_INTENT.MEANING_RECOGNITION ? recognitionSignal(fact) : null;
 };

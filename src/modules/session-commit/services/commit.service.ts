@@ -14,8 +14,10 @@ import { lpAwards } from '../../learning-points/domain/lp-awards';
 import { nextTier, tierKey, unlockedBetween } from '../../learning-points/domain/tier';
 import { EffortRepository, EffortResult } from '../../learning-points/repositories/effort.repository';
 import { canonicalHash } from '../domain/canonical';
-import { CommitRepository, ProgressRow } from '../repositories/commit.repository';
-import { countedTasks, evaluateBatch, EvaluatedTask, evidenceDrafts, memoryDrafts, sessionResult, TargetRow } from '../domain/commit-evaluator';
+import { CommitRepository, PriorEvidence, ProgressRow, SKILL_SUMMARY_MODES } from '../repositories/commit.repository';
+import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, skillChanges } from '../domain/result-summary';
+import { EvidenceRow } from '../../skill-verification/skill-evidence';
+import { countedTasks, evaluateBatch, EvaluatedTask, evidenceDrafts, EvidenceRowDraft, LearnStepRow, memoryDrafts, sessionResult, TargetRow } from '../domain/commit-evaluator';
 
 // A word marked known with no check has no recall to judge; only a miss in a shared task undoes it.
 const SLIP_SIGNALS: string[] = [MEMORY_SIGNAL.FAILED_RECALL, MEMORY_SIGNAL.FAILED_RECOGNITION, MEMORY_SIGNAL.ASSISTED_RECALL];
@@ -83,11 +85,17 @@ export class CommitService {
 
     const newStates = this.applySrs(session.mode, memory, newMeaningIds, known, declared, progress, now);
     const learnedHere = new Set(newMeaningIds);
+    const drafts = evidenceDrafts(counted, targets);
+    const results = this.resultSummary({
+      mode: session.mode, sessionId, now, tasks, targets, steps, counted, drafts, memory, known, progress, newStates, learnedHere,
+      labels: new Labels(session.labels), evidence: session.evidence,
+    });
     const summary = {
       newWordGoalSlots: steps.length,
       knownMeanings: known.size,
       reviewedMeanings: session.mode === SESSION_MODE.DAILY ? memory.filter((m) => !learnedHere.has(m.meaningId)).length : 0,
       practiceTasks: tasks.length,
+      ...results.summary,
       // No pass mark: the counts only show what came back unaided; SRS already took every answer.
       ...(session.mode === SESSION_MODE.CHECKPOINT_CHALLENGE && {
         checkpoint: reviewResult(memory.length, memory.filter((m) => m.signal === MEMORY_SIGNAL.UNAIDED_RECALL).length),
@@ -96,10 +104,53 @@ export class CommitService {
     const response = { sessionId, status: SESSION_STATUS.COMMITTED, committedAt: now.toISOString(), summary, ...this.effortResponse(effort, now) };
     const viaTopics = new Map(steps.map((s) => [s.meaningId, s.viaTopicId ?? null]));
     const withScopeEvents = session.mode === SESSION_MODE.DAILY && steps.length > 0;
+    const withNeedPractice = SKILL_SUMMARY_MODES.includes(session.mode);
 
-    const stored = await this.write(tx, { userId, sessionId, now, requestHash, response, evaluated, counted, memory, newStates, newMeaningIds, viaTopics, targets, receiptMap, withScopeEvents });
+    const stored = await this.write(tx, {
+      userId, sessionId, now, requestHash, response, evaluated, drafts, memory, newStates, newMeaningIds, viaTopics, targets, receiptMap,
+      withScopeEvents, withNeedPractice, stats: results.stats,
+    });
+    const settled = withNeedPractice ? await this.repository.settleNeedPractice(tx, sessionId, userId) : stored;
     await this.repository.settleBacklog(tx, userId, now);
-    return stored;
+    return settled;
+  }
+
+  /** The results screen's groups (spec: Session Result Statistics). Every block is null outside its modes. */
+  private resultSummary(input: {
+    mode: string; sessionId: string; now: Date;
+    tasks: { id: string; ordinal: number }[]; targets: TargetRow[]; steps: LearnStepRow[];
+    counted: EvaluatedTask[]; drafts: EvidenceRowDraft[]; memory: MemoryDraft[]; known: Set<string>;
+    progress: Map<string, ProgressRow>; newStates: Map<string, SrsState>; learnedHere: Set<string>;
+    labels: Labels; evidence: PriorEvidence[];
+  }) {
+    const { mode, sessionId, now, tasks, targets, steps, counted, drafts, memory, known, progress, newStates, learnedHere, labels } = input;
+    const order = planOrder(tasks, targets, steps);
+    const none = { review: null, newWords: null, practice: null, skillChanges: null, needPractice: null, countedAsReview: null };
+
+    if (mode === SESSION_MODE.DAILY) {
+      const review = reviewSummary({ memory, progress, learnedHere, newStates, counted, targets, labels, order });
+      const newWords = newWordSummary({ steps, counted, targets, known, newStates, labels });
+      return {
+        summary: { ...none, review, newWords },
+        stats: { reviewTotal: review.total, reviewSolid: review.groups.solid.length, newTotal: newWords.total, newSmooth: newWords.groups.smooth.length },
+      };
+    }
+    if (!SKILL_SUMMARY_MODES.includes(mode as never)) return { summary: none, stats: null };
+
+    const before = Map.groupBy(input.evidence, (e) => `${e.skill}:${e.meaningId ?? e.pronunciationId}`) as Map<string, EvidenceRow[]>;
+    const sessionMeanings = new Set(targets.flatMap((t) => t.meaningId ?? []));
+    const practice = practiceSummary({ counted, drafts, before, labels, sessionMeanings });
+    const changes = skillChanges({ drafts, before, sessionId, now, labels, sessionMeanings });
+    return {
+      summary: {
+        ...none,
+        practice,
+        skillChanges: changes,
+        needPractice: { before: null, after: null },
+        countedAsReview: countedAsReview({ memory, progress, newStates, now, labels, order }),
+      },
+      stats: { practiceTotal: practice.total, practiceClean: practice.groups.clean.length, leveledUp: changes.leveledUp.length, needPracticeAfter: null },
+    };
   }
 
   private effortResponse(effort: EffortResult, now: Date) {
@@ -145,16 +196,17 @@ export class CommitService {
 
   private async write(tx: Tx, input: {
     userId: string; sessionId: string; now: Date; requestHash: string; response: object;
-    evaluated: EvaluatedTask[]; counted: EvaluatedTask[]; memory: MemoryDraft[]; newStates: Map<string, SrsState>; newMeaningIds: string[];
-    viaTopics: Map<string, string | null>; withScopeEvents: boolean;
+    evaluated: EvaluatedTask[]; drafts: EvidenceRowDraft[]; memory: MemoryDraft[]; newStates: Map<string, SrsState>; newMeaningIds: string[];
+    viaTopics: Map<string, string | null>; withScopeEvents: boolean; withNeedPractice: boolean; stats: object | null;
     targets: TargetRow[]; receiptMap: Map<string, { assessedAt: Date; accuracyScore: number | null }>;
   }) {
-    const { userId, sessionId, now, requestHash, response, evaluated, counted, memory, newStates, newMeaningIds, viaTopics, withScopeEvents, targets, receiptMap } = input;
+    const { userId, sessionId, now, requestHash, response, evaluated, drafts, memory, newStates, newMeaningIds, viaTopics, withScopeEvents, withNeedPractice, targets, receiptMap, stats } = input;
     const learnedHere = new Set(newMeaningIds);
     const data = JSON.stringify({
       rawEvents: evaluated.map((e) => ({ taskId: e.task.id, events: e.rawEvents })),
-      result: sessionResult(evaluated, targets, receiptMap),
-      evidence: evidenceDrafts(counted, targets).map((d) => ({
+      // `summary` keeps the headline counts after raw_events are purged, so sessions can be compared later.
+      result: { ...sessionResult(evaluated, targets, receiptMap), ...(stats && { summary: stats }) },
+      evidence: drafts.map((d) => ({
         id: newId(), task_id: d.taskId, target_ordinal: d.targetOrdinal, skill: d.skill, reasons: d.reasons,
         validity: d.validity, passed: d.passed, meaning_id: d.meaningId, pronunciation_id: d.pronunciationId,
         assessed_at: (d.receiptId && receiptMap.get(d.receiptId)?.assessedAt) || now,
@@ -175,6 +227,6 @@ export class CommitService {
       })),
       consumed: evaluated.flatMap((e) => e.receiptId ?? []),
     });
-    return this.repository.writeCommit(tx, { userId, sessionId, now, requestHash, response, data, withScopeEvents });
+    return this.repository.writeCommit(tx, { userId, sessionId, now, requestHash, response, data, withScopeEvents, withNeedPractice });
   }
 }

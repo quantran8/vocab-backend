@@ -175,6 +175,36 @@ export const OUTCOME = {
 } as const;
 export type Outcome = (typeof OUTCOME)[keyof typeof OUTCOME];
 
+// Commit summary groups (results screen). Values are the JSON keys of `summary.*.groups`, so they stay camelCase.
+export const REVIEW_GROUP = { SOLID: 'solid', SHAKY: 'shaky', RELEARN: 'relearn' } as const;
+export type ReviewGroup = (typeof REVIEW_GROUP)[keyof typeof REVIEW_GROUP];
+export const REVIEW_GROUPS = Object.values(REVIEW_GROUP);
+
+export const NEW_WORD_GROUP = { SMOOTH: 'smooth', RETRIED: 'retried', REVEALED: 'revealed', KNOWN: 'known' } as const;
+export type NewWordGroup = (typeof NEW_WORD_GROUP)[keyof typeof NEW_WORD_GROUP];
+export const NEW_WORD_GROUPS = Object.values(NEW_WORD_GROUP);
+
+export const PRACTICE_GROUP = { CLEAN: 'clean', HELPED: 'helped', MISSED: 'missed' } as const;
+export type PracticeGroup = (typeof PRACTICE_GROUP)[keyof typeof PRACTICE_GROUP];
+export const PRACTICE_GROUPS = Object.values(PRACTICE_GROUP);
+
+export const SKILL_CHANGE = { LEVELED_UP: 'leveledUp', CLEARED: 'cleared', PENDING_CONFIRM: 'pendingConfirm', REGRESSED: 'regressed' } as const;
+export type SkillChange = (typeof SKILL_CHANGE)[keyof typeof SKILL_CHANGE];
+export const SKILL_CHANGES = Object.values(SKILL_CHANGE);
+
+/** Why a word landed in a weaker group: the answer that decided it. Shown per word on the results sheet. */
+export const RESULT_CAUSE = {
+  HINTED: 'hinted',
+  RETRIED: 'retried',
+  PRIMED: 'primed',
+  RECOGNIZED_ONLY: 'recognized_only',
+  REVEALED: 'revealed',
+  OUT_OF_TRIES: 'out_of_tries',
+  WRONG_CHOICE: 'wrong_choice',
+  NOT_PASSED: 'not_passed',
+} as const;
+export type ResultCause = (typeof RESULT_CAUSE)[keyof typeof RESULT_CAUSE];
+
 export const CONTENT_STATUS = { DRAFT: 'draft', PUBLISHED: 'published', ARCHIVED: 'archived' } as const;
 export type ContentStatus = (typeof CONTENT_STATUS)[keyof typeof CONTENT_STATUS];
 export const EDITORIAL_STATE = { DRAFT: 'draft', APPROVED: 'approved' } as const;
