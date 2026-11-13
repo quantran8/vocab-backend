@@ -103,6 +103,21 @@ Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for 
 | Existing users | Migration 0017 gives each a generated username and a random avatar; `leaderboard_visible` is `false` for all. No LP is backfilled: there was no ledger | §7.2 |
 | Not implemented | Admin dashboard (P6), LP correction flow, simulation (P3), Tier-unlocked avatars, holding a changed username for 30 days | Open in §12, §14 |
 
+## Session result statistics
+
+Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo). Contract: `FRONTEND_FLOW.md` §15.
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| `shaky` **Learning** | Assisted recall (including a primed unaided recall) and recognition-only success share one group | Both left the word not proven: SRS either halves the interval or only grants the 24 h grace. Splitting them would show a difference the schedule does not make |
+| `known` outside the total **iOS** | `newWords.total` counts smooth + retried + revealed; known words show separately | Known words skip learning, so they say nothing about how smoothly learning went |
+| New-word edge cases **Learning** | "I know this word" (`knownLearnSteps`) is `known`, like a passed check. A recording `assessed_failed` is `retried`; `invalid`/`unavailable` is skipped. A word with no remaining task is `smooth` | The spec names only the check path and the unavailable case |
+| Labels read at commit | `lemma` and `gloss` come from the active publication for the learner's current `explanation_locale` (user override applied), read inside the existing `loadSession` statement; nothing is stored in the plan | Zero extra queries and no fallback for plans issued before the change; the spec asked for the commit-time locale anyway |
+| Per-word `cause` **iOS** | Weaker review and new-word items carry `cause` + `struggledAt`, from the answers that gave the deciding signal only (a later clean answer never explains a weak group) | A group name alone did not tell learners why a word was there; "Not solid yet" covers four different situations |
+| Practice unit | One `practice` item per skill evidence row, so a Weak task is one (word, skill) pair | Matches "a task with skill evidence"; a `match` produces several rows, all excluded as `weak_template` |
+| `pendingConfirm` | A clean pass on a skill whose issue is under 12 h old; `confirmableAt` = issue time + `POLICY.memory.recoveryHours` | Without it, a Weak session right after a bad Daily looks broken: the answer is right but the word stays flagged |
+| `needPractice` cost | `before` is computed inside `writeCommit` (pre-write snapshot); `after` is one extra statement for Random/Weak only that patches the stored response | Retries and commit-status must replay the first answer; the count stays constant in Meanings |
+
 ## Not implemented
 
 - **Curation admin:** closed. `/admin/collections`, `/admin/topics` and `/admin/topics/:id/meanings` manage the catalog; see "Admin CRUD" below.

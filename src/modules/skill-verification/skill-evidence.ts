@@ -163,19 +163,24 @@ function classify({ passed, reasons }: EvidenceRow): typeof PASS | SkillIssue | 
 
 const isIssue = (kind: ReturnType<typeof classify>) => kind === SKILL_ISSUE.FAILED || kind === SKILL_ISSUE.ASSISTED;
 
-function currentIssue(rows: EvidenceRow[]): SkillIssue | null {
+/** The open issue and when it was raised; recovery needs a clean pass at least `recoveryHours` later. */
+export function openIssue(rows: EvidenceRow[]): { issue: SkillIssue; at: Date } | null {
   const last = rows.findLastIndex((r) => isIssue(classify(r)));
   if (last < 0) return null;
-  const earliestRecovery = rows[last].committedAt.getTime() + POLICY.memory.recoveryHours * MS_PER_HOUR;
+  const at = rows[last].committedAt;
+  const earliestRecovery = at.getTime() + POLICY.memory.recoveryHours * MS_PER_HOUR;
   const recovered = rows.slice(last + 1).some((r) => classify(r) === PASS && r.committedAt.getTime() >= earliestRecovery);
   if (recovered) return null;
   const failedInSession = rows.some((r) => r.sessionId === rows[last].sessionId && classify(r) === SKILL_ISSUE.FAILED);
-  return failedInSession ? SKILL_ISSUE.FAILED : SKILL_ISSUE.ASSISTED;
+  return { issue: failedInSession ? SKILL_ISSUE.FAILED : SKILL_ISSUE.ASSISTED, at };
 }
+
+/** A clean, direct pass: the only row that can verify a skill or close an issue. */
+export const isCleanPass = (row: EvidenceRow) => classify(row) === PASS;
 
 /** Input: valid rows carrying only SKILL_STATE_REASONS for one skill + scope, oldest first. Rules: memory memory-assessment-rework. */
 export function deriveSkillStatus(allRows: EvidenceRow[]): SkillState {
-  const issue = currentIssue(allRows);
+  const issue = openIssue(allRows)?.issue ?? null;
   const needsPractice = issue !== null;
   const rows = allRows.filter((r) => [PASS, SKILL_ISSUE.FAILED].includes(classify(r) as string));
   const lastFailure = rows.findLastIndex((r) => classify(r) === SKILL_ISSUE.FAILED);

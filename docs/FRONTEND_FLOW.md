@@ -459,6 +459,8 @@ Response `200`:
   "summary": { "newWordGoalSlots": 5, "reviewedMeanings": 8, "practiceTasks": 30 } }
 ```
 
+`summary` còn có các khối cho màn kết quả (`review`, `newWords`, `practice`, `skillChanges`, `needPractice`, `countedAsReview`), xem §15. Bốn số `newWordGoalSlots`, `knownMeanings`, `reviewedMeanings`, `practiceTasks` giữ thêm một release rồi gỡ; client mới không đọc.
+
 Session `checkpoint_challenge` có thêm `summary.checkpoint: {reviewedCount, unaidedRecalledCount, needsReviewCount}`. Chỉ trả lời tự nhớ (không hint, không phải chọn đáp án) mới tính vào `unaidedRecalledCount`. Không có ngưỡng đạt: làm xong là challenge hoàn thành.
 
 **Idempotent:** commit lại cùng một body (giống từng byte sau khi chuẩn hoá JSON) trả về đúng response cũ. Vì vậy khi mất mạng hoặc không chắc đã commit, **retry nguyên body** an toàn. Body khác cho session đã commit → `409 SESSION_PAYLOAD_CONFLICT`.
@@ -908,7 +910,7 @@ Theo spec "Scope Completion & Review Load" v1.0. Mọi ngưỡng nằm trong `PO
 
 ### 13.4 Commit
 - Response có thêm `scopeEvents: {completedTopicIds, scopeExhausted, collectionCompleted}`. Trường này chỉ có giá trị ở commit làm số từ mới về 0. Retry trả đúng sự kiện cũ.
-- `summary.knownMeanings` là số từ qua "Tôi biết từ này".
+- `summary.knownMeanings` là số từ qua "Tôi biết từ này" (sắp gỡ; dùng `summary.newWords.groups.known`, §15).
 
 ### 13.5 Settings, giảm tạm thời, tạm dừng ôn
 - `PUT /v1/me/settings` nhận thêm `autoBalanceNewWords`. Đổi `dailyNewWordGoal` thì override bị hủy. `GET /v1/me` trả các cột mới trong `settings` và `reviewPauses: [{collectionId, pausedAt}]`.
@@ -1061,3 +1063,67 @@ Countdown reset tính từ `weekEndsAt` theo giờ thiết bị.
 - Không có push về Ranking hay Tier.
 - Không có countdown ranking trên Home.
 - Không đưa thay đổi thứ hạng vào kết quả session.
+
+## 15. Thống kê màn kết quả
+
+Spec: "Session Result Statistics v1" (repo iOS). Mọi nhóm do server suy ra từ đúng quyết định SRS / skill-verification của commit, client không tính lại. Mọi field mới đều có thể vắng ở session commit trước bản này: client decode optional.
+
+### 15.1 Item
+
+`{meaningId, wordId, lemma, gloss, nextReviewAt}`. `gloss` là `meaningText` theo `explanationLocale` của user **lúc commit** (có áp sửa riêng của user). `learnedAt` chỉ có ở `review`.
+
+Từ ở nhóm yếu hơn (`review.shaky` / `relearn`, `newWords.retried` / `revealed`) có thêm `cause`: câu trả lời đã quyết định nhóm, lấy cái nặng nhất, hoà thì task sớm hơn. `struggledAt` (`reading|writing|listening|speaking`) là kỹ năng của task đó, khi xác định được. Giá trị `cause` (client phải chịu được giá trị lạ):
+
+| `cause` | Nghĩa |
+| --- | --- |
+| `revealed` | Xem đáp án |
+| `out_of_tries` | Gõ/nhớ sai hết lượt |
+| `wrong_choice` | Chọn nhầm đáp án (kể cả đúng ở lần sau) |
+| `not_passed` | Ghi âm chấm chưa đạt |
+| `retried` | Phải thử lại mới đúng |
+| `hinted` | Dùng gợi ý |
+| `primed` | Vừa thấy từ ngay bước trước, nên lần đúng không được tính là tự nhớ |
+| `recognized_only` | Chỉ có task nhận ra (chọn), chưa có task tự nhớ | Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo plan. Nhóm lạ phải bỏ qua.
+
+### 15.2 Daily (gồm `reviewOnly`)
+
+```jsonc
+"summary": {
+  "review":   { "total": 9, "groups": { "solid": [Item], "shaky": [Item], "relearn": [Item] } },
+  "newWords": { "total": 4, "groups": { "smooth": [Item], "retried": [Item], "revealed": [Item], "known": [Item] } },
+  "practice": null, "skillChanges": null, "needPractice": null, "countedAsReview": null
+}
+```
+
+- `review`: theo tín hiệu nhớ mà SRS đã dùng. `solid` = nhớ không trợ giúp (streak +1). `shaky` = nhớ có trợ giúp (gồm nhớ đúng nhưng bị "primed"), hoặc chỉ nhận ra đúng. `relearn` = nhớ sai / nhận ra sai (12 h, lapse +1). Từ đến hạn mà không có task tạo tín hiệu nhớ thì không đếm. `total = solid + shaky + relearn`.
+- `newWords`: nhóm tệ nhất qua các task học mới của từ (không tính `known_check` và task đã bỏ qua). `smooth` = mọi task đúng ngay, không hint. `retried` = có hint hoặc đúng sau khi thử lại, hoặc ghi âm chấm chưa đạt. `revealed` = xem đáp án hoặc hết lượt. Ghi âm `unavailable` / không hợp lệ không hạ nhóm. `known` = qua known check hoặc bấm "Tôi biết từ này". `total = smooth + retried + revealed` (không gồm `known`).
+- `reviewOnly`: `newWords` là `{total: 0, groups: {…rỗng}}`, không null.
+- Daily hai commit (ôn → từ mới): client giữ `review` của commit đầu và ghép với `newWords` của commit sau.
+
+### 15.3 Random và Weak
+
+```jsonc
+"summary": {
+  "review": null, "newWords": null,
+  "practice": {
+    "total": 8,
+    "excluded": { "count": 2, "reasons": ["invalid_recording", "weak_template"] },
+    "groups": { "clean": [PItem], "helped": [PItem], "missed": [PItem] }
+  },
+  "skillChanges": {
+    "leveledUp": [CItem], "cleared": [CItem], "pendingConfirm": [CItem], "regressed": [CItem]
+  },
+  "needPractice": { "before": 11, "after": 8 },
+  "countedAsReview": [Item]
+}
+```
+
+- `PItem` = Item (không có `nextReviewAt`) + `skill` + `hadIssue` (cặp từ–kỹ năng có issue trước buổi; Weak dùng để gắn nhãn "hay sai gần đây" cho cặp không có issue). Mỗi dòng skill evidence là một lượt. `clean` = đúng, không lý do. `helped` = đúng nhờ hint / thử lại / primed. `missed` = sai hoặc xem đáp án.
+- `excluded`: lượt không đo kỹ năng: task không có evidence, hoặc evidence có `weak_template`, `quality_unqualified`, `audio_not_played`, `invalid_recording`; `unavailable` là ghi âm không làm được. `total` không gồm chúng.
+- `CItem` = Item (không có `nextReviewAt`) + `skill`, `from`, `to` (`not_verified|demonstrated|verified`). `leveledUp` khi `to` cao hơn `from`. `cleared` khi issue tắt. `pendingConfirm` khi có pass sạch trên kỹ năng đang có issue nhưng chưa đủ 12 h, kèm `confirmableAt`. `regressed` khi phát sinh issue `failed` mới. Một cặp có thể vừa `leveledUp` vừa `cleared`.
+- `needPractice`: cùng định nghĩa với `needPracticeWords` của `GET /v1/me/words/stats`, trước và sau commit.
+- `countedAsReview`: từ đến hạn nhớ không trợ giúp, được tính là buổi ôn (lịch dời theo SRS).
+
+### 15.4 Lưu trữ
+
+`learning_sessions.result.summary` giữ vài số nguyên để so sánh các buổi sau khi `raw_events` bị xoá: daily `{reviewTotal, reviewSolid, newTotal, newSmooth}`, Random/Weak `{practiceTotal, practiceClean, leveledUp, needPracticeAfter}`. Chưa có API đọc.

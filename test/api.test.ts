@@ -1077,9 +1077,17 @@ describe('Vocab Flow API', () => {
       const top = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=top').expect(200));
       const around = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=around').expect(200));
       const me = await h.countQueries(() => api('get', '/v1/me').expect(200));
+      // A review commit and a practice commit build the results summary for every Meaning.
+      h.clock.advance(24 * 5);
+      const review = await plan();
+      const reviewed = await h.countQueries(() => commit(review, answers(review)).expect(200));
+      h.clock.advance(24 * 5);
+      const practice = await plan('random_practice');
+      const practiced = await h.countQueries(() => commit(practice, answers(practice)).expect(200));
       return {
         plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries,
         ranking: ranking.queries, tier: tier.queries, top: top.queries, around: around.queries, me: me.queries,
+        reviewCommit: reviewed.queries, practiceCommit: practiced.queries,
       };
     };
 
