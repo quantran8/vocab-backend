@@ -148,6 +148,7 @@ jobs:
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
           ELEVENLABS_MODEL_ID: ${{ vars.ELEVENLABS_MODEL_ID }}
           ENABLE_CRON: ${{ vars.ENABLE_CRON }}
+          RANKING_ENABLED: ${{ vars.RANKING_ENABLED }}
           SEED_ADMIN_USERNAME: ${{ vars.SEED_ADMIN_USERNAME }}
           SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
         run: |
@@ -159,7 +160,7 @@ jobs:
                        ANTHROPIC_API_KEY LEXICAL_AI_MODEL \
                        ELEVENLABS_API_KEY ELEVENLABS_VOICE_ID ELEVENLABS_MODEL_ID \
                        SEED_ADMIN_USERNAME SEED_ADMIN_EMAIL \
-                       ENABLE_CRON BACKEND_IMAGE APP_PORT; do
+                       ENABLE_CRON RANKING_ENABLED BACKEND_IMAGE APP_PORT; do
               # Unset must be absent, not KEY="": optional providers switch on by presence, and "" beats zod defaults.
               if [ -z "${!key}" ]; then continue; fi
               # Compose reads env_file with dotenv rules: escape backslash first, then quote.

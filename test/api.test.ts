@@ -294,7 +294,9 @@ describe('Vocab Flow API', () => {
 
     it('returns an empty plan instead of an empty session', async () => {
       await api('get', '/v1/me').expect(200);
-      expect(await plan()).toEqual({ sessionId: null, mode: 'daily', steps: [] });
+      expect(await plan()).toEqual({
+        sessionId: null, mode: 'daily', newWords: { requested: 5, issued: 0, withheldReason: 'scope_exhausted' }, steps: [],
+      });
       expect(await h.count(learningSessions)).toBe(0);
     });
 
@@ -629,14 +631,15 @@ describe('Vocab Flow API', () => {
       expect(learnIds(await plan())).toHaveLength(1);
     });
 
-    it('C04 due Meaning outside active Topics is not selected', async () => {
+    // D2 replaced C04: review takes every learned Meaning, whatever the current scope.
+    it('a due Meaning outside the active Topics is still reviewed after a scope change', async () => {
       await onboard(words(4));
       await learnOne();
       const other = await h.seed('topic-b', words(1, 10));
       await api('put', '/v1/me/scope').send({ collectionId: other.collectionId, topicIds: [other.topicId] }).expect(200);
       h.clock.advance(100);
       const p = await plan();
-      expect(p.steps.filter((s: { phase?: string }) => s.phase === 'due_review')).toEqual([]);
+      expect(p.steps.filter((s: { phase?: string }) => s.phase === 'due_review').length).toBeGreaterThan(0);
     });
 
     it('due review reschedules a Meaning; C35 skill-only review leaves it due', async () => {
@@ -658,7 +661,19 @@ describe('Vocab Flow API', () => {
       expect(after.nextReviewAt.getTime()).toBeGreaterThan(h.clock.current.getTime());
     });
 
-    it('C24 non-Daily success does not extend the schedule', async () => {
+    it('C24 non-Daily success does not extend a word that is not due', async () => {
+      await onboard(words(4));
+      await learnOne();
+      const [before] = await progressRows();
+      h.clock.advance(1);
+      const p = await plan('random_practice');
+      await commit(p, answers(p)).expect(200);
+      const [after] = await progressRows();
+      expect(after.nextReviewAt).toEqual(before.nextReviewAt);
+      expect(after.lastReviewedAt?.getTime()).toBeGreaterThanOrEqual(before.lastReviewedAt!.getTime());
+    });
+
+    it('non-Daily unaided recall of a due word counts as its due review', async () => {
       await onboard(words(4));
       await learnOne();
       const [before] = await progressRows();
@@ -666,8 +681,12 @@ describe('Vocab Flow API', () => {
       const p = await plan('random_practice');
       await commit(p, answers(p)).expect(200);
       const [after] = await progressRows();
-      expect(after.nextReviewAt).toEqual(before.nextReviewAt);
-      expect(after.lastReviewedAt?.getTime()).toBeGreaterThanOrEqual(before.lastReviewedAt!.getTime());
+      const [observation] = await h.db.select().from(memoryObservations).where(eq(memoryObservations.sessionId, p.sessionId));
+      if (observation.signal === MEMORY_SIGNAL.UNAIDED_RECALL && !observation.isPrimed) {
+        expect(after.nextReviewAt > h.clock.now()).toBe(true);
+      } else {
+        expect(after.nextReviewAt).toEqual(before.nextReviewAt);
+      }
     });
 
     it('C36 C37 contextual items reach only learners at or above the rated level', async () => {
@@ -1052,10 +1071,19 @@ describe('Vocab Flow API', () => {
       const home = await h.countQueries(() => api('get', '/v1/me/learn-home').expect(200));
       const list = await h.countQueries(() => api('get', '/v1/me/words').expect(200));
       const path = await h.countQueries(() => api('get', '/v1/me/journey').expect(200));
-      return { plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries };
+      await api('put', '/v1/me/settings').send({ leaderboardVisible: true }).expect(200);
+      const ranking = await h.countQueries(() => api('get', '/v1/me/ranking').expect(200));
+      const tier = await h.countQueries(() => api('get', '/v1/me/tier').expect(200));
+      const top = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=top').expect(200));
+      const around = await h.countQueries(() => api('get', '/v1/ranking/leaderboard?view=around').expect(200));
+      const me = await h.countQueries(() => api('get', '/v1/me').expect(200));
+      return {
+        plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries,
+        ranking: ranking.queries, tier: tier.queries, top: top.queries, around: around.queries, me: me.queries,
+      };
     };
 
-    it('plan, commit, learn-home, me/words and me/journey stay constant from 1 to 20 Meanings', async () => {
+    it('plan, commit, learn-home, me/words, me/journey, me, ranking and tier stay constant from 1 to 20 Meanings', async () => {
       const small = await measure(1);
       const large = await measure(20);
       if (process.env.PRINT_QUERY_COUNTS) console.error('QUERY_COUNTS', JSON.stringify({ small, large }));

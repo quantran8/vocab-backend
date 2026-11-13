@@ -238,6 +238,7 @@ export async function createHarness(): Promise<Harness> {
     SEED_ADMIN_PASSWORD: SEED_ADMIN.PASSWORD,
     ALLOW_PLACEHOLDER_AUDIO: 'true',
     ENABLE_CRON: 'false',
+    RANKING_ENABLED: 'true',
   });
 
   const clock = new TestClock();

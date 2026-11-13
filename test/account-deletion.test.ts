@@ -2,7 +2,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { VALIDITY } from '../src/common/constants/domain';
 import { addHours } from '../src/common/constants/time';
 import {
-  appUsers, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations, learningSessions,
+  appUsers, checkpointChallengeMeanings, learningPointAwards, userReports, weeklyRankSnapshots, checkpointChallenges, deletedIdentities, exampleLocalizations, learningSessions,
   lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, speechAssessmentReceipts,
   skillEvidence, topics, userMeaningProgress, userSettings, words,
 } from '../src/db/schema';
@@ -61,6 +61,16 @@ describe('account deletion', () => {
     const [challenge] = await h.db.insert(checkpointChallenges).values({ userId, sequence: 1 }).returning({ id: checkpointChallenges.id });
     await h.db.insert(checkpointChallengeMeanings).values({ challengeId: challenge.id, meaningId: privateId });
     await learn(other);
+    // Ranking rows in both directions: reported by the other learner, and an eligibility change made about this one.
+    await api('put', '/v1/me/settings').send({ leaderboardVisible: true }).expect(200);
+    await api('put', '/v1/me/settings', other).send({ leaderboardVisible: true }).expect(200);
+    const { username } = (await api('get', '/v1/me').expect(200)).body;
+    await api('post', '/v1/ranking/reports', other).send({ username, reason: 'other' }).expect(202);
+    const admin = await h.token('admin-1', 'admin');
+    await api('put', `/admin/users/${userId}/ranking-eligibility`, admin).send({ eligible: true, reason: 'check' }).expect(200);
+    await h.db.insert(weeklyRankSnapshots).values({
+      weekStart: '2026-10-26', userId, points: 5, rank: 1, listedAtClose: true, rankingPolicyVersion: 'ranking_v1', closedAt: h.clock.now(),
+    });
     return { privateId: privateId as string, sharedId: shared.meaningId as string, sessionId };
   }
 
@@ -88,6 +98,7 @@ describe('account deletion', () => {
   it('removes every row of the account and its identity', async () => {
     const { sessionId } = await buildAccount();
     expect(await rowsReferencing(userId)).toBeGreaterThan(0);
+    expect(await h.count(learningPointAwards, eq(learningPointAwards.userId, userId))).toBeGreaterThan(0);
 
     const { body } = await api('delete', '/v1/me').expect(200);
 
@@ -98,6 +109,7 @@ describe('account deletion', () => {
     expect(await h.count(learningSessions, eq(learningSessions.id, sessionId))).toBe(0);
     expect(await h.count(speechAssessmentReceipts, eq(speechAssessmentReceipts.sessionId, sessionId))).toBe(0);
     expect(await h.count(checkpointChallenges)).toBe(0);
+    expect(await h.count(userReports)).toBe(0);
     expect(await h.count(topics, eq(topics.slug, userId))).toBe(0);
   });
 

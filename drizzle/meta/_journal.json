@@ -17,6 +17,9 @@
     { "idx": 12, "version": "7", "when": 1761868800012, "tag": "0012_evidence_reason_retried", "breakpoints": true },
     { "idx": 13, "version": "7", "when": 1761868800013, "tag": "0013_meaning_popularity", "breakpoints": true },
     { "idx": 14, "version": "7", "when": 1761868800014, "tag": "0014_weekly_session_goal", "breakpoints": true },
-    { "idx": 15, "version": "7", "when": 1761868800015, "tag": "0015_challenge_map", "breakpoints": true }
+    { "idx": 15, "version": "7", "when": 1761868800015, "tag": "0015_challenge_map", "breakpoints": true },
+    { "idx": 16, "version": "7", "when": 1761868800016, "tag": "0016_scope_review_load", "breakpoints": true },
+    { "idx": 17, "version": "7", "when": 1761868800017, "tag": "0017_ranking_tier", "breakpoints": true },
+    { "idx": 18, "version": "7", "when": 1761868800018, "tag": "0018_reviews_per_session", "breakpoints": true }
   ]
 }

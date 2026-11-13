@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq, sql } from 'drizzle-orm';
-import { MEMORY_SIGNAL } from '../../../common/constants/domain';
+import { MEMORY_SIGNAL, NewWordsBlockedReason } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
-import { checkpointChallenges, userSettings } from '../../../db/schema';
+import { checkpointChallenges } from '../../../db/schema';
+import { newWordsBlockedSql } from '../../review-load/repositories/review-scope.sql';
 import { JourneyChallenge, JourneySession, JourneyWindow } from '../domain/journey';
 
 @Injectable()
@@ -41,12 +42,11 @@ export class JourneyRepository {
     return rows;
   }
 
-  async weeklyGoal(userId: string) {
-    const [row] = await this.db
-      .select({ goal: userSettings.weeklySessionGoal })
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId));
-    return row?.goal;
+  async goalState(userId: string) {
+    const { rows: [row] } = await this.db.execute<{ goal: number; newWordsBlockedReason: NewWordsBlockedReason | null }>(sql`
+      SELECT us.weekly_session_goal::int AS goal, ${newWordsBlockedSql(userId, sql`us.explanation_locale`)} AS "newWordsBlockedReason"
+      FROM user_settings us WHERE us.user_id = ${userId}::uuid`);
+    return row;
   }
 
   /** Recall counts per completed review session. */

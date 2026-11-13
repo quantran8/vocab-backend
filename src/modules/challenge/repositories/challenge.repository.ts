@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, lte, SQL, sql } from 'drizzle-orm';
-import { CHALLENGE_OPEN_STATUSES, CHALLENGE_ROLE, CHALLENGE_RUN_STATUS, ChallengeRunStatus } from '../../../common/constants/domain';
+import { CHALLENGE_OPEN_STATUSES, CHALLENGE_ROLE, CHALLENGE_RUN_STATUS, ChallengeRunStatus, NewWordsBlockedReason } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate, Tx } from '../../../db/db';
 import { challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns } from '../../../db/schema';
+import { newWordsBlockedSql } from '../../review-load/repositories/review-scope.sql';
 import { ChapterSummary } from '../domain/challenge-map';
 import { Slot } from '../domain/chapter-content';
 import { RunPlan, SlotContent } from '../domain/match-madness';
@@ -77,6 +78,7 @@ export class ChallengeRepository {
       locale: string; chapters: ChapterSummary[]; activeSlots: SlotRow[]; candidates: CandidateRow[];
       /** Only when the active chapter's frozen locale differs from the current one. */
       activeCandidates: CandidateRow[] | null;
+      newWordsBlockedReason: NewWordsBlockedReason | null;
     }>(sql`
       WITH settings AS (SELECT explanation_locale AS locale FROM user_settings WHERE user_id = ${userId}::uuid),
       active AS (
@@ -99,7 +101,8 @@ export class ChallengeRepository {
         COALESCE((SELECT ${slotsOf(userId, sql`active.id`, sql`active.locale`)} FROM active), '[]'::json) AS "activeSlots",
         ${asJsonArray(unallocated(userId, sql`(SELECT locale FROM settings)`))} AS candidates,
         CASE WHEN (SELECT locale FROM active) IS DISTINCT FROM (SELECT locale FROM settings)
-          THEN ${asJsonArray(unallocated(userId, sql`(SELECT locale FROM active)`))} END AS "activeCandidates"`);
+          THEN ${asJsonArray(unallocated(userId, sql`(SELECT locale FROM active)`))} END AS "activeCandidates",
+        ${newWordsBlockedSql(userId, sql`(SELECT locale FROM settings)`)} AS "newWordsBlockedReason"`);
     return row;
   }
 

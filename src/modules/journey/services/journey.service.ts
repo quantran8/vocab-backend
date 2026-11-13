@@ -14,10 +14,10 @@ export class JourneyService {
     const window = journeyWindow(challenges, opts);
     const reviewed = challenges.filter((c) =>
       c.state === CHECKPOINT_STATE.COMPLETED && c.completedSessionId && c.sequence >= window.lo && c.sequence <= window.hi);
-    const [sessions, counts, goal] = await Promise.all([
+    const [sessions, counts, state] = await Promise.all([
       this.repository.sessions(userId, window),
       this.repository.reviewCounts(reviewed.map((c) => c.completedSessionId!)),
-      this.repository.weeklyGoal(userId),
+      this.repository.goalState(userId),
     ]);
     const bySession = new Map(counts.map((c) => [c.sessionId, reviewResult(c.reviewed, c.unaided)]));
     const results = new Map(reviewed.flatMap((c) => {
@@ -25,6 +25,9 @@ export class JourneyService {
       return result ? [[c.id, result] as const] : [];
     }));
     const fallbackSize = POLICY.checkpoint.defaultSessionsPerChallenge;
-    return buildJourney({ window, weeklyGoal: goal ?? fallbackSize, fallbackSize, challenges, sessions, results });
+    return {
+      ...buildJourney({ window, weeklyGoal: state?.goal ?? fallbackSize, fallbackSize, challenges, sessions, results }),
+      newWordsBlockedReason: state?.newWordsBlockedReason ?? null,
+    };
   }
 }

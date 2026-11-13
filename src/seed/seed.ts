@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { AppConfig } from '../config/app-config';
 import { DB, Db } from '../db/db';
+import { AVATAR_KEY } from '../common/constants/domain';
 import { appUsers } from '../db/schema';
 import { AuthProvider } from '../modules/auth/providers/auth.provider';
 import { seedAdmin } from './seed-admin';
@@ -17,7 +18,9 @@ async function main() {
   await seedDemoContent(db);
   await db
     .insert(appUsers)
-    .values(DEMO_USERS.map(([identitySubject, level]) => ({ identitySubject, proficiencyLevel: level })))
+    .values(DEMO_USERS.map(([identitySubject, level]) => ({
+      identitySubject, proficiencyLevel: level, username: identitySubject.replace('-', '_'), avatarKey: AVATAR_KEY.SYLLIE_SUNNY,
+    })))
     .onConflictDoNothing();
   await app.close();
 }

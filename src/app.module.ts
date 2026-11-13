@@ -63,18 +63,27 @@ import { JourneyController } from './modules/journey/controllers/journey.control
 import { JourneyRepository } from './modules/journey/repositories/journey.repository';
 import { JourneyService } from './modules/journey/services/journey.service';
 import { ChallengeController } from './modules/challenge/controllers/challenge.controller';
+import { ReviewLoadController } from './modules/review-load/controllers/review-load.controller';
+import { ReviewLoadRepository } from './modules/review-load/repositories/review-load.repository';
+import { ReviewLoadService } from './modules/review-load/services/review-load.service';
 import { ChallengeRepository } from './modules/challenge/repositories/challenge.repository';
 import { ChallengeMapService } from './modules/challenge/services/challenge-map.service';
 import { ChallengeRunService } from './modules/challenge/services/challenge-run.service';
 import { HealthController } from './modules/health/health.controller';
+import { AdminRankingController } from './modules/admin/controllers/admin-ranking.controller';
+import { AdminRankingService } from './modules/admin/services/admin-ranking.service';
+import { EffortRepository } from './modules/learning-points/repositories/effort.repository';
+import { MeRankingController, RankingController } from './modules/ranking/controllers/ranking.controller';
+import { RankingRepository } from './modules/ranking/repositories/ranking.repository';
+import { RankingService } from './modules/ranking/services/ranking.service';
 
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, CustomWordsController, AdminController,
-    AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController,
-    HealthController,
+    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
+    AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController,
+    MeRankingController, RankingController, HealthController,
   ],
   providers: [
     UserIdCache, UserProvisioningRepository, SpeechRepository,
@@ -89,7 +98,8 @@ import { HealthController } from './modules/health/health.controller';
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
-    CustomWordsRepository, CustomWordsService, CustomWordsWorker,
+    CustomWordsRepository, CustomWordsService, CustomWordsWorker, ReviewLoadRepository, ReviewLoadService,
+    EffortRepository, RankingRepository, RankingService, AdminRankingService,
   ],
 })
 export class AppModule {}

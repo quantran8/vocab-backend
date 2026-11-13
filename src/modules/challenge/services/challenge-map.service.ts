@@ -33,6 +33,7 @@ export class ChallengeMapService {
         eligibleNewCount: eligibleCount(state.candidates),
         requiredNewCount: challenge.chapterNewMeaningCount,
       }),
+      newWordsBlockedReason: state.newWordsBlockedReason,
     };
   }
 }

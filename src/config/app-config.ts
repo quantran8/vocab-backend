@@ -19,6 +19,8 @@ const envSchema = z.object({
   ELEVENLABS_MODEL_ID: z.string().optional(),
   ALLOW_PLACEHOLDER_AUDIO: z.stringbool().default(false),
   ENABLE_CRON: z.stringbool().default(true),
+  // Leaderboard launch gate (Ranking spec R14); LP and Tier work either way.
+  RANKING_ENABLED: z.stringbool().default(false),
   SEED_ADMIN_USERNAME: z.string().trim().toLowerCase().min(1).optional(),
   SEED_ADMIN_EMAIL: z.string().trim().toLowerCase().pipe(z.email()).optional(),
   SEED_ADMIN_PASSWORD: z.string().optional(),
@@ -49,6 +51,7 @@ export class AppConfig {
   readonly elevenLabsModelId = this.env.ELEVENLABS_MODEL_ID;
   readonly allowPlaceholderAudio = this.env.ALLOW_PLACEHOLDER_AUDIO;
   readonly enableCron = this.env.ENABLE_CRON;
+  readonly rankingEnabled = this.env.RANKING_ENABLED;
   readonly seedAdminUsername = this.env.SEED_ADMIN_USERNAME;
   readonly seedAdminEmail = this.env.SEED_ADMIN_EMAIL;
   readonly seedAdminPassword = this.env.SEED_ADMIN_PASSWORD;

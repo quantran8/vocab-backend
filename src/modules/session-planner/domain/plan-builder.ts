@@ -22,6 +22,8 @@ export interface PlanInput {
   proficiency: string | null;
   // Set: one task per target, each training one of these skills. Unset: mixed practice.
   skills?: Skill[];
+  // Daily: put an optional recall before each Learn card ("I know this").
+  knownCheck?: boolean;
   ctx: ResolveContext;
   rng: Rng;
 }
@@ -33,6 +35,9 @@ export interface PlannedLearn {
   meaningId: string;
   card: Record<string, unknown>;
   firstRecallTaskId: string;
+  knownCheckTaskId?: string;
+  /** New-practice tasks that test only this Meaning; a learner who passed the known check may skip them. */
+  skippableTaskIds?: string[];
 }
 
 export interface PlannedTask {
@@ -256,9 +261,13 @@ export function buildPlan(input: PlanInput): PlannedStep[] {
   for (const slot of planNewMeanings(learnable.length, input.rng)) {
     const target = learnable[slot.meaningIndex];
     if (slot.kind === 'learn') {
+      // Placed right before the card, so nothing has shown the answer yet.
+      const check = input.knownCheck ? buildTypingRecall(target, input.ctx) : null;
+      const knownCheckTaskId = check ? addTask(check, TASK_PHASE.KNOWN_CHECK).id : undefined;
       const learn: PlannedLearn = {
         kind: 'learn', id: newId(), ordinal: steps.length, meaningId: target.meaningId,
         card: buildCard(target, input.ctx), firstRecallTaskId: '',
+        ...(knownCheckTaskId && { knownCheckTaskId }),
       };
       steps.push(learn);
       learnSteps.set(slot.meaningIndex, learn);
@@ -272,6 +281,28 @@ export function buildPlan(input: PlanInput): PlannedStep[] {
       learnSteps.get(slot.meaningIndex)!.firstRecallTaskId = planned.id;
     }
   }
+  if (input.knownCheck) markSkippable(steps, learnable);
   markPriming(steps);
   return steps;
+}
+
+function markSkippable(steps: PlannedStep[], learnable: MeaningSnapshot[]) {
+  const owners = new Map<string, Set<string>>();
+  for (const target of learnable) {
+    for (const id of [target.meaningId, ...target.pronunciations.map((p) => p.id)]) {
+      owners.set(id, (owners.get(id) ?? new Set()).add(target.meaningId));
+    }
+  }
+  const skippable = new Map<string, string[]>();
+  for (const step of steps) {
+    if (step.kind !== 'task' || step.phase !== TASK_PHASE.NEW_PRACTICE) continue;
+    const meanings = new Set(step.task.targets.flatMap((t) => [...(owners.get(t.meaningId ?? t.pronunciationId ?? '') ?? [])]));
+    // Only a task about one Meaning can go; a match pairs several and stays for the others.
+    if (meanings.size !== 1) continue;
+    const [meaningId] = meanings;
+    skippable.set(meaningId, [...(skippable.get(meaningId) ?? []), step.id]);
+  }
+  for (const step of steps) {
+    if (step.kind === 'learn' && step.knownCheckTaskId) step.skippableTaskIds = skippable.get(step.meaningId) ?? [];
+  }
 }

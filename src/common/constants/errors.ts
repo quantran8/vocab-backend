@@ -35,6 +35,14 @@ export const ERROR = {
   CHALLENGE_CONTENT_UNAVAILABLE: { status: 409, retryable: false },
   CHALLENGE_RUN_EXPIRED: { status: 410, retryable: false },
   CHALLENGE_INVALID_EVENTS: { status: 422, retryable: false },
+  REVIEW_PAUSE_ACTIVE_COLLECTION: { status: 422, retryable: false },
+  RANKING_DISABLED: { status: 403, retryable: false },
+  USERNAME_TAKEN: { status: 409, retryable: false },
+  USERNAME_INVALID: { status: 422, retryable: false },
+  USERNAME_NOT_ALLOWED: { status: 422, retryable: false },
+  AVATAR_INVALID: { status: 422, retryable: false },
+  USERNAME_CHANGE_TOO_SOON: { status: 429, retryable: false },
+  REPORT_LIMIT_REACHED: { status: 429, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;
