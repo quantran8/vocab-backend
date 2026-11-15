@@ -129,7 +129,7 @@ describe('custom words', () => {
     it('answers 409 when an admin creates a lemma that exists, in any case', async () => {
       await h.seed('a', [seedWord(1, { lemma: 'unique', example: 'Use unique here.' })]);
       const admin = await h.token('admin', 'admin');
-      const body = { language: 'en', lemma: 'UNIQUE', types: [{ partOfSpeech: 'noun', pronunciations: [], meanings: [{ examples: [] }] }] };
+      const body = { language: 'en', lemma: 'UNIQUE', types: [{ partOfSpeech: 'noun', meanings: [{ pronunciations: [], examples: [] }] }] };
       await api('post', '/admin/words', admin).send(body).expect(409);
       await api('post', '/admin/words', admin).send({ ...body, homographKey: 'unique-2' }).expect(201);
     });
@@ -684,17 +684,20 @@ describe('custom words', () => {
       expect(JSON.stringify(published.snapshot)).toContain('https://cdn.example.invalid/tts/fake-voice/en-US/');
     });
 
-    it('does not pay again for a second sense of the same part of speech', async () => {
+    it('voices each sense from its own IPA, and pays once per sound', async () => {
       await addWord('serendipity');
       const { draftId } = await lookup('serendipity', auth, 'another sense');
-      const verbDraft = await add({ draftId }).expect(201);
-      expect(h.tts.calls).toHaveLength(2);
+      const sameSound = await add({ draftId }).expect(201);
+      expect(h.tts.calls).toEqual(['serendipity']);
+      expect(sameSound.body.added).toBe(true);
 
-      const noun = await lookup('serendipity', auth, 'third sense');
-      await h.db.execute(sql`UPDATE lexical_drafts SET payload = jsonb_set(payload, '{senses,0,partOfSpeech}', '"noun"') WHERE id = ${noun.draftId}::uuid`);
-      await add({ draftId: noun.draftId }).expect(201);
-      expect(h.tts.calls).toHaveLength(2);
-      expect(verbDraft.body.added).toBe(true);
+      h.lexical.ipa = '/ˌsɛr.ənˈdɪp.ɪ.ti/';
+      const other = await lookup('serendipity', auth, 'third sense');
+      const { meaningId } = (await add({ draftId: other.draftId }).expect(201)).body;
+      expect(h.tts.calls).toEqual(['serendipity', 'ˌsɛr.ənˈdɪp.ɪ.ti']);
+      const own = await h.first(pronunciations, eq(pronunciations.meaningId, meaningId)) as { ipa: string; audioAssetKey: string };
+      expect(own.ipa).toBe('/ˌsɛr.ənˈdɪp.ɪ.ti/');
+      expect(own.audioAssetKey).toContain('/tts/fake-voice/en-US/');
     });
 
     it('adds the word when TTS fails, then repairs it through the worker', async () => {

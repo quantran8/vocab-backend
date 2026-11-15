@@ -2,12 +2,13 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { AppModule } from '../app.module';
-import { CefrLevel, DEFAULT_ACCENT, DEFAULT_LOCALE, EDITORIAL_STATE, LEARNING_LANGUAGE, PartOfSpeech } from '../common/constants/domain';
+import { CefrLevel, DEFAULT_ACCENT, DEFAULT_LOCALE, EDITORIAL_STATE, FSRS_GRADE, LEARNING_LANGUAGE, PartOfSpeech } from '../common/constants/domain';
 import { DB, Db } from '../db/db';
 import { meaningExamples, meaningLocalizations, meanings, userMeaningProgress, words, wordTypes } from '../db/schema';
 import { AdminService } from '../modules/admin/services/admin.service';
 import { AdminWordsService } from '../modules/admin/services/admin-words.service';
 import { PublicationService } from '../modules/admin/services/publication.service';
+import { initialState } from '../modules/memory-srs/fsrs';
 
 interface ExtraSense {
   lemma: string;
@@ -76,7 +77,7 @@ async function main() {
     const key = `${sense.lemma}:${sense.partOfSpeech}`;
     let typeId = typeIdOf.get(key);
     if (!typeId) {
-      typeId = (await adminWords.createType(wordId, { partOfSpeech: sense.partOfSpeech, pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: sense.ipa }], meanings: [] })).id;
+      typeId = (await adminWords.createType(wordId, { partOfSpeech: sense.partOfSpeech, meanings: [] })).id;
       typeIdOf.set(key, typeId);
     }
     const start = sense.example.indexOf(sense.target);
@@ -84,6 +85,8 @@ async function main() {
     const { id: meaningId } = await adminWords.createMeaning(typeId, {
       cefrLevel: sense.cefrLevel,
       coreDefinition: sense.coreDefinition,
+      // Each sense carries its own IPA: another sense of the spelling may sound different.
+      pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: sense.ipa }],
       examples: [{ sourceText: sense.example, targetLocator: { start, end: start + sense.target.length } }],
     });
     created.push({ meaningId, sense });
@@ -113,9 +116,10 @@ async function main() {
       .where(eq(userMeaningProgress.userId, userId))
       .limit(1);
     const now = new Date();
+    const { stability, difficulty } = initialState({ grade: FSRS_GRADE.GOOD, weight: 1 }, now);
     await db
       .insert(userMeaningProgress)
-      .values(created.map(({ meaningId }) => ({ userId, meaningId, learnedAt: now, nextReviewAt: now, intervalHours: 24, schedulerVersion })))
+      .values(created.map(({ meaningId }) => ({ userId, meaningId, learnedAt: now, nextReviewAt: now, stability, difficulty, schedulerVersion })))
       .onConflictDoNothing();
   }
   console.log(`Seeded ${created.length} senses`);

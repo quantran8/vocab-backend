@@ -48,11 +48,11 @@ export async function seedTopic({ db, admin, publications }: SeedServices, slug:
       lemma: word.lemma,
       types: [{
         partOfSpeech: word.partOfSpeech,
-        pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: word.ipa, audioAssetKey: word.audioUrl }],
         meanings: [{
           cefrLevel: word.cefrLevel as never,
           coreDefinition: word.definitionText,
           popularity: word.popularity,
+          pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: word.ipa, audioAssetKey: word.audioUrl }],
           examples: [{ sourceText: word.example, targetLocator: { start, end: start + word.lemma.length } }],
         }],
       }],
@@ -67,7 +67,7 @@ export async function seedTopic({ db, admin, publications }: SeedServices, slug:
     await publications.publish(meaning.id, DEFAULT_LOCALE);
     meaningIds.push(meaning.id);
     wordIds.push(created.wordId);
-    pronunciationIds.push(created.types[0].pronunciations[0].id);
+    pronunciationIds.push(meaning.pronunciations[0].id);
   }
 
   const [{ top }] = await db.select({ top: max(topicMeanings.curatedRank) }).from(topicMeanings).where(eq(topicMeanings.topicId, topic.id));

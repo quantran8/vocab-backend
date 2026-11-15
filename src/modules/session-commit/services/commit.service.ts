@@ -6,7 +6,7 @@ import { newId } from '../../../common/ids';
 import { Tx } from '../../../db/db';
 import { reviewResult } from '../../journey/domain/journey';
 import { MemoryDraft } from '../../memory-srs/memory-reducer';
-import { applyDailyDue, applyNonDaily, initialKnownState, initialState, SrsState } from '../../memory-srs/srs';
+import { applyReview, initialState, knownState, ReviewOutcome, SrsState } from '../../memory-srs/fsrs';
 import { CommitBody } from '../../practice-evaluator/events';
 import { AppConfig } from '../../../config/app-config';
 import { POLICY } from '../../../config/policy';
@@ -83,7 +83,7 @@ export class CommitService {
     const awards = lpAwards({ mode: session.mode, now, issuedAt: session.issuedAt, evaluated, targets, newMeaningIds, known, progress, ...session.lp });
     const effort = await this.effort.record(tx, { userId, sessionId, awards, now });
 
-    const newStates = this.applySrs(session.mode, memory, newMeaningIds, known, declared, progress, now);
+    const newStates = this.applySrs(memory, newMeaningIds, known, declared, progress, now);
     const learnedHere = new Set(newMeaningIds);
     const drafts = evidenceDrafts(counted, targets);
     const results = this.resultSummary({
@@ -174,8 +174,9 @@ export class CommitService {
     if (!(await this.repository.completeChallenge(tx, challengeId, session.userId, session.id))) throw new ApiError('SESSION_STALE', 'Challenge already completed');
   }
 
-  private applySrs(mode: string, memory: MemoryDraft[], newMeaningIds: string[], known: Set<string>, declared: Set<string>, progress: Map<string, ProgressRow>, now: Date) {
+  private applySrs(memory: MemoryDraft[], newMeaningIds: string[], known: Set<string>, declared: Set<string>, progress: Map<string, ProgressRow>, now: Date) {
     const observations = new Map(memory.map((m) => [m.meaningId, m]));
+    const outcome = (m: MemoryDraft | undefined): ReviewOutcome | undefined => (m?.grade ? { grade: m.grade, weight: m.weight } : undefined);
     const states = new Map<string, SrsState>();
     for (const id of newMeaningIds) {
       // A later slip in the same session (a shared task) falls back to the normal first schedule.
@@ -183,13 +184,13 @@ export class CommitService {
       const stillKnown = declared.has(id)
         ? !observation || SLIP_SIGNALS.every((signal) => signal !== observation.signal)
         : known.has(id) && observation?.signal === MEMORY_SIGNAL.UNAIDED_RECALL && !observation.isPrimed;
-      states.set(id, stillKnown ? initialKnownState(now) : initialState(observation, now));
+      states.set(id, stillKnown ? knownState(now) : initialState(outcome(observation), now));
     }
     for (const observation of memory) {
       const current = progress.get(observation.meaningId);
-      if (!current) continue;
-      const apply = mode === SESSION_MODE.DAILY ? applyDailyDue : applyNonDaily;
-      states.set(observation.meaningId, apply(current, observation, now));
+      const review = outcome(observation);
+      // No usable evidence leaves the state, last review included, as it was.
+      if (current && review) states.set(observation.meaningId, applyReview(current, review, now));
     }
     return states;
   }
@@ -212,7 +213,9 @@ export class CommitService {
         assessed_at: (d.receiptId && receiptMap.get(d.receiptId)?.assessedAt) || now,
         assessment_receipt_id: d.receiptId ?? null, evaluator_version: d.evaluatorVersion,
       })),
-      memory: memory.map((m) => ({ meaning_id: m.meaningId, signal: m.signal, is_primed: m.isPrimed, source_task_ids: m.sourceTaskIds })),
+      memory: memory.map((m) => ({
+        meaning_id: m.meaningId, signal: m.signal, is_primed: m.isPrimed, source_task_ids: m.sourceTaskIds, grade: m.grade, evidence_weight: m.weight,
+      })),
       progress: [...newStates].map(([meaningId, state]) => ({
         meaning_id: meaningId,
         learned_at: state.learnedAt,
@@ -220,10 +223,9 @@ export class CommitService {
         learned_via_topic_id: learnedHere.has(meaningId) ? viaTopics.get(meaningId) ?? null : null,
         last_reviewed_at: state.lastReviewedAt,
         next_review_at: state.nextReviewAt,
-        interval_hours: state.intervalHours,
-        unaided_streak: state.unaidedStreak,
+        stability: state.stability,
+        difficulty: state.difficulty,
         lapse_count: state.lapseCount,
-        recognition_grace_used: state.recognitionGraceUsed,
       })),
       consumed: evaluated.flatMap((e) => e.receiptId ?? []),
     });

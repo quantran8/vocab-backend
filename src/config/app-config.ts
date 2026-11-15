@@ -16,6 +16,8 @@ const envSchema = z.object({
   ELEVENLABS_API_KEY: z.string().optional(),
   ELEVENLABS_VOICE_ID: z.string().optional(),
   ELEVENLABS_MODEL_ID: z.string().optional(),
+  // Extra voices admins may pick for bulk audio, as "voiceId:Label,voiceId:Label". ELEVENLABS_VOICE_ID stays the default.
+  ELEVENLABS_VOICE_OPTIONS: z.string().optional(),
   // Cloudflare R2 for generated audio; the public base is the bucket's custom domain or r2.dev URL.
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
@@ -59,6 +61,8 @@ export class AppConfig {
   readonly elevenLabsApiKey = this.env.ELEVENLABS_API_KEY;
   readonly elevenLabsVoiceId = this.env.ELEVENLABS_VOICE_ID;
   readonly elevenLabsModelId = this.env.ELEVENLABS_MODEL_ID;
+  /** The default voice first, then the configured options, without repeats. */
+  readonly elevenLabsVoices = parseVoices(this.env.ELEVENLABS_VOICE_ID, this.env.ELEVENLABS_VOICE_OPTIONS);
   readonly r2AccountId = this.env.R2_ACCOUNT_ID;
   readonly r2AccessKeyId = this.env.R2_ACCESS_KEY_ID;
   readonly r2SecretAccessKey = this.env.R2_SECRET_ACCESS_KEY;
@@ -73,4 +77,13 @@ export class AppConfig {
   readonly corsOrigins = this.env.CORS_ORIGINS;
   readonly appVersion = this.env.APP_VERSION;
   readonly appCommit = this.env.APP_COMMIT;
+}
+
+export function parseVoices(defaultId: string | undefined, options: string | undefined) {
+  const entries = (options ?? '').split(',').map((entry) => {
+    const [id, ...label] = entry.split(':');
+    return { id: id.trim(), name: label.join(':').trim() || id.trim() };
+  }).filter((v) => v.id);
+  const voices = defaultId ? [{ id: defaultId, name: entries.find((v) => v.id === defaultId)?.name ?? defaultId }, ...entries] : entries;
+  return voices.filter((v, i) => voices.findIndex((o) => o.id === v.id) === i);
 }

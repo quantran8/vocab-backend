@@ -24,6 +24,8 @@ export type RawMeaningRow = {
   learnedAt: string | null;
   nextReviewAt: string | null;
   override: MeaningOverride | null;
+  lastReviewedAt?: string | null;
+  stability?: number | null;
 };
 
 export interface EvidenceQueryRow extends EvidenceRow {
@@ -143,7 +145,8 @@ export class ProgressRepository {
   async wordMeanings(userId: string, wordId: string) {
     const { rows } = await this.db.execute<RawMeaningRow>(sql`
         SELECT wt.word_id AS "wordId", m.id AS "meaningId", p.snapshot, o.content AS override,
-               ump.learned_at AS "learnedAt", ump.next_review_at AS "nextReviewAt"
+               ump.learned_at AS "learnedAt", ump.next_review_at AS "nextReviewAt",
+               ump.last_reviewed_at AS "lastReviewedAt", ump.stability::float8 AS stability
         FROM word_types wt
         JOIN meanings m ON m.type_id = wt.id
         JOIN user_settings s ON s.user_id = ${userId}::uuid

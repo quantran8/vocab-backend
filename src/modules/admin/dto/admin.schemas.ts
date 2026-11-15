@@ -16,14 +16,15 @@ export const createWordSchema = z.strictObject({
   types: z.array(
     z.strictObject({
       partOfSpeech: z.enum(PARTS_OF_SPEECH),
-      pronunciations: z.array(
-        z.strictObject({ accentLocale: locale, ipa: z.string().optional(), audioAssetKey: z.string().optional() }),
-      ).default([]),
       meanings: z.array(
         z.strictObject({
           cefrLevel: z.enum(CEFR_LEVELS).optional(),
           coreDefinition: z.string().optional(),
           popularity: popularity.optional(),
+          // Per meaning: senses of one spelling can sound different.
+          pronunciations: z.array(
+            z.strictObject({ accentLocale: locale, ipa: z.string().optional(), audioAssetKey: z.string().optional() }),
+          ).default([]),
           examples: z.array(z.strictObject({ sourceText: z.string().min(1), targetLocator: z.record(z.string(), z.unknown()) })).default([]),
         }),
       ).min(1),
@@ -94,6 +95,7 @@ export const meaningSchema = z.strictObject({
   cefrLevel: z.enum(CEFR_LEVELS).optional(),
   coreDefinition: z.string().trim().min(1).optional(),
   popularity: popularity.optional(),
+  pronunciations: z.array(pronunciationSchema).default([]),
   examples: z.array(exampleSchema).default([]),
 });
 export type MeaningBody = z.infer<typeof meaningSchema>;
@@ -105,7 +107,6 @@ export type PatchMeaning = z.infer<typeof patchMeaningSchema>;
 
 export const wordTypeSchema = z.strictObject({
   partOfSpeech: z.enum(PARTS_OF_SPEECH),
-  pronunciations: z.array(pronunciationSchema).default([]),
   meanings: z.array(meaningSchema).default([]),
 });
 export type WordTypeBody = z.infer<typeof wordTypeSchema>;
@@ -154,6 +155,8 @@ export const generateAudioSchema = z.strictObject({
   // false only fills pronunciations without audio; true re-voices the picked ones.
   overwrite: z.boolean().default(false),
   limit: z.number().int().min(1).max(POLICY.audio.maxBatchSize).default(POLICY.audio.defaultBatchSize),
+  // One of GET /admin/audio/status `voices`; omitted uses the default voice.
+  voiceId: z.string().trim().min(1).max(64).optional(),
 }).refine((b) => !(b.pronunciationIds && b.wordIds), 'Use pronunciationIds or wordIds, not both');
 export type GenerateAudio = z.infer<typeof generateAudioSchema>;
 

@@ -8,6 +8,7 @@ import {
   playablePronunciation, pronunciationFor,
 } from '../../practice-resolver/generated';
 import { DistractorView, MeaningSnapshot, ResolveContext, ResolvedTask } from '../../practice-resolver/task.types';
+import { evidenceClassOf } from '../../memory-srs/evidence-weight';
 import { skillOf } from '../../skill-verification/skill-evidence';
 import { pickWeighted, planNewMeanings, Rng, shuffle, TaskSlot } from './interleave';
 
@@ -17,6 +18,8 @@ export interface PlanInput {
   reviewTargets: MeaningSnapshot[];
   // Weak only: skills with an open issue, by meaningId.
   focusSkills?: Map<string, Skill[]>;
+  // Daily only: open form-skill issues of due words, by meaningId; they only bias which task is picked.
+  skillGaps?: Map<string, Skill[]>;
   pool: DistractorView[];
   curated: CuratedItem[];
   proficiency: string | null;
@@ -57,7 +60,7 @@ const PHASE_BY_MODE: Record<SessionMode, TaskPhase> = {
   [SESSION_MODE.WEAK_WORDS_PRACTICE]: TASK_PHASE.WEAK_WORDS_PRACTICE,
 };
 
-const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance } = POLICY.review;
+const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance, classPickWeight, skillGapBoost } = POLICY.review;
 
 function buildCard(target: MeaningSnapshot, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
@@ -106,6 +109,17 @@ function semanticCandidates(target: MeaningSnapshot, input: PlanInput) {
   );
 }
 
+/** Daily: one meaning task per due word, weighted by evidence class and nudged toward an open skill gap. */
+function dailyCandidates(target: MeaningSnapshot, input: PlanInput) {
+  const gaps = input.skillGaps?.get(target.meaningId) ?? [];
+  return semanticCandidates(target, input).flatMap(({ value }) => {
+    const cls = evidenceClassOf(value.variant);
+    if (!cls) return [];
+    const skill = skillOf(value.serverEvaluation.intent, value.serverEvaluation.promptIsTargetAudio);
+    return [{ value, weight: classPickWeight[cls] * (skill && gaps.includes(skill) ? skillGapBoost : 1) }];
+  });
+}
+
 const recallOnly = <T extends { value: ResolvedTask }>(candidates: T[]) =>
   candidates.filter(({ value }) => value.serverEvaluation.intent === ASSESSMENT_INTENT.MEANING_RECALL);
 
@@ -127,9 +141,7 @@ const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYP
 // Each task must yield direct evidence for its skill, or the issue could never clear.
 function taskForSkill(skill: Skill, target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
   switch (skill) {
-    case SKILL.READING:
-      return buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng) ?? buildSelectReverse(target, pool, ctx, rng);
-    case SKILL.WRITING:
+    case SKILL.SPELLING:
       return (rng() < POLICY.newLearning.recallTypingWeight ? null : buildFlyReorder(target, ctx, rng)) ?? buildTypingRecall(target, ctx);
     case SKILL.LISTENING:
       return buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng);
@@ -186,6 +198,11 @@ function reviewTasks(input: PlanInput): ResolvedTask[] {
   if (focusSkills?.size) return focusedTasks(input, focusSkills);
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {
+    if (mode === SESSION_MODE.DAILY) {
+      const task = pickWeighted(dailyCandidates(target, input), rng);
+      if (task) tasks.push(task);
+      continue;
+    }
     const semantic = semanticCandidates(target, input);
     const primary = pickWeighted(mode === SESSION_MODE.CHECKPOINT_CHALLENGE ? recallOnly(semantic) : semantic, rng);
     if (!primary) continue;

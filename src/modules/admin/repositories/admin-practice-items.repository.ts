@@ -18,7 +18,8 @@ const targetsJson = (itemId: SQL) => sql`
     LEFT JOIN word_types mt ON mt.id = m.type_id
     LEFT JOIN words w ON w.id = mt.word_id
     LEFT JOIN pronunciations pr ON pr.id = t.pronunciation_id
-    LEFT JOIN word_types pt ON pt.id = pr.type_id
+    LEFT JOIN meanings pm ON pm.id = pr.meaning_id
+    LEFT JOIN word_types pt ON pt.id = pm.type_id
     LEFT JOIN words pw ON pw.id = pt.word_id
     WHERE t.practice_item_id = ${itemId}), '[]')`;
 
@@ -166,6 +167,7 @@ export class AdminPracticeItemsRepository {
       FROM jsonb_to_recordset(${JSON.stringify(targets)}::jsonb) AS x("meaningId" uuid, "pronunciationId" uuid)
       LEFT JOIN meanings m ON m.id = x."meaningId" AND m.owner_user_id IS NULL
       LEFT JOIN pronunciations p ON p.id = x."pronunciationId"
+        AND EXISTS (SELECT 1 FROM meanings pm WHERE pm.id = p.meaning_id AND pm.owner_user_id IS NULL)
       WHERE (x."meaningId" IS NOT NULL AND m.id IS NULL) OR (x."pronunciationId" IS NOT NULL AND p.id IS NULL)`);
     return known.missing;
   }
@@ -175,7 +177,7 @@ export class AdminPracticeItemsRepository {
       SELECT count(*)::int AS aligned
       FROM jsonb_to_recordset(${JSON.stringify(dual)}::jsonb) AS x("meaningId" uuid, "pronunciationId" uuid)
       JOIN meanings m ON m.id = x."meaningId"
-      JOIN pronunciations p ON p.id = x."pronunciationId" AND p.type_id = m.type_id`);
+      JOIN pronunciations p ON p.id = x."pronunciationId" AND p.meaning_id = m.id`);
     return row.aligned;
   }
 }

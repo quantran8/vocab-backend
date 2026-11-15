@@ -107,6 +107,7 @@ export class PlannerService {
       reviewTargets,
       newTargets,
       focusSkills: selected.focusSkills,
+      skillGaps: new Map(selected.reviewTargets.flatMap((t) => (t.skillGaps?.length ? [[t.snapshot.meaningId, t.skillGaps] as const] : []))),
       pool,
       curated,
       proficiency: learner.proficiencyLevel,
@@ -230,7 +231,7 @@ export class PlannerService {
 }
 
 type Selection = {
-  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null }[];
+  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; skillGaps?: Skill[] }[];
   newTargets: { snapshot: MeaningSnapshot; viaTopicId: string | null }[];
   challengeId?: string;
   focusSkills?: Map<string, Skill[]>;

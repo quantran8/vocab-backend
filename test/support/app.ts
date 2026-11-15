@@ -119,9 +119,12 @@ export class FakeLexical extends LexicalProvider {
 export class FakeTts extends TtsProvider {
   readonly voice = 'fake-voice';
   calls: string[] = [];
+  voices: string[] = [];
   error?: Error;
-  async synthesize(text: string) {
-    this.calls.push(text);
+  /** Records the IPA voiced and the voice. */
+  async synthesizeIpa(ipa: string, voiceId = this.voice) {
+    this.calls.push(ipa);
+    this.voices.push(voiceId);
     if (this.error) throw this.error;
     return Buffer.from('mp3');
   }
@@ -239,6 +242,8 @@ export async function createHarness(): Promise<Harness> {
     SEED_ADMIN_EMAIL: SEED_ADMIN.EMAIL,
     SEED_ADMIN_PASSWORD: SEED_ADMIN.PASSWORD,
     ALLOW_PLACEHOLDER_AUDIO: 'true',
+    ELEVENLABS_VOICE_ID: 'fake-voice',
+    ELEVENLABS_VOICE_OPTIONS: 'alt-voice:Alt voice',
     ENABLE_CRON: 'false',
     RANKING_ENABLED: 'true',
     CORS_ORIGINS: CORS_TEST_ORIGIN,
@@ -287,7 +292,7 @@ export async function createHarness(): Promise<Harness> {
       Object.assign(lexical, { generated: [], translated: [], duplicateOf: null, ipa: undefined, error: undefined });
       lexical.lemmas.clear();
       lexical.invalid.clear();
-      Object.assign(tts, { calls: [], error: undefined });
+      Object.assign(tts, { calls: [], voices: [], error: undefined });
       Object.assign(authAdmin, { deleted: [], deleteStatus: 200 });
       const { rows } = await db.execute<{ tablename: string }>(sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
       await db.execute(sql.raw(`TRUNCATE ${rows.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`));

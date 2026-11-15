@@ -118,16 +118,6 @@ CREATE TABLE word_types (
     UNIQUE (id, word_id),
     UNIQUE (word_id, part_of_speech)
 );
-CREATE TABLE pronunciations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_id UUID NOT NULL REFERENCES word_types(id),
-    accent_locale VARCHAR(32) NOT NULL,
-    ipa TEXT, -- may be NULL in draft; publish validator requires IPA
-    audio_asset_key TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (type_id, accent_locale),
-    CHECK (ipa IS NULL OR length(btrim(ipa)) > 0)
-);
 CREATE TABLE meanings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type_id UUID NOT NULL REFERENCES word_types(id),
@@ -143,6 +133,17 @@ CREATE TABLE meanings (
     popularity SMALLINT CHECK (popularity BETWEEN 0 AND 100), -- higher = more common sense; picks which meaning of a word is learned first
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (lexical_draft_id, draft_sense_index)
+);
+CREATE TABLE pronunciations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    accent_locale VARCHAR(32) NOT NULL,
+    ipa TEXT, -- may be NULL in draft; publish validator requires IPA
+    audio_asset_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Per Meaning: senses of one spelling can sound different (read /riːd/, /rɛd/).
+    meaning_id UUID NOT NULL REFERENCES meanings(id),
+    UNIQUE (meaning_id, accent_locale),
+    CHECK (ipa IS NULL OR length(btrim(ipa)) > 0)
 );
 CREATE INDEX idx_meanings_ai_generated ON meanings(created_at DESC) WHERE origin = 'ai_generated';
 CREATE INDEX idx_meanings_owner ON meanings(owner_user_id) WHERE owner_user_id IS NOT NULL;
@@ -354,13 +355,12 @@ CREATE TABLE user_meaning_progress (
     learned_session_id UUID REFERENCES learning_sessions(id),
     last_reviewed_at TIMESTAMPTZ,
     next_review_at TIMESTAMPTZ NOT NULL,
-    interval_hours NUMERIC(12,3) NOT NULL CHECK (interval_hours >= 0),
-    unaided_streak INTEGER NOT NULL DEFAULT 0 CHECK (unaided_streak >= 0),
     lapse_count INTEGER NOT NULL DEFAULT 0 CHECK (lapse_count >= 0),
-    recognition_grace_used BOOLEAN NOT NULL DEFAULT false,
     scheduler_version VARCHAR(40) NOT NULL,
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     learned_via_topic_id UUID REFERENCES topics(id) ON DELETE SET NULL, -- topic the Meaning was first learned from
+    stability NUMERIC(12,4) NOT NULL CHECK (stability > 0), -- FSRS stability, days
+    difficulty NUMERIC(6,4) NOT NULL CHECK (difficulty BETWEEN 1 AND 10), -- FSRS difficulty
     PRIMARY KEY (user_id, meaning_id)
 );
 CREATE INDEX idx_progress_due ON user_meaning_progress(user_id, next_review_at);
@@ -376,6 +376,8 @@ CREATE TABLE memory_observations (
     source_task_ids JSONB NOT NULL DEFAULT '[]'::jsonb
        CHECK (jsonb_typeof(source_task_ids) = 'array'),
     observed_at TIMESTAMPTZ NOT NULL,
+    grade VARCHAR(8) CHECK (grade IN ('again','hard','good','easy')), -- FSRS rating; NULL did not move the schedule
+    evidence_weight NUMERIC(4,3) CHECK (evidence_weight BETWEEN 0 AND 1),
     PRIMARY KEY (session_id, meaning_id)
 );
 CREATE INDEX idx_memory_user_meaning ON memory_observations(user_id, meaning_id, observed_at DESC);
@@ -386,7 +388,7 @@ CREATE TABLE skill_evidence (
     session_id UUID NOT NULL,
     task_id UUID NOT NULL,
     target_ordinal SMALLINT NOT NULL,
-    skill VARCHAR(12) NOT NULL CHECK (skill IN ('listening','speaking','reading','writing')),
+    skill VARCHAR(12) NOT NULL CHECK (skill IN ('listening','speaking','spelling')),
     reasons JSONB NOT NULL CHECK (jsonb_typeof(reasons) = 'array' AND reasons <@ '["new_practice","hinted","revealed","retried","primed","weak_template","quality_unqualified","audio_not_played","invalid_recording","unknown"]'::jsonb),
     validity VARCHAR(12) NOT NULL CHECK (validity IN ('valid','invalid')),
     passed BOOLEAN,
@@ -399,7 +401,7 @@ CREATE TABLE skill_evidence (
     FOREIGN KEY (session_id, user_id) REFERENCES learning_sessions(id, user_id),
     UNIQUE (session_id, task_id, target_ordinal, skill),
     CHECK ((meaning_id IS NOT NULL) <> (pronunciation_id IS NOT NULL)),
-    CHECK ((skill IN ('reading','writing') AND meaning_id IS NOT NULL)
+    CHECK ((skill = 'spelling' AND meaning_id IS NOT NULL)
         OR (skill IN ('listening','speaking') AND pronunciation_id IS NOT NULL)),
     CHECK ((validity = 'valid' AND passed IS NOT NULL)
         OR (validity = 'invalid' AND passed IS NULL))

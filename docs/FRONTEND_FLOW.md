@@ -163,13 +163,14 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
 - `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
 - `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).
-  - Mỗi meaning có thêm `skills: {reading, writing, listening?, speaking?}` và `needsPractice` (bật khi có kỹ năng cần luyện).
-  - Mỗi kỹ năng là `{status: "not_verified"|"demonstrated"|"verified", needsPractice, issue: "failed"|"assisted"|null}`. Dùng `skills` để biết kỹ năng nào của nghĩa này đang có vấn đề. Một kỹ năng có thể vừa `verified` vừa có `issue: "assisted"`.
-    - `failed`: trả lời sai hoặc show answer, kể cả khi có hint; đã mất `verified`.
-    - `assisted`: đúng nhờ hint, hoặc recall đúng ở lần 2; vẫn giữ `verified`.
+  - Mỗi meaning có thêm `memory`, `skills: {spelling, listening?, speaking?}` và `needsPractice` (bật khi có kỹ năng cần luyện).
+  - `memory: {stabilityDays, retrievability, nextReviewAt}` (null khi chưa học): độ bền trí nhớ FSRS tính bằng ngày, và xác suất còn nhớ nghĩa lúc này (0..1). Đây là thông tin "nhớ nghĩa"; `skills` chỉ đo mặt chữ và âm.
+  - Mỗi kỹ năng là `{status: "not_verified"|"demonstrated", needsPractice, issue: "failed"|"assisted"|null}`. `demonstrated` = đã có ít nhất một lần làm đúng sạch. Dùng `skills` để biết kỹ năng nào của nghĩa này đang có vấn đề. Một kỹ năng có thể vừa `demonstrated` vừa có `issue`.
+    - `failed`: trả lời sai hoặc show answer, kể cả khi có hint.
+    - `assisted`: đúng nhờ hint, hoặc recall đúng ở lần 2.
     - `issue` tắt sau một lần tự trả lời đúng của kỹ năng đó, cách lần có vấn đề ít nhất 12h.
   - `listening/speaking` vắng mặt khi Meaning không có phát âm.
-  - `needsPractice` và `fullyVerified` ở cấp Word.
+  - `needsPractice` ở cấp Word. Không còn `fullyVerified` và trạng thái `verified`.
 
 ## 5. Plan một session
 
@@ -180,14 +181,14 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   "mode": "daily" | "checkpoint_challenge" | "random_practice" | "weak_words_practice",
   "capabilities": { "audioPlayback": true, "microphone": true },
   "challengeId": "uuid",  // chỉ cho checkpoint_challenge, tuỳ chọn, mặc định thử thách cũ nhất còn available
-  "skills": ["listening", "reading"]   // chỉ cho random_practice, tuỳ chọn; 1–4 kỹ năng, không trùng
+  "skills": ["listening", "spelling"]   // chỉ cho random_practice, tuỳ chọn; 1–3 kỹ năng, không trùng
   // "skill": "listening"              // dạng cũ một kỹ năng, vẫn nhận; không gửi kèm "skills"
 }
 ```
 
 | Mode | Nội dung |
 |---|---|
-| `daily` | Ôn các Meaning đến hạn (tối đa `reviewLoad.dueCap`, xem `reviewsPerSession`) rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới và cập nhật lịch ôn |
+| `daily` | Ôn các Meaning đến hạn (tối đa `reviewLoad.dueCap`, xem `reviewsPerSession`): mỗi từ đúng một bài kiểm tra nghĩa, không có bài ghi âm/nghe chép, từ dễ quên nhất (retrievability thấp nhất) trước. Rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới. Mọi mode đều cập nhật lịch ôn FSRS; ôn sớm chỉ được cộng rất ít |
 | `checkpoint_challenge` | **Deprecated.** Ôn lại các Meaning của một challenge cũ còn `available`, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
 | `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
@@ -198,8 +199,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 | `skill` | Task có thể nhận |
 |---|---|
-| `reading` | `select` gloss (text), `reverse_gloss`; `cloze_select` và `select/meaning_clash` nếu có nội dung Curated |
-| `writing` | `typing/meaning_recall`, `fly_reorder/spelling_recall`; `surgery` nếu có nội dung Curated |
+| `spelling` | `typing/meaning_recall`, `fly_reorder/spelling_recall`; `surgery` nếu có nội dung Curated |
 | `listening` | `select/gloss` (audio), `typing/transcription`; `phonetic_choice`, `stress_choice` nếu có nội dung Curated. Chỉ dùng từ có audio |
 | `speaking` | `recording` |
 
@@ -448,6 +448,7 @@ Quy tắc, vi phạm là `422 INVALID_SUBMISSION` và **cả commit bị từ ch
 
 - Phải có kết quả cho **mọi** task đã phát hành (mỗi `taskId` đúng một lần) và mọi learn step phải có trong `learnStepsCompleted`. Không commit từng phần, không commit session đang làm dở.
 - Mỗi task có tối đa 200 events, một commit tối đa 500 task.
+- Mỗi event có thể kèm `elapsedMs` (tuỳ chọn): số ms từ lúc task hiện ra, không được giảm dần trong một task, tối đa 30 phút. Server dùng thời gian của lần submit đầu để chấm mức Easy cho bài gõ/xếp chữ đúng nhanh. Không gửi thì không bao giờ được Easy, mọi thứ khác không đổi.
 - `events` của mỗi task phải tuân theo quy tắc từng template ở mục 7.
 - **Task "first recall"** (task recall trong vòng học từ mới) phải có ít nhất một lần `submit`.
 - **`deliveryMode`**: bắt buộc khi `prompt.type = "audio"`, giá trị `audio | fallback | none`. Chỉ `audio` được tính là audio đã đến tai người dùng (bằng chứng Listening/Speaking trực tiếp). Gửi `audio` khi đã phát được; `fallback` hoặc `none` khi không phát được (thiết bị lỗi, tải thất bại). Gửi đúng sự thật, đừng luôn gửi `audio`. Với prompt text: bỏ trống hoặc `none`. Gửi `audio`/`fallback` cho prompt text là lỗi.
@@ -1072,7 +1073,7 @@ Spec: "Session Result Statistics v1" (repo iOS). Mọi nhóm do server suy ra t�
 
 `{meaningId, wordId, lemma, gloss, nextReviewAt}`. `gloss` là `meaningText` theo `explanationLocale` của user **lúc commit** (có áp sửa riêng của user). `learnedAt` chỉ có ở `review`.
 
-Từ ở nhóm yếu hơn (`review.shaky` / `relearn`, `newWords.retried` / `revealed`) có thêm `cause`: câu trả lời đã quyết định nhóm, lấy cái nặng nhất, hoà thì task sớm hơn. `struggledAt` (`reading|writing|listening|speaking`) là kỹ năng của task đó, khi xác định được. Giá trị `cause` (client phải chịu được giá trị lạ):
+Từ ở nhóm yếu hơn (`review.shaky` / `relearn`, `newWords.retried` / `revealed`) có thêm `cause`: câu trả lời đã quyết định nhóm, lấy cái nặng nhất, hoà thì task sớm hơn. `struggledAt` (`spelling|listening|speaking`) là kỹ năng của task đó, khi task có luyện kỹ năng; task chỉ kiểm tra nghĩa (select chữ, match) không có `struggledAt`. Giá trị `cause` (client phải chịu được giá trị lạ):
 
 | `cause` | Nghĩa |
 | --- | --- |
@@ -1083,7 +1084,7 @@ Từ ở nhóm yếu hơn (`review.shaky` / `relearn`, `newWords.retried` / `rev
 | `retried` | Phải thử lại mới đúng |
 | `hinted` | Dùng gợi ý |
 | `primed` | Vừa thấy từ ngay bước trước, nên lần đúng không được tính là tự nhớ |
-| `recognized_only` | Chỉ có task nhận ra (chọn), chưa có task tự nhớ | Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo plan. Nhóm lạ phải bỏ qua.
+Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo plan. Nhóm lạ phải bỏ qua.
 
 ### 15.2 Daily (gồm `reviewOnly`)
 
@@ -1095,7 +1096,7 @@ Từ ở nhóm yếu hơn (`review.shaky` / `relearn`, `newWords.retried` / `rev
 }
 ```
 
-- `review`: theo tín hiệu nhớ mà SRS đã dùng. `solid` = nhớ không trợ giúp (streak +1). `shaky` = nhớ có trợ giúp (gồm nhớ đúng nhưng bị "primed"), hoặc chỉ nhận ra đúng. `relearn` = nhớ sai / nhận ra sai (12 h, lapse +1). Từ đến hạn mà không có task tạo tín hiệu nhớ thì không đếm. `total = solid + shaky + relearn`.
+- `review`: theo đúng/sai, không theo trọng số bằng chứng. `solid` = mọi câu đúng ngay, không trợ giúp, kể cả chỉ có bài chọn đáp án. `shaky` = đúng nhưng có hint, thử lại, bị "primed", hoặc chọn sai trước khi tự nhớ ra đúng. `relearn` = có câu sai (FSRS Again, lapse +1). Lịch ôn mới vẫn theo trọng số của từng dạng bài (gõ > xếp chữ > chọn trong câu > chọn), nên `nextReviewAt` của các từ `solid` có thể khác nhau. Từ đến hạn mà không có task tạo tín hiệu nhớ thì không đếm. `total = solid + shaky + relearn`.
 - `newWords`: nhóm tệ nhất qua các task học mới của từ (không tính `known_check` và task đã bỏ qua). `smooth` = mọi task đúng ngay, không hint. `retried` = có hint hoặc đúng sau khi thử lại, hoặc ghi âm chấm chưa đạt. `revealed` = xem đáp án hoặc hết lượt. Ghi âm `unavailable` / không hợp lệ không hạ nhóm. `known` = qua known check hoặc bấm "Tôi biết từ này". `total = smooth + retried + revealed` (không gồm `known`).
 - `reviewOnly`: `newWords` là `{total: 0, groups: {…rỗng}}`, không null.
 - Daily hai commit (ôn → từ mới): client giữ `review` của commit đầu và ghép với `newWords` của commit sau.

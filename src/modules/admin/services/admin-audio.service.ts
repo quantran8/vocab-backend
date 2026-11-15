@@ -3,10 +3,10 @@ import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { newId } from '../../../common/ids';
+import { AppConfig } from '../../../config/app-config';
 import { POLICY } from '../../../config/policy';
-import { audioKey, normalizeText } from '../../custom-words/domain/custom-word-text';
-import { AudioStorage } from '../../custom-words/providers/audio-storage';
-import { TtsProvider } from '../../custom-words/providers/tts.provider';
+import { bareIpa } from '../../custom-words/domain/custom-word-text';
+import { IPA_MISSING, PronunciationAudio } from '../../custom-words/services/pronunciation-audio.service';
 import { GenerateAudio, ListAudioMissing, ListAudioStale, RefreshAudio } from '../dto/admin.schemas';
 import { AdminAudioRepository, AudioTarget } from '../repositories/admin-audio.repository';
 
@@ -18,13 +18,13 @@ export class AdminAudioService {
 
   constructor(
     private readonly repository: AdminAudioRepository,
-    private readonly tts: TtsProvider,
-    private readonly storage: AudioStorage,
+    private readonly audio: PronunciationAudio,
     private readonly clock: Clock,
+    private readonly config: AppConfig,
   ) {}
 
   async status() {
-    return { voice: this.tts.voice, accent: DEFAULT_ACCENT, ...(await this.repository.status()) };
+    return { voice: this.audio.voice, voices: this.config.elevenLabsVoices, accent: DEFAULT_ACCENT, ...(await this.repository.status()) };
   }
 
   listMissing(query: ListAudioMissing) {
@@ -35,7 +35,7 @@ export class AdminAudioService {
     return this.repository.listStale(query);
   }
 
-  /** Puts current audio into live snapshots as new revisions; nothing else in them changes. */
+  /** Puts each pronunciation's current IPA and audio into live snapshots as new revisions; nothing else in them changes. */
   async refreshPublications({ publications, limit }: RefreshAudio) {
     const { total, items } = await this.repository.staleTargets(publications, limit);
     const refreshed = await this.repository.refreshAudio(items.map((p) => ({ ...p, id: newId() })), this.clock.now());
@@ -47,41 +47,49 @@ export class AdminAudioService {
    * refreshPublications() (publications are immutable); status() counts those.
    */
   async generate(body: GenerateAudio) {
+    const voiceId = body.voiceId ?? this.audio.voice;
+    if (!this.config.elevenLabsVoices.some((v) => v.id === voiceId)) throw new ApiError('VALIDATION_FAILED', 'voiceId: not one of the configured voices');
     const { missing, items } = await this.repository.targets(body);
 
-    // Homographs share a lemma, and audioKey is per text, so each text is voiced once.
-    const texts = [...new Map(items.map((t) => [normalizeText(t.lemma), t.lemma])).entries()];
-    const voiced = new Map(await mapLimit(texts, POLICY.audio.ttsConcurrency, async ([norm, lemma]) => [norm, await this.voice(lemma)] as const));
-    const results = [...voiced.values()];
+    // The IPA is what is voiced, so meanings that sound the same share one call and one file.
+    const sounds = [...new Set(items.flatMap((t) => bareIpa(t.ipa) ?? []))];
+    // Overwrite means re-voice; otherwise a sound voiced before is reused.
+    const known = body.overwrite ? new Map<string, string>() : await this.repository.audioBySound(sounds, voiceId);
+    const toVoice = sounds.filter((ipa) => !known.has(ipa));
+    const voiced = new Map<string, Voiced>([
+      ...[...known].map(([ipa, url]) => [ipa, { ok: true, url }] as const),
+      ...await mapLimit(toVoice, POLICY.audio.ttsConcurrency, async (ipa) => [ipa, await this.voice(ipa, voiceId)] as const),
+    ]);
+    const results = toVoice.map((ipa) => voiced.get(ipa)!);
     if (results.length > 0 && results.every((r) => !r.ok)) {
       // Nothing worked (missing config, quota): fail the request so the client stops looping.
       throw new ApiError('TTS_PROVIDER_UNAVAILABLE', (results[0] as { message: string }).message);
     }
 
-    const resultOf = (t: AudioTarget) => voiced.get(normalizeText(t.lemma))!;
+    const noIpa: Voiced = { ok: false, message: IPA_MISSING };
+    const resultOf = (t: AudioTarget) => voiced.get(bareIpa(t.ipa) ?? '') ?? noIpa;
     const urlOf = new Map(items.flatMap((t) => { const r = resultOf(t); return r.ok ? [[t.id, r.url] as const] : []; }));
     const saved = await this.repository.setAudio([...urlOf].map(([id, url]) => ({ id, url })), body.overwrite);
 
-    const view = (t: AudioTarget) => ({ pronunciationId: t.id, wordId: t.wordId, lemma: t.lemma });
+    const view = (t: AudioTarget) => ({ pronunciationId: t.id, meaningId: t.meaningId, wordId: t.wordId, lemma: t.lemma, ipa: t.ipa });
     const generated = items.filter((t) => saved.has(t.id));
     const picked = new Set(items.map((t) => t.id));
     return {
-      voice: this.tts.voice,
+      voice: voiceId,
       accent: DEFAULT_ACCENT,
       generated: generated.map((t) => ({ ...view(t), audioUrl: urlOf.get(t.id)! })),
       failed: items.flatMap((t) => { const r = resultOf(t); return r.ok ? [] : [{ ...view(t), message: r.message }]; }),
-      // Requested but not voiced: unknown id, another accent, already voiced without overwrite, or filled meanwhile.
+      // Requested but not voiced: unknown id, another accent, no IPA, already voiced without overwrite, or filled meanwhile.
       skippedIds: [...(body.pronunciationIds?.filter((id) => !picked.has(id)) ?? []), ...[...urlOf.keys()].filter((id) => !saved.has(id))],
       remaining: Math.max(0, missing - generated.filter((t) => !t.hasAudio).length),
     };
   }
 
-  private async voice(lemma: string): Promise<Voiced> {
+  private async voice(ipa: string, voiceId: string): Promise<Voiced> {
     try {
-      const audio = await this.tts.synthesize(lemma);
-      return { ok: true, url: await this.storage.upload(audioKey(this.tts.voice, DEFAULT_ACCENT, lemma), audio) };
+      return { ok: true, url: await this.audio.create(ipa, voiceId) };
     } catch (error) {
-      this.logger.warn(`audio for "${lemma}" failed: ${(error as Error).message}`);
+      this.logger.warn(`audio for /${ipa}/ failed: ${(error as Error).message}`);
       return { ok: false, message: (error as Error).message };
     }
   }

@@ -16,6 +16,7 @@
     "test:int": "vitest run test/",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "nest build && node --env-file-if-exists=.env dist/seed/seed.js",
+    "db:seed:heteronyms": "nest build && node --env-file-if-exists=.env dist/seed/seed-heteronyms.js",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "embedded-postgres": "17.10.0-beta.17",
     "eslint": "^10.14.0",
     "supertest": "^7.3.1",
+    "ts-fsrs": "^6.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "unplugin-swc": "^2.0.0",

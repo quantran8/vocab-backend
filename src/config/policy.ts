@@ -1,4 +1,4 @@
-import { TEMPLATE, TIER_KEY } from '../common/constants/domain';
+import { EVIDENCE_CLASS, TEMPLATE, TIER_KEY } from '../common/constants/domain';
 import { HOURS_PER_DAY } from '../common/constants/time';
 
 // Every [TRIAL] value from the spec; tune here, not at call sites.
@@ -17,9 +17,19 @@ export const POLICY = {
   },
   // Supabase allows access tokens to live up to a week.
   account: { deletedIdentityRetentionHours: 7 * HOURS_PER_DAY },
-  review: { semanticWeight: 2, skillWeight: 1, skillBonusChance: 0.3, audioChance: 0.5, matchChance: 0.3, candidateMultiplier: 3 },
-  // knownInitialHours [TRIAL]: first interval of a word passed with "I know this" instead of being taught.
-  newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4, knownInitialHours: 7 * HOURS_PER_DAY },
+  review: {
+    semanticWeight: 2, skillWeight: 1, skillBonusChance: 0.3, audioChance: 0.5, matchChance: 0.3, candidateMultiplier: 3,
+    // Daily: how often each evidence class is picked as a due word's one task [TRIAL].
+    classPickWeight: {
+      [EVIDENCE_CLASS.RECOGNIZE]: 2,
+      [EVIDENCE_CLASS.RECOGNIZE_CONTEXT]: 2,
+      [EVIDENCE_CLASS.RECALL_ASSEMBLED]: 1.5,
+      [EVIDENCE_CLASS.RECALL_PRODUCE]: 1,
+    },
+    // A due word with an open form-skill issue favours tasks that train that skill.
+    skillGapBoost: 2,
+  },
+  newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
   practice: {
     // Retries after a wrong answer before the app moves on. match counts per left item; recording counts speech assessments.
     maxRetries: {
@@ -33,23 +43,40 @@ export const POLICY = {
     },
   },
   priming: { windowTasks: 1 },
-  srs: {
-    initialUnaidedHours: 48,
-    initialAssistedHours: 24,
-    initialFailedHours: 12,
-    failedRecognitionDelayHours: 24,
-    recognitionGraceHours: 24,
-    assistedFollowUpHours: 24,
-    failedRecallIntervalHours: 12,
-    weakenedIntervalFactor: 0.5,
-    baseGrowth: 1.6,
-    streakBonus: 0.15,
-    maxGrowth: 2.2,
-    minIntervalHours: 48,
-    maxIntervalHours: 90 * HOURS_PER_DAY,
+  // FSRS-6 (open-spaced-repetition defaults); desiredRetention and the bounds are [TRIAL].
+  fsrs: {
+    w: [
+      0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796,
+      1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
+    ] as readonly number[],
+    desiredRetention: 0.9,
+    minIntervalHours: 12,
+    maxIntervalDays: 90,
+    minStability: 0.001,
+    maxStability: 36_500,
+    // First stability of a word passed with "I know this" instead of being taught.
+    knownInitialDays: 7,
+  },
+  // Weight of one clean correct answer as memory evidence, by evidence class [TRIAL].
+  memoryEvidence: {
+    weights: {
+      [EVIDENCE_CLASS.RECALL_PRODUCE]: 1,
+      [EVIDENCE_CLASS.RECALL_ASSEMBLED]: 0.7,
+      [EVIDENCE_CLASS.RECOGNIZE_CONTEXT]: 0.4,
+      [EVIDENCE_CLASS.RECOGNIZE]: 0.3,
+    },
+    // A target-audio prompt is harder than text; never above the next class up.
+    audioFactor: 1.2,
+    // Weights assume this many choices; fewer choices are easier to guess.
+    baseOptionCount: 4,
+    // Fast clean recall earns Easy; thresholds scale with the answer's length.
+    easy: {
+      [EVIDENCE_CLASS.RECALL_PRODUCE]: { baseMs: 3_000, perUnitMs: 600 },
+      [EVIDENCE_CLASS.RECALL_ASSEMBLED]: { baseMs: 2_500, perUnitMs: 500 },
+    },
+    maxElapsedMs: 30 * 60_000,
   },
   memory: { lightRetryAttempts: 2, recoveryHours: 12 },
-  skill: { requiredSessions: 2, delayedRecheckHours: HOURS_PER_DAY },
   speech: { passAccuracy: 80, receiptTtlHours: 72, maxAudioBytes: 2 * 1024 * 1024 },
   weak: { lookbackDays: 30, minAttempts: 3 },
   // Scope completion and review load [TRIAL] until the simulation in docs/DECISIONS.md settles them.
@@ -134,7 +161,7 @@ export const POLICY = {
     usernameChangeDays: 30,
     reportsPerUtcDay: 10,
   },
-  // Admin bulk TTS: one request stays well under a minute at ElevenLabs' concurrency limit.
-  audio: { maxBatchSize: 50, defaultBatchSize: 20, ttsConcurrency: 4, maxRefreshBatch: 200 },
+  // Admin bulk TTS: ElevenLabs allows 2 requests at once on the free plan (more on paid ones).
+  audio: { maxBatchSize: 50, defaultBatchSize: 20, ttsConcurrency: 2, maxRefreshBatch: 200 },
   customWords: { maxRoadmapWords: 500, dailyLookups: 30, maxTextLength: 64, maxContextLength: 200, maxMeaningsPerWord: 8, maxSensesPerDraft: 3 },
 } as const;

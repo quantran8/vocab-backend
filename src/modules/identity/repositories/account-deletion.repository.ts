@@ -2,10 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, notExists, or } from 'drizzle-orm';
 import { DB, Db } from '../../../db/db';
 import {
-  activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations,
-  learningPointAwards, learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations,
-  rankingEligibilityAudit, skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userEffortDays,
-  userEffortTotals, userMeaningOverrides, userMeaningProgress, userReports, userTierUnlocks, weeklyLpScores, weeklyRankSnapshots,
+  activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations, learningPointAwards, learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, pronunciations, rankingEligibilityAudit, skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userEffortDays, userEffortTotals, userMeaningOverrides, userMeaningProgress, userReports, userTierUnlocks, weeklyLpScores, weeklyRankSnapshots,
 } from '../../../db/schema';
 
 @Injectable()
@@ -55,6 +52,7 @@ export class AccountDeletionRepository {
       await tx.delete(meaningLocalizations).where(inArray(meaningLocalizations.meaningId, privateMeanings));
       await tx.delete(activeMeaningPublications).where(inArray(activeMeaningPublications.meaningId, privateMeanings));
       await tx.delete(meaningPublications).where(inArray(meaningPublications.meaningId, privateMeanings));
+      await tx.delete(pronunciations).where(inArray(pronunciations.meaningId, privateMeanings));
       await tx.delete(meanings).where(eq(meanings.ownerUserId, userId));
       await tx.delete(lexicalDrafts).where(and(
         eq(lexicalDrafts.ownerUserId, userId),

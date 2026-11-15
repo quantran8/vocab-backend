@@ -8,12 +8,11 @@ import { POLICY } from '../../../config/policy';
 import { hasValidHighlight, PublicationService } from '../../admin/services/publication.service';
 import { MeaningOverride } from '../../practice-resolver/meaning-override';
 import { ExampleView, MeaningSnapshot } from '../../practice-resolver/task.types';
-import { AudioStorage } from '../providers/audio-storage';
-import { audioKey, contextKey, locateTarget, normalizeText, translationKey } from '../domain/custom-word-text';
+import { bareIpa, contextKey, locateTarget, normalizeText, translationKey } from '../domain/custom-word-text';
 import { AddRequest, LookupRequest, OverrideRequest } from '../dto/custom-words.schemas';
 import { CustomWordsRepository, DraftKey, WordMatch } from '../repositories/custom-words.repository';
+import { PronunciationAudio } from './pronunciation-audio.service';
 import { GeneratedWord, LexicalProvider, SourceMeaning, TranslationDraftPayload, WordDraftPayload } from '../providers/lexical.provider';
-import { TtsProvider } from '../providers/tts.provider';
 
 const { maxSensesPerDraft } = POLICY.customWords;
 const WORD_CONTEXT_KEY = '';
@@ -66,8 +65,7 @@ export class CustomWordsService {
     private readonly repository: CustomWordsRepository,
     private readonly publications: PublicationService,
     private readonly lexical: LexicalProvider,
-    private readonly tts: TtsProvider,
-    private readonly storage: AudioStorage,
+    private readonly audio: PronunciationAudio,
     private readonly clock: Clock,
   ) {}
 
@@ -217,7 +215,7 @@ export class CustomWordsService {
     if (!payload.isValidWord || !sense) throw new ApiError('CUSTOM_WORD_INVALID', 'Draft has no such sense');
 
     const normalized = normalizeText(payload.lemma);
-    const audioUrl = await this.repository.hasPronunciation(normalized, sense.partOfSpeech) ? null : await this.audioFor(payload.lemma);
+    const audioUrl = await this.audioFor(sense.ipa);
     return this.repository.transaction(async (tx) => {
       const { meaningId, created } = await this.repository.addSense(tx, {
         kind: draft.kind, draftId: draft.id, senseIndex: body.senseIndex, userId, locale, lemma: payload.lemma, normalized, sense, audioUrl,
@@ -240,19 +238,16 @@ export class CustomWordsService {
     });
   }
 
-  // Audio is optional: the planner falls back to text and the worker retries.
-  private async audioFor(lemma: string) {
+  // Audio is optional: the planner falls back to text and the worker retries. A sound voiced before is reused.
+  private async audioFor(ipa: string | undefined) {
+    const phonemes = bareIpa(ipa);
+    if (!phonemes) return null;
     try {
-      return await this.synthesize(lemma);
+      return (await this.repository.audioForIpa(phonemes)) ?? await this.audio.create(phonemes);
     } catch (error) {
       this.logger.warn(`audio skipped: ${(error as Error).message}`);
       return null;
     }
-  }
-
-  private async synthesize(lemma: string) {
-    const audio = await this.tts.synthesize(lemma);
-    return this.storage.upload(audioKey(this.tts.voice, DEFAULT_ACCENT, lemma), audio);
   }
 
   async list(userId: string) {
@@ -300,7 +295,7 @@ export class CustomWordsService {
     }
     const missing = await this.repository.nextMissingAudio();
     if (!missing) return false;
-    await this.repository.setAudio(missing.id, await this.synthesize(missing.lemma));
+    await this.repository.setAudio(missing.id, await this.audio.create(missing.ipa));
     return true;
   }
 }

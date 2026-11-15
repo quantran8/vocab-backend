@@ -18,13 +18,13 @@ describe('audio providers', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('sends the text and model to ElevenLabs', async () => {
+  it('sends the IPA, in Eleven v4 slash form, and the model to ElevenLabs', async () => {
     fetchMock.mockResolvedValue(new Response(new Uint8Array([1, 2])));
-    await expect(new ElevenLabsTtsProvider(config).synthesize('run')).resolves.toEqual(Buffer.from([1, 2]));
+    await expect(new ElevenLabsTtsProvider(config).synthesizeIpa('rʌn')).resolves.toEqual(Buffer.from([1, 2]));
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain('/v1/text-to-speech/voice');
     expect(init.headers['xi-api-key']).toBe('key');
-    expect(JSON.parse(init.body)).toEqual({ text: 'run', model_id: 'model' });
+    expect(JSON.parse(init.body)).toEqual({ text: '"/rʌn/"', model_id: 'model' });
   });
 
   it.each([
@@ -33,11 +33,26 @@ describe('audio providers', () => {
     ['quota failure', config, new Response('', { status: 401 })],
   ])('fails as unavailable on %s', async (_, cfg, response) => {
     if (response) fetchMock.mockResolvedValue(response);
-    await expect(new ElevenLabsTtsProvider(cfg).synthesize('run')).rejects.toMatchObject({ status: ERROR.TTS_PROVIDER_UNAVAILABLE.status });
+    await expect(new ElevenLabsTtsProvider(cfg).synthesizeIpa('rʌn')).rejects.toMatchObject({ status: ERROR.TTS_PROVIDER_UNAVAILABLE.status });
+  });
+
+  it('waits and retries when too many requests run at once', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 429 })).mockResolvedValueOnce(new Response(new Uint8Array([7])));
+    const pending = new ElevenLabsTtsProvider(config).synthesizeIpa('rʌn');
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual(Buffer.from([7]));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('passes on the reason ElevenLabs gives', async () => {
+    fetchMock.mockResolvedValue(Response.json({ detail: { status: 'payment_required', message: 'Free users cannot use library voices via the API.' } }, { status: 402 }));
+    await expect(new ElevenLabsTtsProvider(config).synthesizeIpa('rʌn')).rejects.toThrow('ElevenLabs returned 402: Free users cannot use library voices via the API.');
   });
 
   it('never calls out without config', async () => {
-    await new ElevenLabsTtsProvider({ ...config, elevenLabsVoiceId: undefined } as AppConfig).synthesize('run').catch(() => undefined);
+    await new ElevenLabsTtsProvider({ ...config, elevenLabsVoiceId: undefined } as AppConfig).synthesizeIpa('rʌn').catch(() => undefined);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

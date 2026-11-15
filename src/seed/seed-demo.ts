@@ -51,21 +51,18 @@ export async function seedDemoContent(db: Db) {
     const typeIds = new Map(typeRows.map((t) => [`${t.wordId}:${t.partOfSpeech}`, t.id]));
     const typeIdOf = (w: (typeof wordList)[number]) => typeIds.get(`${wordIdOf(w.lemma, w.id)}:${w.partOfSpeech}`)!;
 
-    // Same rule as a pool write: a row left by a private meaning gives way, one behind shared content stays.
+    await tx.insert(meanings).values(wordList.map((w) => ({ id: w.meaning.id, typeId: typeIdOf(w), cefrLevel: w.meaning.cefrLevel as CefrLevel, coreDefinition: w.meaning.coreDefinition }))).onConflictDoNothing();
+    // Per meaning. Read back by meaning: a re-run after the per-meaning migration may find a row under another id.
     await tx
       .insert(pronunciations)
-      .values(wordList.map((w) => ({ id: w.pronunciation.id, typeId: typeIdOf(w), accentLocale: DEFAULT_ACCENT, ipa: w.pronunciation.ipa })))
-      .onConflictDoUpdate({
-        target: [pronunciations.typeId, pronunciations.accentLocale],
-        set: { ipa: sql`excluded.ipa` },
-        setWhere: sql`NOT EXISTS (SELECT 1 FROM meanings m WHERE m.type_id = pronunciations.type_id AND m.owner_user_id IS NULL)`,
-      });
+      .values(wordList.map((w) => ({ id: w.pronunciation.id, meaningId: w.meaning.id, accentLocale: DEFAULT_ACCENT, ipa: w.pronunciation.ipa })))
+      .onConflictDoNothing();
     const pronunciationRows = await tx
-      .select({ id: pronunciations.id, typeId: pronunciations.typeId, ipa: pronunciations.ipa })
+      .select({ id: pronunciations.id, meaningId: pronunciations.meaningId, ipa: pronunciations.ipa })
       .from(pronunciations)
-      .where(and(inArray(pronunciations.typeId, typeRows.map((t) => t.id)), eq(pronunciations.accentLocale, DEFAULT_ACCENT)));
-    const pronunciationByType = new Map(pronunciationRows.map((p) => [p.typeId, p]));
-    const pronunciationOf = (w: (typeof wordList)[number]) => pronunciationByType.get(typeIdOf(w))!;
+      .where(and(inArray(pronunciations.meaningId, wordList.map((w) => w.meaning.id)), eq(pronunciations.accentLocale, DEFAULT_ACCENT)));
+    const pronunciationByMeaning = new Map(pronunciationRows.map((p) => [p.meaningId, p]));
+    const pronunciationOf = (w: (typeof wordList)[number]) => pronunciationByMeaning.get(w.meaning.id)!;
     const pronunciationIds = new Map(wordList.map((w) => [w.pronunciation.id, pronunciationOf(w).id]));
 
     const snapshots = wordList.map((w): MeaningSnapshot => {
@@ -89,7 +86,6 @@ export async function seedDemoContent(db: Db) {
     };
     const items = authoredItems.map((item) => ({ item, content: toRuntimeContent(item, lookup) }));
 
-    await tx.insert(meanings).values(wordList.map((w) => ({ id: w.meaning.id, typeId: typeIdOf(w), cefrLevel: w.meaning.cefrLevel as CefrLevel, coreDefinition: w.meaning.coreDefinition }))).onConflictDoNothing();
     await tx.insert(meaningExamples).values(wordList.map((w) => ({
       id: w.example.id, meaningId: w.meaning.id, sourceText: w.example.text, targetLocator: { start: w.example.start, end: w.example.end },
     }))).onConflictDoNothing();

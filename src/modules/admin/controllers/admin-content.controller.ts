@@ -76,7 +76,7 @@ export class AdminWordsController {
     return this.words.deleteType(id);
   }
 
-  @Post('word-types/:id/pronunciations')
+  @Post('meanings/:id/pronunciations')
   createPronunciation(@Param('id', uuid) id: string, @Body(new ZodPipe(pronunciationSchema)) body: PronunciationBody) {
     return this.words.createPronunciation(id, body);
   }

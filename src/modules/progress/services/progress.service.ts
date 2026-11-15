@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
-import { DEFAULT_ACCENT, Skill, SKILL, SKILL_STATUS } from '../../../common/constants/domain';
+import { DEFAULT_ACCENT, Skill, SKILL } from '../../../common/constants/domain';
+import { MS_PER_DAY } from '../../../common/constants/time';
 import { activeOverride, effectiveNewWords, reviewsPerSession, scopeStatus, shouldPromptChoice } from '../../review-load/domain/review-load';
 import { ApiError } from '../../../common/http/api-error';
 import { AppConfig } from '../../../config/app-config';
@@ -9,7 +10,8 @@ import { resolveAudioUrl } from '../../practice-resolver/asset-url';
 import { applyOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { EvidenceQueryRow, LearnHomeRow, ProgressRepository, RawMeaningRow } from '../repositories/progress.repository';
-import { deriveSkillStatus, EvidenceRow, isWordFullyVerified, SkillState } from '../../skill-verification/skill-evidence';
+import { retrievability } from '../../memory-srs/fsrs';
+import { deriveSkillStatus, EvidenceRow, SkillState } from '../../skill-verification/skill-evidence';
 
 interface MeaningRow {
   wordId: string;
@@ -17,6 +19,8 @@ interface MeaningRow {
   snapshot: MeaningSnapshot;
   learnedAt: Date | null;
   nextReviewAt: Date | null;
+  lastReviewedAt?: Date | null;
+  stability?: number | null;
 }
 
 const parseMeaningRows = (rows: RawMeaningRow[]): MeaningRow[] =>
@@ -25,7 +29,15 @@ const parseMeaningRows = (rows: RawMeaningRow[]): MeaningRow[] =>
     snapshot: applyOverride(r.snapshot, override ?? undefined),
     learnedAt: r.learnedAt ? toDate(r.learnedAt) : null,
     nextReviewAt: r.nextReviewAt ? toDate(r.nextReviewAt) : null,
+    lastReviewedAt: r.lastReviewedAt ? toDate(r.lastReviewedAt) : null,
   }));
+
+/** How well the word holds now, for the word detail; null until learned. */
+function memoryView(row: MeaningRow, now: Date) {
+  if (!row.learnedAt || row.stability == null) return null;
+  const since = (now.getTime() - (row.lastReviewedAt ?? row.learnedAt).getTime()) / MS_PER_DAY;
+  return { stabilityDays: row.stability, retrievability: Math.round(retrievability(since, row.stability) * 1000) / 1000, nextReviewAt: row.nextReviewAt };
+}
 
 type EvidenceIndex = Map<string, EvidenceRow[]>;
 
@@ -52,10 +64,9 @@ function senseView(snapshot: MeaningSnapshot, allowPlaceholderAudio: boolean) {
   };
 }
 
-function meaningView(row: MeaningRow, index: EvidenceIndex, allowPlaceholderAudio: boolean) {
+function meaningView(row: MeaningRow, index: EvidenceIndex, allowPlaceholderAudio: boolean, now: Date) {
   const pronunciation = defaultPronunciation(row.snapshot);
-  const reading = stateOf(index, SKILL.READING, row.meaningId);
-  const writing = stateOf(index, SKILL.WRITING, row.meaningId);
+  const spelling = stateOf(index, SKILL.SPELLING, row.meaningId);
   const listening = pronunciation ? stateOf(index, SKILL.LISTENING, pronunciation.id) : undefined;
   const speaking = pronunciation ? stateOf(index, SKILL.SPEAKING, pronunciation.id) : undefined;
   return {
@@ -63,24 +74,19 @@ function meaningView(row: MeaningRow, index: EvidenceIndex, allowPlaceholderAudi
     meaning: senseView(row.snapshot, allowPlaceholderAudio),
     learnedAt: row.learnedAt,
     nextReviewAt: row.nextReviewAt,
-    skills: { reading, writing, listening, speaking },
-    needsPractice: [reading, writing, listening, speaking].some((s) => s?.needsPractice),
+    memory: memoryView(row, now),
+    skills: { spelling, listening, speaking },
+    needsPractice: [spelling, listening, speaking].some((s) => s?.needsPractice),
   };
 }
 
-function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudio: boolean) {
-  const meanings = rows.map((row) => meaningView(row, index, allowPlaceholderAudio));
-  const learned = meanings.filter((m) => m.learnedAt);
+function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudio: boolean, now: Date) {
+  const meanings = rows.map((row) => meaningView(row, index, allowPlaceholderAudio, now));
   return {
     wordId: rows[0].wordId,
     lemma: rows[0].snapshot.lemma,
     meanings,
-    needsPractice: learned.some((m) => m.needsPractice),
-    fullyVerified: isWordFullyVerified({
-      learnedMeaningCount: learned.length,
-      readingWriting: learned.flatMap((m) => [m.skills.reading.status, m.skills.writing.status]),
-      listeningSpeaking: learned.flatMap((m) => [m.skills.listening?.status ?? SKILL_STATUS.NOT_VERIFIED, m.skills.speaking?.status ?? SKILL_STATUS.NOT_VERIFIED] as const),
-    }),
+    needsPractice: meanings.some((m) => m.learnedAt && m.needsPractice),
   };
 }
 
@@ -148,6 +154,6 @@ export class ProgressService {
     if (rows.length === 0) throw new ApiError('NOT_FOUND', 'Word not found');
     const meanings = parseMeaningRows(rows);
     const evidence = await this.repository.evidence(userId, meanings.map((m) => m.meaningId), meanings.flatMap((m) => m.snapshot.pronunciations.map((p) => p.id)));
-    return wordView(meanings, indexEvidence(evidence), this.config.allowPlaceholderAudio);
+    return wordView(meanings, indexEvidence(evidence), this.config.allowPlaceholderAudio, this.clock.now());
   }
 }

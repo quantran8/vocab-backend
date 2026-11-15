@@ -22,8 +22,11 @@ describe('admin API', () => {
     lemma,
     types: [{
       partOfSpeech: 'verb',
-      pronunciations: [{ accentLocale: 'en-US', ipa: '/proʊb/' }],
-      meanings: [{ cefrLevel: 'B1', examples: [{ sourceText: 'Use it now.', targetLocator: { start: 4, end: 6 } }] }],
+      // One sound per spelling, so audio tests can tell words apart.
+      meanings: [{
+        cefrLevel: 'B1', pronunciations: [{ accentLocale: 'en-US', ipa: `/${lemma.toLowerCase()}/` }],
+        examples: [{ sourceText: 'Use it now.', targetLocator: { start: 4, end: 6 } }],
+      }],
     }],
     ...overrides,
   });
@@ -32,7 +35,7 @@ describe('admin API', () => {
     const { body } = await api('post', '/admin/words').send(draft(lemma)).expect(201);
     const type = body.types[0];
     const meaning = type.meanings[0];
-    return { wordId: body.wordId as string, typeId: type.id as string, meaningId: meaning.id as string, exampleId: meaning.examples[0].id as string, pronunciationId: type.pronunciations[0].id as string };
+    return { wordId: body.wordId as string, typeId: type.id as string, meaningId: meaning.id as string, exampleId: meaning.examples[0].id as string, pronunciationId: meaning.pronunciations[0].id as string };
   }
 
   async function publishWord(lemma = 'probe') {
@@ -195,8 +198,9 @@ describe('admin API', () => {
       await api('post', `/admin/words/${wordId}/types`).send({ partOfSpeech: 'noun' }).expect(409);
       await api('post', `/admin/words/${randomUUID()}/types`).send({ partOfSpeech: 'noun' }).expect(404);
 
-      await api('post', `/admin/word-types/${typeId}/pronunciations`).send({ accentLocale: 'en-US' }).expect(409);
-      await api('post', `/admin/word-types/${typeId}/pronunciations`).send({ accentLocale: 'en-GB', ipa: '/x/' }).expect(201);
+      await api('post', `/admin/meanings/${meaningId}/pronunciations`).send({ accentLocale: 'en-US' }).expect(409);
+      await api('post', `/admin/meanings/${meaningId}/pronunciations`).send({ accentLocale: 'en-GB', ipa: '/x/' }).expect(201);
+      await api('post', `/admin/word-types/${typeId}/pronunciations`).send({ accentLocale: 'en-GB' }).expect(404);
       await api('patch', `/admin/pronunciations/${pronunciationId}`).send({ ipa: '/new/' }).expect(200);
       await api('patch', `/admin/pronunciations/${pronunciationId}`).send({ accentLocale: 'en-GB' }).expect(409);
       await api('delete', `/admin/pronunciations/${pronunciationId}`).expect(204);
@@ -536,9 +540,9 @@ describe('admin API', () => {
     const generate = (body: object = {}, token = admin) => api('post', '/admin/audio/generate', token).send(body);
     const audioOf = async (pronunciationId: string) => (await h.first(pronunciations, eq(pronunciations.id, pronunciationId)) as { audioAssetKey: string | null }).audioAssetKey;
 
-    it('voices every missing pronunciation in batches, once per text', async () => {
+    it('voices every missing pronunciation from its IPA in batches, once per sound', async () => {
       const a = await createWord('probe');
-      const b = (await api('post', '/admin/words').send(draft('Probe', { homographKey: 'b' })).expect(201)).body.types[0].pronunciations[0].id as string;
+      const b = (await api('post', '/admin/words').send(draft('Probe', { homographKey: 'b' })).expect(201)).body.types[0].meanings[0].pronunciations[0].id as string;
       const c = await createWord('apple');
       expect((await api('get', '/admin/audio/status').expect(200)).body).toMatchObject({ voice: 'fake-voice', accent: 'en-US', missing: 3, withAudio: 0 });
 
@@ -548,7 +552,8 @@ describe('admin API', () => {
       const second = (await generate().expect(200)).body;
       expect(second.generated).toHaveLength(1);
       expect(second.remaining).toBe(0);
-      expect(h.tts.calls).toEqual(['apple', 'probe', 'Probe']);
+      // The IPA is voiced, not the spelling; the homograph that sounds the same reuses the first file.
+      expect(h.tts.calls).toEqual(['apple', 'probe']);
 
       expect(await audioOf(a.pronunciationId)).toMatch(/^https:\/\/cdn\.example\.invalid\/tts\/fake-voice\/en-US\/[0-9a-f]{64}\.mp3$/);
       expect(await audioOf(b)).toBe(await audioOf(a.pronunciationId));
@@ -556,10 +561,55 @@ describe('admin API', () => {
       expect((await generate().expect(200)).body).toMatchObject({ generated: [], failed: [], remaining: 0 });
     });
 
+    it('gives each meaning its own IPA and audio, and skips meanings without IPA', async () => {
+      const { wordId, typeId, meaningId, pronunciationId } = await createWord('read');
+      const past = (await api('post', `/admin/word-types/${typeId}/meanings`).send({
+        cefrLevel: 'A2', pronunciations: [{ accentLocale: 'en-US', ipa: '/rɛd/' }],
+      }).expect(201)).body.id as string;
+      const bare = (await api('post', `/admin/word-types/${typeId}/meanings`).send({ cefrLevel: 'A2' }).expect(201)).body.id as string;
+      const detail = (await api('get', `/admin/words/${wordId}`).expect(200)).body;
+      const ipaOf = (id: string) => detail.types[0].meanings.find((m: Json) => m.id === id).pronunciations.map((p: Json) => p.ipa);
+      expect([ipaOf(meaningId), ipaOf(past), ipaOf(bare)]).toEqual([['/read/'], ['/rɛd/'], []]);
+
+      await api('post', `/admin/meanings/${bare}/pronunciations`).send({ accentLocale: 'en-US' }).expect(201);
+      expect((await api('get', '/admin/audio/status').expect(200)).body).toMatchObject({ missing: 2, missingIpa: 1 });
+      const { body } = await generate({ wordIds: [wordId] }).expect(200);
+      expect(body.generated.map((g: Json) => g.ipa).sort()).toEqual(['/read/', '/rɛd/']);
+      expect(h.tts.calls.sort()).toEqual(['read', 'rɛd']);
+      expect(await audioOf(pronunciationId)).not.toBe(body.generated.find((g: Json) => g.meaningId === past).audioUrl);
+      expect((await api('get', '/admin/audio/status').expect(200)).body).toMatchObject({ missing: 0, missingIpa: 1 });
+    });
+
+    it('voices with a configured voice, the default unless one is picked', async () => {
+      const a = await createWord('probe');
+      expect((await api('get', '/admin/audio/status').expect(200)).body.voices).toEqual([
+        { id: 'fake-voice', name: 'fake-voice' }, { id: 'alt-voice', name: 'Alt voice' },
+      ]);
+      expect((await generate({ voiceId: 'stranger' }).expect(400)).body.code).toBe('VALIDATION_FAILED');
+
+      await generate().expect(200);
+      expect(await audioOf(a.pronunciationId)).toContain('/tts/fake-voice/');
+      const alt = (await generate({ pronunciationIds: [a.pronunciationId], overwrite: true, voiceId: 'alt-voice' }).expect(200)).body;
+      expect(alt.voice).toBe('alt-voice');
+      expect(await audioOf(a.pronunciationId)).toContain('/tts/alt-voice/');
+      expect(h.tts.voices).toEqual(['fake-voice', 'alt-voice']);
+
+      // Reuse matches the sound and the voice: /probe/ now exists only in alt-voice.
+      const twin = async (key: string) => (await api('post', '/admin/words').send(draft('Probe', { homographKey: key })).expect(201)).body.types[0].meanings[0].pronunciations[0].id as string;
+      const inAlt = await twin('b');
+      await generate({ pronunciationIds: [inAlt], voiceId: 'alt-voice' }).expect(200);
+      expect(h.tts.voices).toEqual(['fake-voice', 'alt-voice']);
+      expect(await audioOf(inAlt)).toBe(await audioOf(a.pronunciationId));
+      const inDefault = await twin('c');
+      await generate({ pronunciationIds: [inDefault] }).expect(200);
+      expect(h.tts.voices).toEqual(['fake-voice', 'alt-voice', 'fake-voice']);
+      expect(await audioOf(inDefault)).toContain('/tts/fake-voice/');
+    });
+
     it('targets ids, skips other accents and keeps audio unless overwrite', async () => {
       const a = await createWord('probe');
       const other = await createWord('apple');
-      const gb = (await api('post', `/admin/word-types/${a.typeId}/pronunciations`).send({ accentLocale: 'en-GB', ipa: '/x/' }).expect(201)).body.id as string;
+      const gb = (await api('post', `/admin/meanings/${a.meaningId}/pronunciations`).send({ accentLocale: 'en-GB', ipa: '/x/' }).expect(201)).body.id as string;
 
       const byWord = (await generate({ wordIds: [a.wordId] }).expect(200)).body;
       expect(byWord.generated.map((g: Json) => g.pronunciationId)).toEqual([a.pronunciationId]);
@@ -603,9 +653,9 @@ describe('admin API', () => {
       await createWord('apricot');
       const { body } = await api('get', '/admin/audio/missing?q=AP&limit=1').expect(200);
       expect(body.total).toBe(2);
-      expect(body.items).toEqual([expect.objectContaining({ lemma: 'apple', partOfSpeech: 'verb', ipa: '/proʊb/', live: false })]);
+      expect(body.items).toEqual([expect.objectContaining({ lemma: 'apple', partOfSpeech: 'verb', ipa: '/apple/', live: false, isPrivate: false })]);
       const probe = (await api('get', '/admin/audio/missing?q=probe').expect(200)).body.items[0];
-      expect(probe).toMatchObject({ pronunciationId: live.pronunciationId, wordId: live.wordId, live: true });
+      expect(probe).toMatchObject({ pronunciationId: live.pronunciationId, meaningId: live.meaningId, wordId: live.wordId, live: true });
       await generate({ wordIds: [live.wordId] }).expect(200);
       expect((await api('get', '/admin/audio/missing?q=probe').expect(200)).body).toEqual({ total: 0, items: [] });
     });
@@ -633,6 +683,19 @@ describe('admin API', () => {
       expect((await api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200)).body.remaining).toBe(0);
       expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(0);
       expect((await api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200)).body).toEqual({ refreshed: [], remaining: 0 });
+    });
+
+    it('carries a corrected IPA to the live snapshot, with its new audio', async () => {
+      const { meaningId, pronunciationId } = await publishWord('read');
+      await api('patch', `/admin/pronunciations/${pronunciationId}`).send({ ipa: '/rɛd/' }).expect(200);
+      expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(1);
+      await generate({ pronunciationIds: [pronunciationId], overwrite: true }).expect(200);
+      expect(h.tts.calls).toEqual(['rɛd']);
+      await api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200);
+      const active = await h.first(activeMeaningPublications, eq(activeMeaningPublications.meaningId, meaningId)) as { publicationId: string };
+      const live = await h.first(meaningPublications, eq(meaningPublications.id, active.publicationId)) as { snapshot: Json };
+      expect(live.snapshot.pronunciations[0]).toMatchObject({ ipa: '/rɛd/', audioUrl: await audioOf(pronunciationId) });
+      expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(0);
     });
 
     it('skips recalled publications', async () => {
