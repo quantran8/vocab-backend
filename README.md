@@ -33,7 +33,8 @@ API docs are served at `/docs`.
 
 - `GET /admin/audio/status`: default-accent pronunciations with and without audio, and live publications whose snapshot misses the current audio.
 - `POST /admin/audio/generate` `{ pronunciationIds? | wordIds?, overwrite?, limit? }`: voices up to 50 pronunciations per call (default 20, missing only). Call again until `remaining` is 0.
-- Publications are immutable, so a live meaning plays the new audio only after `POST /admin/meanings/:id/publish`. The cron worker does this for AI-generated meanings only.
+- `GET /admin/audio/missing?q=&limit=&offset=`: default-accent pronunciations without audio (`live` marks a type with a live meaning).
+- Publications are immutable, so a live meaning plays new audio only in a new revision. `GET /admin/audio/stale-publications` lists live ones playing older audio; `POST /admin/audio/stale-publications/refresh` `{ publications?: [{ meaningId, locale }], limit? }` adds revisions that copy the live snapshot and change only `audioUrl`, so unpublished edits stay unpublished. Up to 200 per call; call again until `remaining` is 0.
 
 ## Tests
 

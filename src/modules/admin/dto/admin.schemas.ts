@@ -156,3 +156,17 @@ export const generateAudioSchema = z.strictObject({
   limit: z.number().int().min(1).max(POLICY.audio.maxBatchSize).default(POLICY.audio.defaultBatchSize),
 }).refine((b) => !(b.pronunciationIds && b.wordIds), 'Use pronunciationIds or wordIds, not both');
 export type GenerateAudio = z.infer<typeof generateAudioSchema>;
+
+export const listAudioMissingSchema = z.object({ ...page, q: searchText });
+export type ListAudioMissing = z.infer<typeof listAudioMissingSchema>;
+export const listAudioStaleSchema = z.object(page);
+export type ListAudioStale = z.infer<typeof listAudioStaleSchema>;
+
+const publicationKey = z.strictObject({ meaningId: z.uuid(), locale });
+export type PublicationKey = z.infer<typeof publicationKey>;
+export const refreshAudioSchema = z.strictObject({
+  // Omitted: refresh the first `limit` stale publications.
+  publications: z.array(publicationKey).min(1).max(POLICY.audio.maxRefreshBatch).optional(),
+  limit: z.number().int().min(1).max(POLICY.audio.maxRefreshBatch).default(POLICY.audio.maxRefreshBatch),
+});
+export type RefreshAudio = z.infer<typeof refreshAudioSchema>;
