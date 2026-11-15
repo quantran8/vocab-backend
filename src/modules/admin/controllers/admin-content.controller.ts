@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, P
 import { z } from 'zod';
 import { AdminOnly, AuthUser, CurrentUser, FullAdminOnly } from '../../../common/auth/auth.decorators';
 import {
-  ADMIN_ROLES, AI_MEANING_SCOPE, ASSIGNABLE_ROLES, CEFR_LEVELS, CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, PARTS_OF_SPEECH, TEMPLATE_VARIANTS,
+  ADMIN_ROLES, AI_MEANING_SCOPE, ASSIGNABLE_ROLES, CEFR_LEVELS, CONTENT_STATUS, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, PARTS_OF_SPEECH, TEMPLATE_VARIANTS,
 } from '../../../common/constants/domain';
 import { ZodPipe } from '../../../common/http/zod.pipe';
 import { SUPPORTED_LOCALES } from '../../practice-resolver/locale-copy';
@@ -39,6 +39,8 @@ export class AdminWordsController {
       aiMeaningScopes: Object.values(AI_MEANING_SCOPE),
       adminRoles: ADMIN_ROLES,
       assignableRoles: ASSIGNABLE_ROLES,
+      // The only accent POST /admin/audio/generate voices.
+      audioAccent: DEFAULT_ACCENT,
     };
   }
 

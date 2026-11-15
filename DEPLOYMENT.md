@@ -49,6 +49,7 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `DIRECT_URL` | session/direct connection (5432), used by migrations |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | from `.env` |
 | `AZURE_SPEECH_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY` | optional; unset disables that provider |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | R2 API token for audio uploads; unset disables generated audio |
 
 **Variables**:
 
@@ -61,7 +62,8 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `BUILD_PLATFORM` | `linux/arm64` (default) or `linux/amd64` |
 | `APP_PORT` | loopback port on the VM, default `3001` (money-space uses 3000) |
 | `EDGE_DIR` | money-space's `APP_DIR`, default `/opt/money-space` |
-| optional | `AZURE_SPEECH_REGION`, `SUPABASE_AUDIO_BUCKET`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED` |
+| optional | `AZURE_SPEECH_REGION`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED` |
+| `CORS_ORIGINS` | comma-separated browser origins allowed to call the API, e.g. `https://vocab-admin.vercel.app`. Unset keeps CORS off |
 | `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` | login name and address of the seeded admin. Without them the admin signs in by email only. The password is not deployed: `pnpm db:seed` reads it from your local `.env` |
 
 An unset optional value is left out of the VM's `.env`, so the defaults in

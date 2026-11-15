@@ -24,7 +24,7 @@ import { AuthProvider } from './modules/auth/providers/auth.provider';
 import { AuthService } from './modules/auth/services/auth.service';
 import { CatalogController } from './modules/catalog/controllers/catalog.controller';
 import { AnthropicLexicalProvider } from './modules/custom-words/providers/anthropic-lexical.provider';
-import { AudioStorage, SupabaseAudioStorage } from './modules/custom-words/providers/audio-storage';
+import { AudioStorage, R2AudioStorage } from './modules/custom-words/providers/audio-storage';
 import { CustomWordsController } from './modules/custom-words/controllers/custom-words.controller';
 import { AccountDeletionRepository } from './modules/identity/repositories/account-deletion.repository';
 import { IdentityRepository } from './modules/identity/repositories/identity.repository';
@@ -70,6 +70,9 @@ import { ChallengeRepository } from './modules/challenge/repositories/challenge.
 import { ChallengeMapService } from './modules/challenge/services/challenge-map.service';
 import { ChallengeRunService } from './modules/challenge/services/challenge-run.service';
 import { HealthController } from './modules/health/health.controller';
+import { AdminAudioController } from './modules/admin/controllers/admin-audio.controller';
+import { AdminAudioRepository } from './modules/admin/repositories/admin-audio.repository';
+import { AdminAudioService } from './modules/admin/services/admin-audio.service';
 import { AdminRankingController } from './modules/admin/controllers/admin-ranking.controller';
 import { AdminRankingService } from './modules/admin/services/admin-ranking.service';
 import { EffortRepository } from './modules/learning-points/repositories/effort.repository';
@@ -82,7 +85,7 @@ import { RankingService } from './modules/ranking/services/ranking.service';
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
     SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
-    AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController,
+    AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController, AdminAudioController,
     MeRankingController, RankingController, HealthController,
   ],
   providers: [
@@ -92,14 +95,14 @@ import { RankingService } from './modules/ranking/services/ranking.service';
     { provide: SpeechProvider, useClass: AzureRestSpeechProvider },
     { provide: LexicalProvider, useClass: AnthropicLexicalProvider },
     { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
-    { provide: AudioStorage, useClass: SupabaseAudioStorage },
+    { provide: AudioStorage, useClass: R2AudioStorage },
     AuthProvider, AuthService, IdentityService, PlacementRepository, PlacementService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
     SpeechService, CheckpointService, JourneyService, ChallengeMapService, ChallengeRunService, ChallengeRepository, MaintenanceService, AdminService, PublicationService,
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker, ReviewLoadRepository, ReviewLoadService,
-    EffortRepository, RankingRepository, RankingService, AdminRankingService,
+    EffortRepository, RankingRepository, RankingService, AdminRankingService, AdminAudioRepository, AdminAudioService,
   ],
 })
 export class AppModule {}
