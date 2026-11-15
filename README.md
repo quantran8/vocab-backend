@@ -29,12 +29,14 @@ API docs are served at `/docs`.
 
 ## Audio
 
-`pronunciations.audio_asset_key` holds a ready-to-play HTTPS URL. Generated audio is voiced by ElevenLabs and stored in Cloudflare R2 at `tts/<voice>/<accent>/<sha256 of text>.mp3`, so URLs never contain the word (blind listening tasks reject URLs that do).
+IPA and audio belong to a Meaning (`pronunciations.meaning_id`, one row per accent): senses of one spelling can sound different (read /riːd/, /rɛd/). Snapshots carry the Meaning's own pronunciation, so learn cards, word detail and listening/speaking evidence follow the Meaning. `pnpm db:seed:heteronyms` adds a few words whose senses sound different (tear, bass, lead, row, bow). Admin: `POST /admin/meanings/:id/pronunciations`; `POST /admin/words` and `POST /admin/word-types/:id/meanings` take `pronunciations` inside each meaning.
 
-- `GET /admin/audio/status`: default-accent pronunciations with and without audio, and live publications whose snapshot misses the current audio.
-- `POST /admin/audio/generate` `{ pronunciationIds? | wordIds?, overwrite?, limit? }`: voices up to 50 pronunciations per call (default 20, missing only). Call again until `remaining` is 0.
-- `GET /admin/audio/missing?q=&limit=&offset=`: default-accent pronunciations without audio (`live` marks a type with a live meaning).
-- Publications are immutable, so a live meaning plays new audio only in a new revision. `GET /admin/audio/stale-publications` lists live ones playing older audio; `POST /admin/audio/stale-publications/refresh` `{ publications?: [{ meaningId, locale }], limit? }` adds revisions that copy the live snapshot and change only `audioUrl`, so unpublished edits stay unpublished. Up to 200 per call; call again until `remaining` is 0.
+`pronunciations.audio_asset_key` holds a ready-to-play HTTPS URL. Audio is voiced by ElevenLabs from the IPA, never the spelling (needs `eleven_v4`), and stored in Cloudflare R2 at `tts/<voice>/<accent>/<sha256 of IPA>.mp3`: one file per sound and voice, and the URL never reveals the word. A pronunciation without IPA gets no audio.
+
+- `GET /admin/audio/status`: default-accent pronunciations with audio, missing it (`missing`, voiceable) and missing IPA (`missingIpa`); live publications playing older audio; `voices` an admin may pick (default first, from `ELEVENLABS_VOICE_ID` and `ELEVENLABS_VOICE_OPTIONS`).
+- `POST /admin/audio/generate` `{ pronunciationIds? | wordIds?, overwrite?, limit?, voiceId? }`: voices up to 50 per call (default 20, missing only). A sound already voiced in that voice is reused. Call again until `remaining` is 0.
+- `GET /admin/audio/missing?q=&limit=&offset=`: pronunciations without audio, per Meaning (`ipa: null` cannot be voiced yet).
+- Publications are immutable, so a live meaning plays new audio only in a new revision. `GET /admin/audio/stale-publications` lists live ones showing an older IPA or playing older audio; `POST /admin/audio/stale-publications/refresh` `{ publications?: [{ meaningId, locale }], limit? }` adds revisions that copy the live snapshot and change only each pronunciation's `ipa` and `audioUrl`, so other unpublished edits stay unpublished. Up to 200 per call; call again until `remaining` is 0.
 
 ## Tests
 

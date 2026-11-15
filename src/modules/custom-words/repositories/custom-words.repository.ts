@@ -139,15 +139,13 @@ export class CustomWordsRepository {
     if (rowCount === 0) throw new ApiError('CUSTOM_WORD_LIMIT_REACHED', 'Daily lookup limit reached');
   }
 
-  async hasPronunciation(normalized: string, partOfSpeech: PartOfSpeech) {
-    const [row] = await this.db
-      .select({ id: pronunciations.id })
-      .from(pronunciations)
-      .innerJoin(wordTypes, eq(wordTypes.id, pronunciations.typeId))
-      .innerJoin(words, eq(words.id, wordTypes.wordId))
-      .where(and(sameLemma(normalized), eq(wordTypes.partOfSpeech, partOfSpeech), eq(pronunciations.accentLocale, DEFAULT_ACCENT)))
-      .limit(1);
-    return Boolean(row);
+  /** Audio already made for this sound, so a sense that sounds the same is not voiced again. */
+  async audioForIpa(ipa: string) {
+    const { rows: [row] } = await this.db.execute<{ url: string }>(sql`
+      SELECT audio_asset_key AS url FROM pronunciations
+      WHERE accent_locale = ${DEFAULT_ACCENT} AND audio_asset_key IS NOT NULL AND btrim(ipa, '/[] ') = ${ipa}
+      LIMIT 1`);
+    return row?.url ?? null;
   }
 
   private async lockWord(tx: Tx, normalized: string) {
@@ -196,19 +194,13 @@ export class CustomWordsRepository {
     if (state.total >= POLICY.customWords.maxMeaningsPerWord) throw new ApiError('CUSTOM_WORD_LIMIT_REACHED', 'Word has too many meanings');
 
     const typeId = await this.ensureType(tx, wordId, sense.partOfSpeech);
-    const pronunciation = tx.insert(pronunciations).values({ typeId, accentLocale: DEFAULT_ACCENT, ipa: sense.ipa, audioAssetKey: audioUrl });
-    // A row left by a private meaning must not shape shared content; shared rows are never touched from a private one.
-    await (isPrivate ? pronunciation.onConflictDoNothing() : pronunciation.onConflictDoUpdate({
-      target: [pronunciations.typeId, pronunciations.accentLocale],
-      set: { ipa: sense.ipa, audioAssetKey: audioUrl },
-      setWhere: sql`NOT EXISTS (SELECT 1 FROM meanings m WHERE m.type_id = ${typeId}::uuid AND m.owner_user_id IS NULL)`,
-    }));
-
     const meaningId = newId();
     await tx.insert(meanings).values({
       id: meaningId, typeId, cefrLevel: sense.cefrLevel, coreDefinition: sense.definitionText, popularity: sense.popularity ?? null, origin: MEANING_ORIGIN.AI_GENERATED,
       createdByUserId: userId, ownerUserId: isPrivate ? userId : null, lexicalDraftId: draftId, draftSenseIndex: senseIndex,
     });
+    // The sense's own IPA: another sense of this spelling may sound different.
+    await tx.insert(pronunciations).values({ meaningId, accentLocale: DEFAULT_ACCENT, ipa: sense.ipa, audioAssetKey: audioUrl });
     await tx.insert(meaningLocalizations).values({
       meaningId, locale, meaningText: sense.meaningText, definitionText: sense.definitionText,
       editorialState: EDITORIAL_STATE.APPROVED, origin: MEANING_ORIGIN.AI_GENERATED,
@@ -375,7 +367,7 @@ export class CustomWordsRepository {
     const { rows: [row] } = await this.db.execute<{ meaningId: string; locale: string }>(sql`
       SELECT a.meaning_id AS "meaningId", a.locale
       FROM meanings m
-      JOIN pronunciations pr ON pr.type_id = m.type_id AND pr.accent_locale = ${DEFAULT_ACCENT} AND pr.audio_asset_key IS NOT NULL
+      JOIN pronunciations pr ON pr.meaning_id = m.id AND pr.accent_locale = ${DEFAULT_ACCENT} AND pr.audio_asset_key IS NOT NULL
       JOIN active_meaning_publications a ON a.meaning_id = m.id AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
       WHERE m.origin = ${MEANING_ORIGIN.AI_GENERATED}
@@ -387,13 +379,12 @@ export class CustomWordsRepository {
   }
 
   async nextMissingAudio() {
-    const { rows: [row] } = await this.db.execute<{ id: string; lemma: string }>(sql`
-      SELECT pr.id, w.lemma
+    const { rows: [row] } = await this.db.execute<{ id: string; ipa: string }>(sql`
+      SELECT pr.id, pr.ipa
       FROM pronunciations pr
-      JOIN word_types wt ON wt.id = pr.type_id
-      JOIN words w ON w.id = wt.word_id
-      WHERE pr.accent_locale = ${DEFAULT_ACCENT} AND pr.audio_asset_key IS NULL
-        AND EXISTS (SELECT 1 FROM meanings m WHERE m.type_id = pr.type_id AND m.origin = ${MEANING_ORIGIN.AI_GENERATED})
+      JOIN meanings m ON m.id = pr.meaning_id
+      WHERE pr.accent_locale = ${DEFAULT_ACCENT} AND pr.audio_asset_key IS NULL AND pr.ipa IS NOT NULL
+        AND m.origin = ${MEANING_ORIGIN.AI_GENERATED}
       ORDER BY random() LIMIT 1`);
     return row;
   }

@@ -24,10 +24,10 @@ export class AdminService {
     const types = body.types.map((type) => ({
       ...type,
       id: newId(),
-      pronunciations: type.pronunciations.map((p) => ({ ...p, id: newId() })),
       meanings: type.meanings.map((meaning) => ({
         ...meaning,
         id: newId(),
+        pronunciations: meaning.pronunciations.map((p) => ({ ...p, id: newId() })),
         examples: meaning.examples.map((example) => ({ ...example, id: newId() })),
       })),
     }));
@@ -35,8 +35,8 @@ export class AdminService {
     await this.repository.insertWordTree({
       word: { id: wordId, language: body.language, lemma: body.lemma, homographKey: body.homographKey },
       types: types.map(({ id, partOfSpeech }) => ({ id, wordId, partOfSpeech })),
-      pronunciations: types.flatMap((t) => t.pronunciations.map((p) => ({ ...p, typeId: t.id }))),
       meanings: typeMeanings.map(({ id, typeId, cefrLevel, coreDefinition, popularity }) => ({ id, typeId, cefrLevel, coreDefinition, popularity })),
+      pronunciations: typeMeanings.flatMap((m) => m.pronunciations.map((p) => ({ ...p, meaningId: m.id }))),
       examples: typeMeanings.flatMap((m) =>
         m.examples.map(({ id, sourceText, targetLocator }) => ({ id, meaningId: m.id, sourceText, targetLocator })),
       ),
@@ -79,12 +79,12 @@ export class AdminService {
     return { id };
   }
 
-  // C52: a dual target must point at the same Word/Type. Items are shared content, so a private meaning cannot be a target.
+  // C52: a dual target's pronunciation must be its Meaning's own. Items are shared content, so a private meaning cannot be a target.
   async assertAligned(targets: CreateItem['targets']) {
     if ((await this.items.countMissingTargets(targets)) > 0) throw new ApiError('TASK_DATA_INVALID', 'Target does not exist or is private');
     const dual = targets.filter((t) => t.meaningId && t.pronunciationId);
     if (dual.length === 0) return;
-    if ((await this.items.countAlignedTargets(dual)) !== dual.length) throw new ApiError('TASK_DATA_INVALID', 'Meaning and pronunciation targets differ in Word/Type');
+    if ((await this.items.countAlignedTargets(dual)) !== dual.length) throw new ApiError('TASK_DATA_INVALID', 'Pronunciation target belongs to another Meaning');
   }
 
   async putItemLocale(practiceItemId: string, locale: string, body: ItemLocale) {

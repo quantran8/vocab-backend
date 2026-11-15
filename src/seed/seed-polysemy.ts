@@ -77,7 +77,7 @@ async function main() {
     const key = `${sense.lemma}:${sense.partOfSpeech}`;
     let typeId = typeIdOf.get(key);
     if (!typeId) {
-      typeId = (await adminWords.createType(wordId, { partOfSpeech: sense.partOfSpeech, pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: sense.ipa }], meanings: [] })).id;
+      typeId = (await adminWords.createType(wordId, { partOfSpeech: sense.partOfSpeech, meanings: [] })).id;
       typeIdOf.set(key, typeId);
     }
     const start = sense.example.indexOf(sense.target);
@@ -85,6 +85,8 @@ async function main() {
     const { id: meaningId } = await adminWords.createMeaning(typeId, {
       cefrLevel: sense.cefrLevel,
       coreDefinition: sense.coreDefinition,
+      // Each sense carries its own IPA: another sense of the spelling may sound different.
+      pronunciations: [{ accentLocale: DEFAULT_ACCENT, ipa: sense.ipa }],
       examples: [{ sourceText: sense.example, targetLocator: { start, end: start + sense.target.length } }],
     });
     created.push({ meaningId, sense });

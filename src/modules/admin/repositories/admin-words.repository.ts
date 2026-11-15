@@ -10,7 +10,7 @@ import {
 import { constraintOf, IN_USE, mapPgErrors, WORD_UNIQUE_INDEX } from '../domain/admin.errors';
 import { ExampleBody, ListMeanings, ListWords, MeaningBody, PatchMeaning, PatchPronunciation, PatchWord, PronunciationBody, WordTypeBody } from '../dto/admin.schemas';
 
-const ACCENT_EXISTS = 'This type already has that accent';
+const ACCENT_EXISTS = 'This meaning already has that accent';
 
 const escapeLike = (text: string) => text.replace(/[\\%_]/g, '\\$&');
 
@@ -21,6 +21,7 @@ const purgeMeanings = (scope: SQL) => sql`
   del_example_locales AS (DELETE FROM example_localizations WHERE example_id IN (SELECT id FROM target_examples)),
   del_examples AS (DELETE FROM meaning_examples WHERE id IN (SELECT id FROM target_examples)),
   del_meaning_locales AS (DELETE FROM meaning_localizations WHERE meaning_id IN (SELECT id FROM target_meanings)),
+  del_pronunciations AS (DELETE FROM pronunciations WHERE meaning_id IN (SELECT id FROM target_meanings)),
   del_meanings AS (DELETE FROM meanings WHERE id IN (SELECT id FROM target_meanings))`;
 
 @Injectable()
@@ -66,11 +67,11 @@ export class AdminWordsRepository {
         types: {
           columns: { id: true, partOfSpeech: true },
           with: {
-            pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
             meanings: {
               where: (m) => isNull(m.ownerUserId),
               columns: { id: true, cefrLevel: true, coreDefinition: true, popularity: true, origin: true, reviewedAt: true, createdAt: true },
               with: {
+                pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
                 localizations: { columns: { locale: true, meaningText: true, definitionText: true, editorialState: true, origin: true, updatedAt: true } },
                 examples: { columns: { id: true, sourceText: true, targetLocator: true }, with: { localizations: { columns: { locale: true, translationText: true } } } },
               },
@@ -117,7 +118,6 @@ export class AdminWordsRepository {
     const { rows } = await mapPgErrors(this.db.execute<{ id: string }>(sql`
       WITH target_types AS (SELECT id FROM word_types WHERE word_id = ${id}::uuid),
       ${purgeMeanings(sql`type_id IN (SELECT id FROM target_types)`)},
-      del_pronunciations AS (DELETE FROM pronunciations WHERE type_id IN (SELECT id FROM target_types)),
       del_types AS (DELETE FROM word_types WHERE id IN (SELECT id FROM target_types))
       DELETE FROM words WHERE id = ${id}::uuid RETURNING id`), { fk: IN_USE });
     return rows.length > 0;
@@ -128,25 +128,21 @@ export class AdminWordsRepository {
       await mapPgErrors(tx.insert(wordTypes).values({ id, wordId, partOfSpeech: body.partOfSpeech }), {
         fk: 'Word not found', fkCode: 'NOT_FOUND', unique: 'This word already has that part of speech',
       });
-      if (body.pronunciations.length > 0) {
-        await mapPgErrors(tx.insert(pronunciations).values(body.pronunciations.map((p) => ({ ...p, typeId: id }))), { unique: ACCENT_EXISTS });
-      }
       await this.insertMeanings(tx, id, body.meanings);
     });
   }
 
   async deleteType(id: string) {
     const { rows } = await mapPgErrors(this.db.execute<{ id: string }>(sql`
-      WITH ${purgeMeanings(sql`type_id = ${id}::uuid`)},
-      del_pronunciations AS (DELETE FROM pronunciations WHERE type_id = ${id}::uuid)
+      WITH ${purgeMeanings(sql`type_id = ${id}::uuid`)}
       DELETE FROM word_types WHERE id = ${id}::uuid RETURNING id`), { fk: IN_USE });
     return rows.length > 0;
   }
 
-  async insertPronunciation(typeId: string, body: PronunciationBody) {
+  async insertPronunciation(meaningId: string, body: PronunciationBody) {
     const [row] = await mapPgErrors(
-      this.db.insert(pronunciations).values({ ...body, typeId }).returning({ id: pronunciations.id }),
-      { fk: 'Word type not found', fkCode: 'NOT_FOUND', unique: ACCENT_EXISTS },
+      this.db.insert(pronunciations).values({ ...body, meaningId }).returning({ id: pronunciations.id }),
+      { fk: 'Meaning not found', fkCode: 'NOT_FOUND', unique: ACCENT_EXISTS },
     );
     return row.id;
   }
@@ -154,7 +150,7 @@ export class AdminWordsRepository {
   async updatePronunciation(id: string, body: PatchPronunciation) {
     const [row] = await mapPgErrors(
       this.db.update(pronunciations).set(body).where(eq(pronunciations.id, id)).returning({
-        id: pronunciations.id, typeId: pronunciations.typeId, accentLocale: pronunciations.accentLocale, ipa: pronunciations.ipa, audioAssetKey: pronunciations.audioAssetKey,
+        id: pronunciations.id, meaningId: pronunciations.meaningId, accentLocale: pronunciations.accentLocale, ipa: pronunciations.ipa, audioAssetKey: pronunciations.audioAssetKey,
       }),
       { unique: ACCENT_EXISTS },
     );
@@ -188,7 +184,7 @@ export class AdminWordsRepository {
           (SELECT ml.meaning_text FROM meaning_localizations ml WHERE ml.meaning_id = p.id AND ml.locale = ${locale}) AS "meaningText",
           COALESCE((SELECT jsonb_agg(a.locale ORDER BY a.locale) FROM active_meaning_publications a WHERE a.meaning_id = p.id AND a.recalled_at IS NULL), '[]') AS "liveLocales",
           COALESCE((SELECT jsonb_agg(jsonb_build_object('id', pr.id, 'accentLocale', pr.accent_locale, 'ipa', pr.ipa) ORDER BY pr.accent_locale)
-                    FROM pronunciations pr WHERE pr.type_id = p.type_id), '[]') AS pronunciations
+                    FROM pronunciations pr WHERE pr.meaning_id = p.id), '[]') AS pronunciations
         FROM page p
       ) row`);
     return page;
@@ -284,7 +280,7 @@ export class AdminWordsRepository {
   }
 
   hasPronunciationHistory(id: string) {
-    return this.hasHistory(sql`t.id = (SELECT type_id FROM pronunciations WHERE id = ${id}::uuid)`);
+    return this.hasHistory(sql`m.id = (SELECT meaning_id FROM pronunciations WHERE id = ${id}::uuid)`);
   }
 
   hasMeaningHistory(id: string) {
@@ -297,8 +293,10 @@ export class AdminWordsRepository {
 
   private async insertMeanings(tx: Executor, typeId: string, bodies: MeaningBody[]) {
     if (bodies.length === 0) return [];
-    const rows = bodies.map(({ examples, ...meaning }) => ({ ...meaning, id: newId(), typeId, examples }));
-    await mapPgErrors(tx.insert(meanings).values(rows.map(({ examples: _examples, ...meaning }) => meaning)), { fk: 'Word type not found', fkCode: 'NOT_FOUND' });
+    const rows = bodies.map(({ examples, pronunciations: voices, ...meaning }) => ({ ...meaning, id: newId(), typeId, examples, voices }));
+    await mapPgErrors(tx.insert(meanings).values(rows.map(({ examples: _examples, voices: _voices, ...meaning }) => meaning)), { fk: 'Word type not found', fkCode: 'NOT_FOUND' });
+    const pronunciationRows = rows.flatMap((m) => m.voices.map((p) => ({ ...p, meaningId: m.id })));
+    if (pronunciationRows.length > 0) await mapPgErrors(tx.insert(pronunciations).values(pronunciationRows), { unique: ACCENT_EXISTS });
     const exampleRows = rows.flatMap((m) => m.examples.map((e) => ({ ...e, meaningId: m.id })));
     if (exampleRows.length > 0) await tx.insert(meaningExamples).values(exampleRows);
     return rows.map((m) => m.id);

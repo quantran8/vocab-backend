@@ -16,6 +16,7 @@
     "test:int": "vitest run test/",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "nest build && node --env-file-if-exists=.env dist/seed/seed.js",
+    "db:seed:heteronyms": "nest build && node --env-file-if-exists=.env dist/seed/seed-heteronyms.js",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

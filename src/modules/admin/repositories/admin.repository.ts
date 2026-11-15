@@ -34,8 +34,8 @@ export class AdminRepository {
           throw error;
         });
       await mapPgErrors(tx.insert(wordTypes).values(types), { unique: 'A word cannot repeat a part of speech' });
-      if (pronunciationRows.length > 0) await mapPgErrors(tx.insert(pronunciations).values(pronunciationRows), { unique: 'A type cannot repeat an accent' });
       await tx.insert(meanings).values(meaningRows);
+      if (pronunciationRows.length > 0) await mapPgErrors(tx.insert(pronunciations).values(pronunciationRows), { unique: 'A meaning cannot repeat an accent' });
       if (examples.length > 0) await tx.insert(meaningExamples).values(examples);
     });
   }
@@ -68,7 +68,7 @@ export class AdminRepository {
         FROM page m
         JOIN word_types wt ON wt.id = m.type_id
         JOIN words w ON w.id = wt.word_id
-        LEFT JOIN pronunciations pr ON pr.type_id = wt.id AND pr.accent_locale = ${DEFAULT_ACCENT}
+        LEFT JOIN pronunciations pr ON pr.meaning_id = m.id AND pr.accent_locale = ${DEFAULT_ACCENT}
       ) row`);
     return { total: page.total, meanings: page.items.map((r) => ({ ...r, createdAt: toDate(r.createdAt) })) };
   }

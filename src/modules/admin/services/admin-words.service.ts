@@ -63,8 +63,9 @@ export class AdminWordsService {
     if (!(await this.repository.deleteType(id))) throw new ApiError('NOT_FOUND', 'Word type not found');
   }
 
-  async createPronunciation(typeId: string, body: PronunciationBody) {
-    return { id: await this.repository.insertPronunciation(typeId, body), typeId, ...body };
+  async createPronunciation(meaningId: string, body: PronunciationBody) {
+    await this.assertSharedMeaning(meaningId);
+    return { id: await this.repository.insertPronunciation(meaningId, body), meaningId, ...body };
   }
 
   async patchPronunciation(id: string, body: PatchPronunciation) {
@@ -73,7 +74,7 @@ export class AdminWordsService {
     return row;
   }
 
-  // Snapshots hold pronunciation ids, so a type with published meanings keeps its rows.
+  // Snapshots hold pronunciation ids, so a published meaning keeps its rows.
   async deletePronunciation(id: string) {
     if (await this.repository.hasPronunciationHistory(id)) throw new ApiError('CONTENT_LOCKED', NEVER_PUBLISHED_ONLY);
     if (!(await this.repository.deletePronunciation(id))) throw new ApiError('NOT_FOUND', 'Pronunciation not found');

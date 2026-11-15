@@ -19,15 +19,12 @@ describe('demo seed', () => {
     // A learner's custom word got there first: the seed must attach to it, not fail on the unique lemma.
     const [custom] = await h.db.insert(words).values({ language: LEARNING_LANGUAGE, lemma: 'Doctor' }).returning({ id: words.id });
     const [customType] = await h.db.insert(wordTypes).values({ wordId: custom.id, partOfSpeech: 'noun' }).returning({ id: wordTypes.id });
+    const [privateMeaning] = await h.db.insert(meanings).values({ typeId: customType.id }).returning({ id: meanings.id });
     const [customPronunciation] = await h.db
       .insert(pronunciations)
-      .values({ typeId: customType.id, accentLocale: DEFAULT_ACCENT, ipa: '/private/' })
+      .values({ meaningId: privateMeaning.id, accentLocale: DEFAULT_ACCENT, ipa: '/private/' })
       .returning({ id: pronunciations.id });
 
-    // Shared content on an unrelated word must not stop the private row from giving way.
-    const [other] = await h.db.insert(words).values({ language: LEARNING_LANGUAGE, lemma: 'unrelated' }).returning({ id: words.id });
-    const [otherType] = await h.db.insert(wordTypes).values({ wordId: other.id, partOfSpeech: 'noun' }).returning({ id: wordTypes.id });
-    await h.db.insert(meanings).values({ typeId: otherType.id });
 
     await seedDemoContent(h.db);
     await seedDemoContent(h.db);
@@ -45,8 +42,10 @@ describe('demo seed', () => {
     expect(publication.snapshot).toMatchObject({
       wordId: custom.id,
       typeId: customType.id,
-      pronunciations: [{ id: customPronunciation.id, ipa: doctor.pronunciation.ipa }],
+      pronunciations: [{ id: doctor.pronunciation.id, ipa: doctor.pronunciation.ipa }],
     });
+    // Each Meaning owns its pronunciation: the learner's stays as it was.
+    expect(await h.first(pronunciations, eq(pronunciations.id, customPronunciation.id))).toMatchObject({ meaningId: privateMeaning.id, ipa: '/private/' });
 
     const items = await h.db.select().from(practiceItems);
     const locales = await h.db.select().from(practiceItemLocalizations);

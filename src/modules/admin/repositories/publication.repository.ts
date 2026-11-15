@@ -18,12 +18,10 @@ export class PublicationRepository {
           columns: { sourceText: true, targetLocator: true },
           with: { localizations: { where: (l) => eq(l.locale, locale), columns: { translationText: true } } },
         },
+        pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
         type: {
           columns: { id: true, partOfSpeech: true },
-          with: {
-            word: { columns: { id: true, lemma: true } },
-            pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
-          },
+          with: { word: { columns: { id: true, lemma: true } } },
         },
       },
     });

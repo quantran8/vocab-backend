@@ -118,16 +118,6 @@ CREATE TABLE word_types (
     UNIQUE (id, word_id),
     UNIQUE (word_id, part_of_speech)
 );
-CREATE TABLE pronunciations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type_id UUID NOT NULL REFERENCES word_types(id),
-    accent_locale VARCHAR(32) NOT NULL,
-    ipa TEXT, -- may be NULL in draft; publish validator requires IPA
-    audio_asset_key TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (type_id, accent_locale),
-    CHECK (ipa IS NULL OR length(btrim(ipa)) > 0)
-);
 CREATE TABLE meanings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type_id UUID NOT NULL REFERENCES word_types(id),
@@ -143,6 +133,17 @@ CREATE TABLE meanings (
     popularity SMALLINT CHECK (popularity BETWEEN 0 AND 100), -- higher = more common sense; picks which meaning of a word is learned first
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (lexical_draft_id, draft_sense_index)
+);
+CREATE TABLE pronunciations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    accent_locale VARCHAR(32) NOT NULL,
+    ipa TEXT, -- may be NULL in draft; publish validator requires IPA
+    audio_asset_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Per Meaning: senses of one spelling can sound different (read /riːd/, /rɛd/).
+    meaning_id UUID NOT NULL REFERENCES meanings(id),
+    UNIQUE (meaning_id, accent_locale),
+    CHECK (ipa IS NULL OR length(btrim(ipa)) > 0)
 );
 CREATE INDEX idx_meanings_ai_generated ON meanings(created_at DESC) WHERE origin = 'ai_generated';
 CREATE INDEX idx_meanings_owner ON meanings(owner_user_id) WHERE owner_user_id IS NOT NULL;

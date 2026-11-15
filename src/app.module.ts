@@ -36,6 +36,7 @@ import { UserProvisioningRepository } from './common/auth/user-provisioning.repo
 import { CommitRepository } from './modules/session-commit/repositories/commit.repository';
 import { ProgressRepository } from './modules/progress/repositories/progress.repository';
 import { CustomWordsRepository } from './modules/custom-words/repositories/custom-words.repository';
+import { PronunciationAudio } from './modules/custom-words/services/pronunciation-audio.service';
 import { CustomWordsService } from './modules/custom-words/services/custom-words.service';
 import { CustomWordsWorker } from './modules/custom-words/workers/custom-words.worker';
 import { LexicalProvider } from './modules/custom-words/providers/lexical.provider';
@@ -101,7 +102,7 @@ import { RankingService } from './modules/ranking/services/ranking.service';
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
     AdminWordsService, AdminPracticeItemsService, AdminCatalogService, AdminUsersService,
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
-    CustomWordsRepository, CustomWordsService, CustomWordsWorker, ReviewLoadRepository, ReviewLoadService,
+    CustomWordsRepository, CustomWordsService, CustomWordsWorker, PronunciationAudio, ReviewLoadRepository, ReviewLoadService,
     EffortRepository, RankingRepository, RankingService, AdminRankingService, AdminAudioRepository, AdminAudioService,
   ],
 })

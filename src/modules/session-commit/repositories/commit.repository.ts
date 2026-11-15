@@ -99,12 +99,11 @@ export class CommitRepository {
       SELECT (g->>'pronunciationId')::uuid
       FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
       WHERE g->>'pronunciationId' IS NOT NULL`;
-    // A listening/speaking target names only a pronunciation: label it with the learner's Meanings of that word type.
+    // A listening/speaking target names only a pronunciation: label it with the Meaning that owns it, if the learner has it.
     const labelMeanings = sql`
       ${planMeanings}
       UNION SELECT ump.meaning_id FROM pronunciations pr
-      JOIN meanings m ON m.type_id = pr.type_id
-      JOIN user_meaning_progress ump ON ump.meaning_id = m.id AND ump.user_id = ${userId}::uuid
+      JOIN user_meaning_progress ump ON ump.meaning_id = pr.meaning_id AND ump.user_id = ${userId}::uuid
       WHERE pr.id IN (${planPronunciations})`;
     const skillModes = sql.join(SKILL_SUMMARY_MODES.map((m) => sql`${m}`), sql`, `);
     const { rows } = await tx.execute<RawLpContext & {

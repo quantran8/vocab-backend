@@ -128,14 +128,15 @@ export const wordTypes = pgTable('word_types', {
   unique('word_types_word_id_part_of_speech_key').on(t.wordId, t.partOfSpeech),
 ]);
 
+// Per Meaning: senses of one spelling can sound different (read /riːd/, /rɛd/).
 export const pronunciations = pgTable('pronunciations', {
   id: id(),
-  typeId: uuid('type_id').notNull(),
+  meaningId: uuid('meaning_id').notNull(),
   accentLocale: varchar('accent_locale', { length: 32 }).notNull(),
   ipa: text('ipa'),
   audioAssetKey: text('audio_asset_key'),
   createdAt: createdAt(),
-}, (t) => [unique('pronunciations_type_id_accent_locale_key').on(t.typeId, t.accentLocale)]);
+}, (t) => [unique('pronunciations_meaning_id_accent_locale_key').on(t.meaningId, t.accentLocale)]);
 
 export const meanings = pgTable('meanings', {
   id: id(),
@@ -572,16 +573,16 @@ export const topicLocalizationsRelations = relations(topicLocalizations, ({ one 
 export const wordsRelations = relations(words, ({ many }) => ({ types: many(wordTypes) }));
 export const wordTypesRelations = relations(wordTypes, ({ one, many }) => ({
   word: one(words, { fields: [wordTypes.wordId], references: [words.id] }),
-  pronunciations: many(pronunciations),
   meanings: many(meanings),
 }));
 export const pronunciationsRelations = relations(pronunciations, ({ one }) => ({
-  type: one(wordTypes, { fields: [pronunciations.typeId], references: [wordTypes.id] }),
+  meaning: one(meanings, { fields: [pronunciations.meaningId], references: [meanings.id] }),
 }));
 export const meaningsRelations = relations(meanings, ({ one, many }) => ({
   type: one(wordTypes, { fields: [meanings.typeId], references: [wordTypes.id] }),
   examples: many(meaningExamples),
   localizations: many(meaningLocalizations),
+  pronunciations: many(pronunciations),
 }));
 export const meaningExamplesRelations = relations(meaningExamples, ({ one, many }) => ({
   meaning: one(meanings, { fields: [meaningExamples.meaningId], references: [meanings.id] }),

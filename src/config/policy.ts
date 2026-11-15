@@ -161,7 +161,7 @@ export const POLICY = {
     usernameChangeDays: 30,
     reportsPerUtcDay: 10,
   },
-  // Admin bulk TTS: one request stays well under a minute at ElevenLabs' concurrency limit.
-  audio: { maxBatchSize: 50, defaultBatchSize: 20, ttsConcurrency: 4, maxRefreshBatch: 200 },
+  // Admin bulk TTS: ElevenLabs allows 2 requests at once on the free plan (more on paid ones).
+  audio: { maxBatchSize: 50, defaultBatchSize: 20, ttsConcurrency: 2, maxRefreshBatch: 200 },
   customWords: { maxRoadmapWords: 500, dailyLookups: 30, maxTextLength: 64, maxContextLength: 200, maxMeaningsPerWord: 8, maxSensesPerDraft: 3 },
 } as const;

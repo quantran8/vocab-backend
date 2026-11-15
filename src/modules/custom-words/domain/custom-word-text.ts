@@ -11,8 +11,12 @@ export const contextKey = (userId: string, context: string) => `sense:${userId}:
 
 export const translationKey = (meaningId: string) => `meaning:${meaningId}`;
 
-export const audioKey = (voice: string, accent: string, text: string) =>
-  `tts/${voice}/${accent}/${createHash('sha256').update(normalizeText(text)).digest('hex')}.mp3`;
+/** IPA without the /slashes/ or [brackets] editors may type; null when nothing is left. */
+export const bareIpa = (ipa: string | null | undefined) => ipa?.normalize('NFC').trim().replace(/^[/[]+|[/\]]+$/g, '').trim() || null;
+
+// Keyed by sound, not spelling: "read" (past) and "red" share /rɛd/. The key never reveals the word.
+export const audioKey = (voice: string, accent: string, ipa: string) =>
+  `tts/${voice}/${accent}/${createHash('sha256').update(ipa).digest('hex')}.mp3`;
 
 export function locateTarget(text: string, target: string) {
   const start = text.toLowerCase().indexOf(target.trim().toLowerCase());

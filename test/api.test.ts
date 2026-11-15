@@ -162,8 +162,7 @@ describe('Vocab Flow API', () => {
       lemma: 'probe',
       types: [{
         partOfSpeech: 'verb',
-        pronunciations: [{ accentLocale: 'en-US', ipa: '/proʊb/' }],
-        meanings: [{ cefrLevel: 'B1', examples }],
+        meanings: [{ cefrLevel: 'B1', pronunciations: [{ accentLocale: 'en-US', ipa: '/proʊb/' }], examples }],
       }],
     });
 
@@ -565,8 +564,11 @@ describe('Vocab Flow API', () => {
         language: 'en', lemma: 'bank',
         types: [{
           partOfSpeech: 'noun',
-          pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }],
-          meanings: [{ cefrLevel: 'B1', examples: [example] }, { cefrLevel: 'B1', examples: [example] }],
+          // Different IPA per sense, so the learn card must carry its own Meaning's.
+          meanings: [
+            { cefrLevel: 'B1', pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }], examples: [example] },
+            { cefrLevel: 'B1', pronunciations: [{ accentLocale: 'en-US', ipa: '/bɑŋk/' }], examples: [example] },
+          ],
         }],
       });
       const [first, second] = created.types[0].meanings;
@@ -583,6 +585,9 @@ describe('Vocab Flow API', () => {
       await goal(2);
       const today = await plan();
       expect(learnIds(today)).toHaveLength(2);
+      type LearnPlan = { steps: { type: string; card?: { meaningId: string; ipa?: string } }[] };
+      const cardOf = (p: LearnPlan, meaningId: string) => p.steps.find((s) => s.type === 'learn' && s.card?.meaningId === meaningId)!.card!;
+      expect(cardOf(today, first.id).ipa).toBe('/bæŋk/');
       await commit(today, answers(today)).expect(200);
       const learned = (await progressRows()).map((r) => r.meaningId);
       expect(learned).toContain(first.id);
@@ -592,6 +597,7 @@ describe('Vocab Flow API', () => {
 
       h.clock.advance(24);
       const tomorrow = await plan();
+      expect(cardOf(tomorrow, second.id).ipa).toBe('/bɑŋk/');
       await commit(tomorrow, answers(tomorrow)).expect(200);
       expect((await progressRows()).map((r) => r.meaningId)).toContain(second.id);
     });
@@ -604,8 +610,10 @@ describe('Vocab Flow API', () => {
         language: 'en', lemma: 'bank',
         types: [{
           partOfSpeech: 'noun',
-          pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }],
-          meanings: [{ cefrLevel: 'B1', popularity: 20, examples: [example] }, { cefrLevel: 'A1', popularity: 90, examples: [example] }],
+          meanings: [
+            { cefrLevel: 'B1', popularity: 20, pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }], examples: [example] },
+            { cefrLevel: 'A1', popularity: 90, pronunciations: [{ accentLocale: 'en-US', ipa: '/bæŋk/' }], examples: [example] },
+          ],
         }],
       });
       const [rare, common] = created.types[0].meanings;

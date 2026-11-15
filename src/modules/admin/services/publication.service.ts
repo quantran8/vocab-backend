@@ -34,7 +34,7 @@ export class PublicationService {
     if (!localization?.meaningText.trim() || !localization.definitionText.trim()) throw reject('Localized meaning or definition missing');
     if (localization.editorialState !== EDITORIAL_STATE.APPROVED) throw reject('Localization is not approved');
 
-    const pronunciations = meaning.type.pronunciations;
+    const pronunciations = meaning.pronunciations;
     if (pronunciations.length === 0 || pronunciations.some((p) => !p.ipa?.trim())) throw reject('IPA missing');
 
     const examples = meaning.examples.flatMap((e) => {
