@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Clock } from '../../../common/clock';
 import { addDays, addHours, addMinutes, DAYS_PER_WEEK, HOURS_PER_DAY, utcDay, utcWeekStart } from '../../../common/constants/time';
@@ -10,7 +10,7 @@ import { RankingRepository } from '../../ranking/repositories/ranking.repository
 import { MaintenanceRepository } from '../repositories/maintenance.repository';
 
 @Injectable()
-export class MaintenanceService {
+export class MaintenanceService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MaintenanceService.name);
 
   constructor(
@@ -21,6 +21,17 @@ export class MaintenanceService {
     private readonly ranking: RankingRepository,
     private readonly effort: EffortRepository,
   ) {}
+
+  /** A lowered Tier threshold applies at deploy, not at the next 03:00 run. Idempotent, never lowers a Tier. */
+  async onApplicationBootstrap() {
+    if (!this.config.enableCron) return;
+    try {
+      const raised = await this.effort.raiseTiers(this.clock.now());
+      if (raised > 0) this.logger.log(`tiers raised by policy at startup=${raised}`);
+    } catch (error) {
+      this.logger.error(`raising tiers at startup failed: ${error}`);
+    }
+  }
 
   @Cron(CronExpression.EVERY_HOUR)
   async hourly() {

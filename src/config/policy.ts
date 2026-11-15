@@ -138,15 +138,17 @@ export const POLICY = {
     minQualifiedDayLP: 5,
   },
   tier: {
-    version: 'tier_lifetime_trial_v1',
+    // Tier depends on lifetime LP only. Active days are still counted (and sent) but gate nothing:
+    // minActiveDays 0 everywhere. The daily `raiseTiers` lifts learners the old day rule held back.
+    version: 'tier_lifetime_lp_v2',
     levels: [
-      { level: 1, key: TIER_KEY.FIRST_STEPS, minLifetimeLP: 40, minActiveDays: 1 },
-      { level: 2, key: TIER_KEY.IN_MOTION, minLifetimeLP: 180, minActiveDays: 7 },
-      { level: 3, key: TIER_KEY.BUILDING_UP, minLifetimeLP: 600, minActiveDays: 30 },
-      { level: 4, key: TIER_KEY.STEADY_EFFORT, minLifetimeLP: 1_500, minActiveDays: 90 },
-      { level: 5, key: TIER_KEY.COMMITTED, minLifetimeLP: 4_000, minActiveDays: 180 },
-      { level: 6, key: TIER_KEY.DEDICATED, minLifetimeLP: 9_000, minActiveDays: 270 },
-      { level: 7, key: TIER_KEY.LASTING_MARK, minLifetimeLP: 20_000, minActiveDays: 365 },
+      { level: 1, key: TIER_KEY.FIRST_STEPS, minLifetimeLP: 40, minActiveDays: 0 },
+      { level: 2, key: TIER_KEY.IN_MOTION, minLifetimeLP: 180, minActiveDays: 0 },
+      { level: 3, key: TIER_KEY.BUILDING_UP, minLifetimeLP: 600, minActiveDays: 0 },
+      { level: 4, key: TIER_KEY.STEADY_EFFORT, minLifetimeLP: 1_500, minActiveDays: 0 },
+      { level: 5, key: TIER_KEY.COMMITTED, minLifetimeLP: 4_000, minActiveDays: 0 },
+      { level: 6, key: TIER_KEY.DEDICATED, minLifetimeLP: 9_000, minActiveDays: 0 },
+      { level: 7, key: TIER_KEY.LASTING_MARK, minLifetimeLP: 20_000, minActiveDays: 0 },
     ],
   },
   ranking: {

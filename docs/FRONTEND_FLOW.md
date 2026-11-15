@@ -1002,14 +1002,14 @@ Theo "Syll — Ranking & Tier" v1.2. Mọi con số là thử nghiệm và lấy
 `GET /v1/me/tier`:
 
 ```jsonc
-{ "level": 3, "key": "building_up", "lifetimeLP": 12450, "lifetimeActiveDays": 86,
-  "nextTier": { "level": 4, "key": "steady_effort", "minLifetimeLP": 1500, "minLifetimeActiveDays": 90, "remainingLP": 0, "remainingActiveDays": 4 },
+{ "level": 3, "key": "building_up", "lifetimeLP": 1250, "lifetimeActiveDays": 86,
+  "nextTier": { "level": 4, "key": "steady_effort", "minLifetimeLP": 1500, "minLifetimeActiveDays": 0, "remainingLP": 250, "remainingActiveDays": 0 },
   "minQualifiedDayLP": 5,
   "milestones": [ { "level": 1, "key": "first_steps", "unlockedAt": "...", "source": "live" } ],
-  "tierPolicyVersion": "tier_lifetime_trial_v1" }
+  "tierPolicyVersion": "tier_lifetime_lp_v2" }
 ```
 
-- Hiển thị hai thanh tiến độ riêng: LP và ngày. Không gộp thành một phần trăm.
+- Tier chỉ tính theo LP tích lũy (`tier_lifetime_lp_v2`). `lifetimeActiveDays` vẫn được đếm và gửi, nhưng `minLifetimeActiveDays` luôn là 0, không chặn Tier nào. Client chỉ hiện một thanh tiến độ LP.
 - Chỉ nói phần còn thiếu, không đếm ngược.
 - Tên, câu chuyện và hình Syllie của mỗi `key` nằm ở client, có bản en/vi.
 

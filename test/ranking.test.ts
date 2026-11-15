@@ -76,7 +76,7 @@ describe('LP, Tier and weekly ranking', () => {
       expect(first.lp).toEqual({
         earned: 15, breakdown: { newMeaningLP: 15, dueReviewLP: 0, extraPracticeLP: 0 }, lpPolicyVersion: 'lp_effort_trial_v1', weeklyLP: 15, lifetimeLP: 15,
       });
-      expect(first.tier).toMatchObject({ level: 0, key: null, lifetimeActiveDays: 1, tierUps: [], nextTier: { level: 1, minLifetimeLP: 40, minLifetimeActiveDays: 1 } });
+      expect(first.tier).toMatchObject({ level: 0, key: null, lifetimeActiveDays: 1, tierUps: [], nextTier: { level: 1, minLifetimeLP: 40, minLifetimeActiveDays: 0 } });
       expect(first.ranking).toEqual({ weeklyLP: 15, listed: false });
 
       expect((await commit(p, body).expect(200)).body).toEqual(first);
@@ -102,7 +102,7 @@ describe('LP, Tier and weekly ranking', () => {
       ]);
       const tier = (await api('get', '/v1/me/tier').expect(200)).body;
       expect(tier.milestones.map((m: Json) => m.level)).toEqual([1, 2, 3]);
-      expect(tier.nextTier).toMatchObject({ level: 4, remainingLP: 900, remainingActiveDays: 60 });
+      expect(tier.nextTier).toMatchObject({ level: 4, remainingLP: 900, remainingActiveDays: 0 });
     });
 
     it('counts a day only once its LP reaches 5, and pays practice once per Meaning a day', async () => {
