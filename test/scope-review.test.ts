@@ -1,3 +1,4 @@
+import { POLICY } from '../src/config/policy';
 import { eq } from 'drizzle-orm';
 import { newId } from '../src/common/ids';
 import { collections, learningSessions, memoryObservations, topicMeanings, topics, userCollectionReviewPauses, userMeaningProgress, userReviewLoadPrompts, userSettings } from '../src/db/schema';
@@ -303,7 +304,7 @@ describe('scope completion and review load', () => {
       const committed = (await commit(p, body).expect(200)).body;
       expect(committed.summary.knownMeanings).toBe(2);
       const rows = await h.db.select().from(userMeaningProgress);
-      expect(rows.map((r) => Number(r.intervalHours))).toEqual([168, 168]);
+      expect(rows.map((r) => r.stability)).toEqual([POLICY.fsrs.knownInitialDays, POLICY.fsrs.knownInitialDays]);
     });
 
     it('a declined or failed check teaches as usual without penalty', async () => {
@@ -335,7 +336,7 @@ describe('scope completion and review load', () => {
       const body = { learnStepsCompleted: [], taskResults: all.taskResults.filter((r) => !dropped.has(r.taskId)), knownLearnSteps: steps.map((s) => s.id) };
       expect((await commit(p, body).expect(200)).body.summary.knownMeanings).toBe(2);
       const rows = await h.db.select().from(userMeaningProgress);
-      expect(rows.map((r) => Number(r.intervalHours))).toEqual([168, 168]);
+      expect(rows.map((r) => r.stability)).toEqual([POLICY.fsrs.knownInitialDays, POLICY.fsrs.knownInitialDays]);
     });
 
     it('a step marked known cannot also be completed, nor come from a plan without checks', async () => {

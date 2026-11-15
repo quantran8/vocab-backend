@@ -1,6 +1,6 @@
 import {
   ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, DeliveryMode, EVIDENCE_REASON, EvidenceReason, OUTCOME, Outcome,
-  SKILL, Skill, SKILL_ISSUE, SKILL_STATUS, SkillIssue, SkillStatus, TASK_PHASE, TaskPhase, TEMPLATE, Template, VALIDITY, Validity,
+  SKILL, Skill, SKILL_ISSUE, SKILL_STATUS, SkillIssue, SkillStatus, TASK_PHASE, TaskPhase, Template, VALIDITY, Validity,
 } from '../../common/constants/domain';
 import { MS_PER_HOUR } from '../../common/constants/time';
 import { POLICY } from '../../config/policy';
@@ -86,11 +86,10 @@ function speakingEvidence(fact: SkillFact): EvidenceDraft[] {
   }];
 }
 
-/** The skill a task of this shape trains; must agree with evidenceFor below. */
+/** The skill a task of this shape trains; must agree with evidenceFor below. Meaning-only tasks train none. */
 export function skillOf(intent: AssessmentIntent, promptIsTargetAudio: boolean): Skill | null {
   switch (intent) {
     case ASSESSMENT_INTENT.MEANING_RECOGNITION:
-      return promptIsTargetAudio ? SKILL.LISTENING : SKILL.READING;
     case ASSESSMENT_INTENT.TRANSCRIPTION:
       return promptIsTargetAudio ? SKILL.LISTENING : null;
     case ASSESSMENT_INTENT.SOUND_DISCRIMINATION:
@@ -98,10 +97,10 @@ export function skillOf(intent: AssessmentIntent, promptIsTargetAudio: boolean):
     case ASSESSMENT_INTENT.PRONUNCIATION:
       return SKILL.SPEAKING;
     case ASSESSMENT_INTENT.PAIRING:
-      return SKILL.READING;
+      return null;
     case ASSESSMENT_INTENT.MEANING_RECALL:
     case ASSESSMENT_INTENT.SPELLING_REPAIR:
-      return SKILL.WRITING;
+      return SKILL.SPELLING;
   }
 }
 
@@ -115,20 +114,18 @@ export function deriveEvidence(fact: SkillFact): EvidenceDraft[] {
 function evidenceFor(fact: SkillFact): EvidenceDraft[] {
   switch (fact.intent) {
     case ASSESSMENT_INTENT.MEANING_RECOGNITION:
-      if (fact.promptIsTargetAudio) return listeningEvidence(fact, false);
-      return meaningEvidence(fact, SKILL.READING, fact.template !== TEMPLATE.SELECT);
-    case ASSESSMENT_INTENT.MEANING_RECALL:
-      return meaningEvidence(fact, SKILL.WRITING, false);
     case ASSESSMENT_INTENT.TRANSCRIPTION:
       return fact.promptIsTargetAudio ? listeningEvidence(fact, false) : [];
+    case ASSESSMENT_INTENT.MEANING_RECALL:
+      return meaningEvidence(fact, SKILL.SPELLING, false);
     case ASSESSMENT_INTENT.SOUND_DISCRIMINATION:
       return listeningEvidence(fact, true);
     case ASSESSMENT_INTENT.PRONUNCIATION:
       return speakingEvidence(fact);
     case ASSESSMENT_INTENT.PAIRING:
-      return meaningEvidence(fact, SKILL.READING, true);
+      return [];
     case ASSESSMENT_INTENT.SPELLING_REPAIR:
-      return meaningEvidence(fact, SKILL.WRITING, true);
+      return meaningEvidence(fact, SKILL.SPELLING, true);
   }
 }
 
@@ -178,30 +175,9 @@ export function openIssue(rows: EvidenceRow[]): { issue: SkillIssue; at: Date } 
 /** A clean, direct pass: the only row that can verify a skill or close an issue. */
 export const isCleanPass = (row: EvidenceRow) => classify(row) === PASS;
 
-/** Input: valid rows carrying only SKILL_STATE_REASONS for one skill + scope, oldest first. Rules: memory memory-assessment-rework. */
-export function deriveSkillStatus(allRows: EvidenceRow[]): SkillState {
-  const issue = openIssue(allRows)?.issue ?? null;
-  const needsPractice = issue !== null;
-  const rows = allRows.filter((r) => [PASS, SKILL_ISSUE.FAILED].includes(classify(r) as string));
-  const lastFailure = rows.findLastIndex((r) => classify(r) === SKILL_ISSUE.FAILED);
-  const passes = rows.slice(lastFailure + 1);
-
-  if (passes.length === 0) {
-    const hadPass = rows.some((r) => classify(r) === PASS);
-    return { status: hadPass ? SKILL_STATUS.DEMONSTRATED : SKILL_STATUS.NOT_VERIFIED, needsPractice, issue };
-  }
-  const sessions = new Set(passes.map((r) => r.sessionId));
-  const spanHours = (passes.at(-1)!.committedAt.getTime() - passes[0].committedAt.getTime()) / MS_PER_HOUR;
-  const verified = sessions.size >= POLICY.skill.requiredSessions && spanHours >= POLICY.skill.delayedRecheckHours;
-  return { status: verified ? SKILL_STATUS.VERIFIED : SKILL_STATUS.DEMONSTRATED, needsPractice, issue };
+/** Input: valid rows carrying only SKILL_STATE_REASONS for one skill + scope, oldest first. Spacing is FSRS's job: one clean pass demonstrates the skill, an open issue says it needs practice. */
+export function deriveSkillStatus(rows: EvidenceRow[]): SkillState {
+  const issue = openIssue(rows)?.issue ?? null;
+  const status = rows.some((r) => classify(r) === PASS) ? SKILL_STATUS.DEMONSTRATED : SKILL_STATUS.NOT_VERIFIED;
+  return { status, needsPractice: issue !== null, issue };
 }
-
-export interface WordScopes {
-  readingWriting: SkillStatus[];
-  listeningSpeaking: SkillStatus[];
-  learnedMeaningCount: number;
-}
-
-export const isWordFullyVerified = ({ readingWriting, listeningSpeaking, learnedMeaningCount }: WordScopes) =>
-  learnedMeaningCount > 0 &&
-  [...readingWriting, ...listeningSpeaking].every((s) => s === SKILL_STATUS.VERIFIED);

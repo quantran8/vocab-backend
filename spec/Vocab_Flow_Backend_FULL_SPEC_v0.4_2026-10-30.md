@@ -1003,6 +1003,9 @@ Reducer ưu tiên valid meaning recall trước recognition; wrong FlyReorder/Ty
 
 ### 5.3. Mode-specific SRS policy `[PROPOSED]`
 
+> **Superseded (2026-11):** thay bằng FSRS-6 với trọng số bằng chứng theo dạng bài, xem `docs/DECISIONS.md` § "FSRS and weighted evidence" và `docs/FSRS_PLAN.md`.
+
+
 - **Daily New:** Sau Learn + first **`typing | flyReorder`** Meaning-cued recall attempt + đủ mandatory group interactions (`select`, `typing | flyReorder`, `recording` terminal assessed/unavailable) + Finish, khởi tạo `learned_at` kể cả answer sai. Đếm **một Word goal slot** cho Meaning mới; 4–5 lượt cùng session gộp thành **1 MemoryObservation/Meaning/session**, không được cộng dồn 5 SRS successes.
 - **Daily Due:** Template lựa chọn linh hoạt, weighted random trên eligible pool. **Chỉ** semantic memory task hợp lệ mới cập nhật Meaning SRS (bao gồm `select(audio)` nghe từ chọn nghĩa và `typing | flyReorder` meaning-cued); `recording`/sound-only `select.phoneticChoice`/`select.stressChoice`/`typing.transcription` đơn lẻ không tự xóa due. Due từ active Topics, review cap, backlog không chặn New.
 - **Checkpoint / Random / Weak:** Random/adaptive giữa 7 eligible templates, không dùng new-learning mandatory checklist. Record skill evidence khi đủ điều kiện; **success không kéo dài Meaning SRS**; failure có thể kéo due sớm (`min(oldNextDue, now+failureDelay)`). Đây là lựa chọn chống farming success, vẫn `[OPEN]` về việc non-Daily có consume due hay không.
@@ -1010,6 +1013,9 @@ Reducer ưu tiên valid meaning recall trước recognition; wrong FlyReorder/Ty
 - Một Meaning không được khởi tạo lần 2 khi user học lại ở Topic/Collection khác.
 
 ### 5.4. Adaptive Meaning SRS — parameters `[TRIAL]`
+
+> **Superseded (2026-11):** thay bằng FSRS-6 với trọng số bằng chứng theo dạng bài, xem `docs/DECISIONS.md` § "FSRS and weighted evidence" và `docs/FSRS_PLAN.md`.
+
 
 | Parameter | Trial value | Meaning |
 |---|---:|---|
@@ -1043,6 +1049,9 @@ Daily Due + recognitionSuccess:
 ---
 
 ## 6. Four-skill verification & Word status
+
+> **Superseded (2026-11):** skill chỉ còn `listening`, `speaking`, `spelling`; bỏ `reading` và trạng thái `verified`. Xem `docs/DECISIONS.md` § "FSRS and weighted evidence".
+
 
 **Skill targets giữ theo scope hiện hành:** Reading/Writing → Meaning, Listening/Speaking → Pronunciation. Một `select(audio)` direct meaning-question sẽ được map tới cả Meaning và Pronunciation thông qua **dual-target** đã service-validated. Mere `prompt.type=audio` không tự thành Listening evidence; audio phải là target English word (không phải localized instruction/meaning audio), response phải chứng minh nhận diện nghĩa.
 

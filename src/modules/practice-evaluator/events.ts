@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { DELIVERY_MODE, EVENT_ACTION } from '../../common/constants/domain';
 import { POLICY } from '../../config/policy';
 
-const base = { seq: z.number().int().positive() };
+// elapsedMs: since the task was shown; optional, old clients never earn Easy.
+const base = { seq: z.number().int().positive(), elapsedMs: z.number().int().nonnegative().max(POLICY.memoryEvidence.maxElapsedMs).optional() };
 const id = z.number().int().nonnegative();
 
 export const eventSchema = z.discriminatedUnion('action', [

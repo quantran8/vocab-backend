@@ -7,7 +7,7 @@ import {
 import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
-  type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
+  type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type FsrsGrade, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
   type AvatarKey, type ContentProvenance, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
@@ -310,10 +310,10 @@ export const userMeaningProgress = pgTable('user_meaning_progress', {
   learnedSessionId: uuid('learned_session_id'),
   lastReviewedAt: ts('last_reviewed_at'),
   nextReviewAt: ts('next_review_at').notNull(),
-  intervalHours: numeric('interval_hours', { precision: 12, scale: 3, mode: 'number' }).notNull(),
-  unaidedStreak: integer('unaided_streak').notNull().default(0),
+  // FSRS memory state: stability in days, difficulty 1..10.
+  stability: numeric('stability', { precision: 12, scale: 4, mode: 'number' }).notNull(),
+  difficulty: numeric('difficulty', { precision: 6, scale: 4, mode: 'number' }).notNull(),
   lapseCount: integer('lapse_count').notNull().default(0),
-  recognitionGraceUsed: boolean('recognition_grace_used').notNull().default(false),
   schedulerVersion: varchar('scheduler_version', { length: 40 }).notNull(),
   version: integer('version').notNull().default(1),
   learnedViaTopicId: uuid('learned_via_topic_id'),
@@ -330,6 +330,9 @@ export const memoryObservations = pgTable('memory_observations', {
   signal: varchar('signal', { length: 24 }).$type<MemorySignal>().notNull(),
   isPrimed: boolean('is_primed').notNull().default(false),
   sourceTaskIds: jsonb('source_task_ids').notNull().default([]).$type<string[]>(),
+  // null: the session's evidence did not move the schedule.
+  grade: varchar('grade', { length: 8 }).$type<FsrsGrade>(),
+  evidenceWeight: numeric('evidence_weight', { precision: 4, scale: 3, mode: 'number' }),
   observedAt: ts('observed_at').notNull(),
 }, (t) => [
   primaryKey({ columns: [t.sessionId, t.meaningId] }),

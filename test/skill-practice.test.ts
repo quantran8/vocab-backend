@@ -61,14 +61,14 @@ describe('practice by skill', () => {
     const listening = await plan(SKILL.LISTENING);
     expect(tasksOf(listening)).toHaveLength(WITH_AUDIO);
     expect(tasksOf(listening).every((t: { prompt: { type: string } }) => t.prompt.type === 'audio')).toBe(true);
-    expect(tasksOf(await plan(SKILL.WRITING))).toHaveLength(LEARNED);
+    expect(tasksOf(await plan(SKILL.SPELLING))).toHaveLength(LEARNED);
   });
 
   it('records evidence for the chosen skill only', async () => {
-    const p = await plan(SKILL.WRITING);
+    const p = await plan(SKILL.SPELLING);
     await commit(p, answers(p)).expect(200);
     const rows = await h.db.select({ skill: skillEvidence.skill }).from(skillEvidence).where(eq(skillEvidence.sessionId, p.sessionId));
-    expect(new Set(rows.map((r) => r.skill))).toEqual(new Set([SKILL.WRITING]));
+    expect(new Set(rows.map((r) => r.skill))).toEqual(new Set([SKILL.SPELLING]));
   });
 
   it('speaking issues recording tasks', async () => {
@@ -77,8 +77,8 @@ describe('practice by skill', () => {
   });
 
   it('keeps the skill in the session scope', async () => {
-    const p = await plan(SKILL.READING);
-    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.READING] });
+    const p = await plan(SKILL.SPELLING);
+    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.SPELLING] });
   });
 
   it('returns an empty plan when the device cannot train the skill', async () => {
@@ -87,8 +87,10 @@ describe('practice by skill', () => {
   });
 
   it('rejects a skill outside random practice, and an unknown skill', async () => {
-    await api('post', '/v1/sessions/plan').send(planBody(SKILL.READING, CAPS, 'daily')).expect(400);
+    await api('post', '/v1/sessions/plan').send(planBody(SKILL.SPELLING, CAPS, 'daily')).expect(400);
     await api('post', '/v1/sessions/plan').send(planBody('grammar')).expect(400);
+    // Meaning memory is FSRS's job: reading is no longer a skill.
+    await api('post', '/v1/sessions/plan').send(planBody('reading')).expect(400);
   });
 
   it('without a skill stays mixed practice', async () => {
@@ -98,25 +100,25 @@ describe('practice by skill', () => {
   });
 
   it('several skills: one task per word, only the chosen skills, each one used', async () => {
-    const p = await planSkills([SKILL.READING, SKILL.WRITING]);
+    const p = await planSkills([SKILL.LISTENING, SKILL.SPELLING]);
     const skills = await skillsOf(p.sessionId);
     expect(skills).toHaveLength(LEARNED);
-    expect(new Set(skills)).toEqual(new Set([SKILL.READING, SKILL.WRITING]));
-    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.READING, SKILL.WRITING] });
+    expect(new Set(skills)).toEqual(new Set([SKILL.LISTENING, SKILL.SPELLING]));
+    expect((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).scopeSnapshot).toMatchObject({ skills: [SKILL.LISTENING, SKILL.SPELLING] });
     await commit(p, answers(p)).expect(200);
   });
 
   it('several skills: a word without audio trains another chosen skill instead of listening', async () => {
-    const p = await planSkills([SKILL.LISTENING, SKILL.READING]);
+    const p = await planSkills([SKILL.LISTENING, SKILL.SPELLING]);
     const skills = await skillsOf(p.sessionId);
     expect(skills).toHaveLength(LEARNED);
     expect(skills.filter((s) => s === SKILL.LISTENING).length).toBeLessThanOrEqual(WITH_AUDIO);
-    expect(skills.every((s) => s === SKILL.LISTENING || s === SKILL.READING)).toBe(true);
+    expect(skills.every((s) => s === SKILL.LISTENING || s === SKILL.SPELLING)).toBe(true);
   });
 
   it('several skills: drops the ones the device cannot train', async () => {
-    const p = await planSkills([SKILL.SPEAKING, SKILL.WRITING], { ...CAPS, microphone: false });
-    expect(new Set(await skillsOf(p.sessionId))).toEqual(new Set([SKILL.WRITING]));
+    const p = await planSkills([SKILL.SPEAKING, SKILL.SPELLING], { ...CAPS, microphone: false });
+    expect(new Set(await skillsOf(p.sessionId))).toEqual(new Set([SKILL.SPELLING]));
     expect(await planSkills([SKILL.SPEAKING, SKILL.LISTENING], { audioPlayback: false, microphone: false }))
       .toEqual({ sessionId: null, mode: 'random_practice', steps: [] });
   });
@@ -124,8 +126,8 @@ describe('practice by skill', () => {
   it('rejects empty, duplicate or mixed skill fields', async () => {
     const send = (body: object) => api('post', '/v1/sessions/plan').send({ mode: 'random_practice', capabilities: CAPS, ...body });
     await send({ skills: [] }).expect(400);
-    await send({ skills: [SKILL.READING, SKILL.READING] }).expect(400);
-    await send({ skill: SKILL.READING, skills: [SKILL.WRITING] }).expect(400);
-    await api('post', '/v1/sessions/plan').send({ mode: 'daily', capabilities: CAPS, skills: [SKILL.READING] }).expect(400);
+    await send({ skills: [SKILL.SPELLING, SKILL.SPELLING] }).expect(400);
+    await send({ skill: SKILL.SPELLING, skills: [SKILL.SPELLING] }).expect(400);
+    await api('post', '/v1/sessions/plan').send({ mode: 'daily', capabilities: CAPS, skills: [SKILL.SPELLING] }).expect(400);
   });
 });

@@ -67,6 +67,11 @@ function assertMonotonic(events: TaskEvent[]) {
     if (event.seq <= previous) throw invalid('Event seq must strictly increase');
     return event.seq;
   }, 0);
+  events.reduce((previous, event) => {
+    if (event.elapsedMs === undefined) return previous;
+    if (event.elapsedMs < previous) throw invalid('Event elapsedMs must not decrease');
+    return event.elapsedMs;
+  }, 0);
 }
 
 interface AttemptTally {

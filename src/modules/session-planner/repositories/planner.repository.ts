@@ -7,6 +7,7 @@ import { DB, Db, toDate } from '../../../db/db';
 import { practiceItemLocalizations, practiceItemTargets, checkpointChallenges, learningSessions, userMeaningOverrides } from '../../../db/schema';
 import { CuratedItem } from '../../practice-resolver/curated';
 import { DistractorView, MeaningSnapshot } from '../../practice-resolver/task.types';
+import { DECAY, FACTOR } from '../../memory-srs/fsrs';
 import { openSkillIssuesSql } from '../../skill-verification/skill-issue.sql';
 import { NewWordOverride } from '../../review-load/domain/review-load';
 import { backlogSql, pendingCustomSql, remainingNewSql, reviewableSql } from '../../review-load/repositories/review-scope.sql';
@@ -14,7 +15,7 @@ import { backlogSql, pendingCustomSql, remainingNewSql, reviewableSql } from '..
 type SnapshotRow = { snapshot: MeaningSnapshot };
 
 export interface SourceTopic { id: string; name: string; personal: boolean }
-export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null };
+export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; skillGaps?: Skill[] };
 export type NewTarget = { snapshot: MeaningSnapshot; viaTopicId: string | null };
 
 /** Random practice source (§9); unset means every reviewable learned Meaning. */
@@ -115,8 +116,16 @@ export class PlannerRepository {
   // Every reviewable learned Meaning, not only the current scope (D2). The label follows §6.3:
   // a scope topic, then the topic it was learned from, then the first curated membership.
   async dueTargets(userId: string, locale: string, uiLocale: string, now: Date, limit: number): Promise<DueTarget[]> {
-    const { rows } = await this.db.execute<{ snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null }>(sql`
-      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal
+    // Lowest FSRS retrievability first: the word most likely forgotten by now leads the session.
+    const elapsedDays = sql`GREATEST(0, extract(epoch FROM ${now}::timestamptz - COALESCE(ump.last_reviewed_at, ump.learned_at)) / 86400)`;
+    const { rows } = await this.db.execute<{
+      snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null; skillGaps: Skill[];
+    }>(sql`
+      WITH open_issue AS (${openSkillIssuesSql(userId)})
+      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal,
+        ARRAY(SELECT DISTINCT oi.skill FROM open_issue oi
+          WHERE oi.meaning_id = ump.meaning_id
+             OR oi.pronunciation_id IN (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e)) AS "skillGaps"
       FROM user_meaning_progress ump
       JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
@@ -136,11 +145,12 @@ export class PlannerRepository {
         LIMIT 1) st ON true
       WHERE ump.user_id = ${userId}::uuid AND ump.next_review_at <= ${now}::timestamptz
         AND ${reviewableSql(userId, sql`ump.meaning_id`)}
-      ORDER BY ump.next_review_at, ump.meaning_id
+      ORDER BY power(1 + ${FACTOR}::float8 * ${elapsedDays} / ump.stability, ${DECAY}::float8), ump.meaning_id
       LIMIT ${limit}`);
     return rows.map((r) => ({
       snapshot: r.snapshot,
       sourceTopic: r.topicId ? { id: r.topicId, name: r.topicName!, personal: r.personal! } : null,
+      skillGaps: r.skillGaps,
     }));
   }
 

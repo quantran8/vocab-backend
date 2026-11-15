@@ -1,12 +1,12 @@
 import {
-  ASSESSMENT_INTENT, AssessmentIntent, EVIDENCE_REASON, EvidenceReason, MEMORY_SIGNAL, NEW_WORD_GROUP, NewWordGroup, OUTCOME, Outcome,
+  ASSESSMENT_INTENT, AssessmentIntent, EVIDENCE_REASON, EvidenceReason, FSRS_GRADE, MEMORY_SIGNAL, NEW_WORD_GROUP, NewWordGroup, OUTCOME, Outcome,
   PRACTICE_GROUP, PracticeGroup, RESULT_CAUSE, ResultCause, REVIEW_GROUP, ReviewGroup, SKILL_CHANGE, SKILL_ISSUE, SKILL_STATUS, Skill, SkillChange,
   SkillStatus, TASK_PHASE, VALIDITY,
 } from '../../../common/constants/domain';
 import { addHours } from '../../../common/constants/time';
 import { POLICY } from '../../../config/policy';
 import { MemoryDraft, signalOf } from '../../memory-srs/memory-reducer';
-import { SrsState } from '../../memory-srs/srs';
+import { SrsState } from '../../memory-srs/fsrs';
 import { ServerEvaluation } from '../../practice-resolver/task.types';
 import { deriveSkillStatus, EvidenceRow, isCleanPass, openIssue, SKILL_STATE_REASONS, skillOf } from '../../skill-verification/skill-evidence';
 import { EvaluatedTask, EvidenceRowDraft, LearnStepRow, TargetRow } from './commit-evaluator';
@@ -87,7 +87,7 @@ interface Answer {
 // Worst first: the cause shown is the most serious thing that happened to the word.
 const CAUSE_ORDER: ResultCause[] = [
   RESULT_CAUSE.REVEALED, RESULT_CAUSE.OUT_OF_TRIES, RESULT_CAUSE.WRONG_CHOICE, RESULT_CAUSE.NOT_PASSED,
-  RESULT_CAUSE.RETRIED, RESULT_CAUSE.HINTED, RESULT_CAUSE.PRIMED, RESULT_CAUSE.RECOGNIZED_ONLY,
+  RESULT_CAUSE.RETRIED, RESULT_CAUSE.HINTED, RESULT_CAUSE.PRIMED,
 ];
 
 /** What went wrong in one answer; null for a clean one or one that says nothing (no mic, unusable audio). */
@@ -150,22 +150,20 @@ function answersByMeaning(counted: EvaluatedTask[], targets: TargetRow[], labels
 
 // --- Daily: review ---------------------------------------------------------------------------------
 
-// Same signal that picks the SRS branch, so the group can never disagree with the new schedule.
+// By correctness, not evidence weight: a clean select is remembered even though it moves the schedule less.
 function reviewGroupOf(draft: MemoryDraft): ReviewGroup {
-  if (draft.signal === MEMORY_SIGNAL.UNAIDED_RECALL) return draft.isPrimed ? REVIEW_GROUP.SHAKY : REVIEW_GROUP.SOLID;
-  if (draft.signal === MEMORY_SIGNAL.ASSISTED_RECALL || draft.signal === MEMORY_SIGNAL.RECOGNITION_SUCCESS) return REVIEW_GROUP.SHAKY;
-  return REVIEW_GROUP.RELEARN;
+  if (draft.grade === FSRS_GRADE.AGAIN) return REVIEW_GROUP.RELEARN;
+  return draft.grade === FSRS_GRADE.HARD ? REVIEW_GROUP.SHAKY : REVIEW_GROUP.SOLID;
 }
 
 /** Only the answers that gave the deciding signal explain the group; a later clean answer does not. */
 function reviewCause(draft: MemoryDraft, answers: Answer[]) {
-  if (draft.signal === MEMORY_SIGNAL.UNAIDED_RECALL) return draft.isPrimed ? { cause: RESULT_CAUSE.PRIMED } : null;
-  const deciding = answers.filter((a) => signalOf(a) === draft.signal);
-  if (draft.signal === MEMORY_SIGNAL.RECOGNITION_SUCCESS) {
-    const first = deciding.reduce<Answer | null>((f, a) => (!f || a.ordinal < f.ordinal ? a : f), null);
-    return { cause: RESULT_CAUSE.RECOGNIZED_ONLY, ...(first?.skill && { struggledAt: first.skill }) };
-  }
-  return worstCause(deciding);
+  if (draft.grade === FSRS_GRADE.AGAIN) return worstCause(answers.filter((a) => signalOf(a) === draft.signal));
+  if (draft.grade !== FSRS_GRADE.HARD) return null;
+  if (draft.signal === MEMORY_SIGNAL.ASSISTED_RECALL) return worstCause(answers.filter((a) => signalOf(a) === draft.signal));
+  if (draft.isPrimed) return { cause: RESULT_CAUSE.PRIMED };
+  // A clean recall that outranked a wrong pick: the pick is the doubt.
+  return worstCause(answers);
 }
 
 export function reviewSummary(input: {
@@ -309,7 +307,7 @@ export function practiceSummary(input: {
 
 // --- Random / Weak: skill changes ------------------------------------------------------------------
 
-const RANK: Record<SkillStatus, number> = { [SKILL_STATUS.NOT_VERIFIED]: 0, [SKILL_STATUS.DEMONSTRATED]: 1, [SKILL_STATUS.VERIFIED]: 2 };
+const RANK: Record<SkillStatus, number> = { [SKILL_STATUS.NOT_VERIFIED]: 0, [SKILL_STATUS.DEMONSTRATED]: 1 };
 
 export interface ChangeItem {
   meaningId: string;
@@ -362,7 +360,7 @@ export function skillChanges(input: {
   return groups;
 }
 
-/** Practice that served as the due review (`applyNonDaily`'s first branch): a due word recalled unaided and unprimed. */
+/** Practice that served as the due review: a word due before the session, answered cleanly (GOOD or EASY). */
 export function countedAsReview(input: {
   memory: MemoryDraft[];
   progress: Map<string, SrsState>;
@@ -375,7 +373,7 @@ export function countedAsReview(input: {
   const ids = memory
     .filter((m) => {
       const state = progress.get(m.meaningId);
-      return state !== undefined && state.nextReviewAt <= now && m.signal === MEMORY_SIGNAL.UNAIDED_RECALL && !m.isPrimed;
+      return state !== undefined && state.nextReviewAt <= now && (m.grade === FSRS_GRADE.GOOD || m.grade === FSRS_GRADE.EASY);
     })
     .map((m) => m.meaningId);
   return order(ids).map((meaningId) => ({ ...item(meaningId, labels), nextReviewAt: iso(newStates.get(meaningId)?.nextReviewAt) }));
