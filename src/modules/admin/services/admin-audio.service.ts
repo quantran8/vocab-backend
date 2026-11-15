@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
+import { newId } from '../../../common/ids';
 import { POLICY } from '../../../config/policy';
 import { audioKey, normalizeText } from '../../custom-words/domain/custom-word-text';
 import { AudioStorage } from '../../custom-words/providers/audio-storage';
 import { TtsProvider } from '../../custom-words/providers/tts.provider';
-import { GenerateAudio } from '../dto/admin.schemas';
+import { GenerateAudio, ListAudioMissing, ListAudioStale, RefreshAudio } from '../dto/admin.schemas';
 import { AdminAudioRepository, AudioTarget } from '../repositories/admin-audio.repository';
 
 type Voiced = { ok: true; url: string } | { ok: false; message: string };
@@ -14,15 +16,35 @@ type Voiced = { ok: true; url: string } | { ok: false; message: string };
 export class AdminAudioService {
   private readonly logger = new Logger(AdminAudioService.name);
 
-  constructor(private readonly repository: AdminAudioRepository, private readonly tts: TtsProvider, private readonly storage: AudioStorage) {}
+  constructor(
+    private readonly repository: AdminAudioRepository,
+    private readonly tts: TtsProvider,
+    private readonly storage: AudioStorage,
+    private readonly clock: Clock,
+  ) {}
 
   async status() {
     return { voice: this.tts.voice, accent: DEFAULT_ACCENT, ...(await this.repository.status()) };
   }
 
+  listMissing(query: ListAudioMissing) {
+    return this.repository.listMissing(query);
+  }
+
+  listStale(query: ListAudioStale) {
+    return this.repository.listStale(query);
+  }
+
+  /** Puts current audio into live snapshots as new revisions; nothing else in them changes. */
+  async refreshPublications({ publications, limit }: RefreshAudio) {
+    const { total, items } = await this.repository.staleTargets(publications, limit);
+    const refreshed = await this.repository.refreshAudio(items.map((p) => ({ ...p, id: newId() })), this.clock.now());
+    return { refreshed, remaining: Math.max(0, total - refreshed.length) };
+  }
+
   /**
-   * Voices one batch and saves it in one write. Live snapshots keep their old audio until the
-   * meaning is republished (publications are immutable); status() counts those.
+   * Voices one batch and saves it in one write. Live snapshots keep their old audio until
+   * refreshPublications() (publications are immutable); status() counts those.
    */
   async generate(body: GenerateAudio) {
     const { missing, items } = await this.repository.targets(body);

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PERSONAL_COLLECTION_SLUG } from '../src/common/constants/domain';
 import { AppConfig } from '../src/config/app-config';
 import { ApiError } from '../src/common/http/api-error';
-import { appUsers, collections, pronunciations, topicMeanings, topics, userMeaningOverrides, words } from '../src/db/schema';
+import { activeMeaningPublications, appUsers, collections, meaningPublications, pronunciations, topicMeanings, topics, userMeaningOverrides, words } from '../src/db/schema';
 import { AuthProvider } from '../src/modules/auth/providers/auth.provider';
 import { seedAdmin } from '../src/seed/seed-admin';
 import { createHarness, Harness, SEED_ADMIN, seedWord } from './support/app';
@@ -597,15 +597,67 @@ describe('admin API', () => {
       expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(0);
     });
 
+    it('lists pronunciations without audio', async () => {
+      const live = await publishWord('probe');
+      await createWord('apple');
+      await createWord('apricot');
+      const { body } = await api('get', '/admin/audio/missing?q=AP&limit=1').expect(200);
+      expect(body.total).toBe(2);
+      expect(body.items).toEqual([expect.objectContaining({ lemma: 'apple', partOfSpeech: 'verb', ipa: '/proʊb/', live: false })]);
+      const probe = (await api('get', '/admin/audio/missing?q=probe').expect(200)).body.items[0];
+      expect(probe).toMatchObject({ pronunciationId: live.pronunciationId, wordId: live.wordId, live: true });
+      await generate({ wordIds: [live.wordId] }).expect(200);
+      expect((await api('get', '/admin/audio/missing?q=probe').expect(200)).body).toEqual({ total: 0, items: [] });
+    });
+
+    it('refreshes only the audio of live snapshots, never unpublished edits', async () => {
+      const a = await publishWord('probe');
+      const b = await publishWord('apple');
+      await generate().expect(200);
+      await api('patch', `/admin/examples/${a.exampleId}`).send({ sourceText: 'Edited later.', targetLocator: { start: 0, end: 6 } }).expect(200);
+
+      const stale = (await api('get', '/admin/audio/stale-publications').expect(200)).body;
+      expect(stale.total).toBe(2);
+      expect(stale.items[0]).toMatchObject({ meaningId: b.meaningId, locale: VI, lemma: 'apple', revision: 1, meaningText: 'dò' });
+
+      const one = (await api('post', '/admin/audio/stale-publications/refresh').send({ publications: [{ meaningId: a.meaningId, locale: VI }] }).expect(200)).body;
+      expect(one).toEqual({ refreshed: [{ meaningId: a.meaningId, locale: VI, revision: 2 }], remaining: 1 });
+      const [revision2] = await h.db.select().from(meaningPublications)
+        .where(and(eq(meaningPublications.meaningId, a.meaningId), eq(meaningPublications.revision, 2)));
+      const snapshot = revision2.snapshot as Json;
+      expect(snapshot.pronunciations[0].audioUrl).toBe(await audioOf(a.pronunciationId));
+      expect(snapshot.examples[0].text).toBe('Use it now.');
+      const active = await h.first(activeMeaningPublications, eq(activeMeaningPublications.meaningId, a.meaningId)) as { publicationId: string };
+      expect(active.publicationId).toBe(revision2.id);
+
+      expect((await api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200)).body.remaining).toBe(0);
+      expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(0);
+      expect((await api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200)).body).toEqual({ refreshed: [], remaining: 0 });
+    });
+
+    it('skips recalled publications', async () => {
+      const { meaningId } = await publishWord('probe');
+      await generate().expect(200);
+      await api('post', `/admin/meanings/${meaningId}/recall?locale=${VI}`).expect(200);
+      expect((await api('get', '/admin/audio/stale-publications').expect(200)).body.total).toBe(0);
+      expect((await api('post', '/admin/audio/stale-publications/refresh').send({ publications: [{ meaningId, locale: VI }] }).expect(200)).body.refreshed).toEqual([]);
+    });
+
     it('uses the same number of queries for 1 and 20 words', async () => {
       const measure = async (n: number) => {
         await h.reset();
         admin = await h.token('admin-1', 'admin');
         await h.seed('topic-a', Array.from({ length: n }, (_, i) => seedWord(i, { audioUrl: undefined })));
         await api('get', '/v1/me').expect(200);
-        return (await h.countQueries(() => generate({ limit: 50 }).expect(200).then(() => undefined))).queries;
+        const count = async (run: () => Promise<unknown>) => (await h.countQueries(() => run().then(() => undefined))).queries;
+        return {
+          missing: await count(() => api('get', '/admin/audio/missing?limit=100').expect(200)),
+          generate: await count(() => generate({ limit: 50 }).expect(200)),
+          stale: await count(() => api('get', '/admin/audio/stale-publications?limit=100').expect(200)),
+          refresh: await count(() => api('post', '/admin/audio/stale-publications/refresh').send({}).expect(200)),
+        };
       };
-      expect(await measure(20)).toBe(await measure(1));
+      expect(await measure(20)).toEqual(await measure(1));
     });
   });
 });
