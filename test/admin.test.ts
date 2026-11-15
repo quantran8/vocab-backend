@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PERSONAL_COLLECTION_SLUG } from '../src/common/constants/domain';
 import { AppConfig } from '../src/config/app-config';
-import { appUsers, collections, topicMeanings, topics, userMeaningOverrides, words } from '../src/db/schema';
+import { ApiError } from '../src/common/http/api-error';
+import { appUsers, collections, pronunciations, topicMeanings, topics, userMeaningOverrides, words } from '../src/db/schema';
 import { AuthProvider } from '../src/modules/auth/providers/auth.provider';
 import { seedAdmin } from '../src/seed/seed-admin';
 import { createHarness, Harness, SEED_ADMIN, seedWord } from './support/app';
@@ -74,6 +75,7 @@ describe('admin API', () => {
       const { body } = await api('get', '/admin/meta').expect(200);
       expect(body.locales).toEqual(expect.arrayContaining([VI, 'en-US']));
       expect(body.templateVariants.select).toContain('gloss');
+      expect(body.audioAccent).toBe('en-US');
     });
   });
 
@@ -530,4 +532,80 @@ describe('admin API', () => {
     });
   });
 
+  describe('audio', () => {
+    const generate = (body: object = {}, token = admin) => api('post', '/admin/audio/generate', token).send(body);
+    const audioOf = async (pronunciationId: string) => (await h.first(pronunciations, eq(pronunciations.id, pronunciationId)) as { audioAssetKey: string | null }).audioAssetKey;
+
+    it('voices every missing pronunciation in batches, once per text', async () => {
+      const a = await createWord('probe');
+      const b = (await api('post', '/admin/words').send(draft('Probe', { homographKey: 'b' })).expect(201)).body.types[0].pronunciations[0].id as string;
+      const c = await createWord('apple');
+      expect((await api('get', '/admin/audio/status').expect(200)).body).toMatchObject({ voice: 'fake-voice', accent: 'en-US', missing: 3, withAudio: 0 });
+
+      const first = (await generate({ limit: 2 }).expect(200)).body;
+      expect(first.generated.map((g: Json) => g.lemma)).toEqual(['apple', 'probe']);
+      expect(first.remaining).toBe(1);
+      const second = (await generate().expect(200)).body;
+      expect(second.generated).toHaveLength(1);
+      expect(second.remaining).toBe(0);
+      expect(h.tts.calls).toEqual(['apple', 'probe', 'Probe']);
+
+      expect(await audioOf(a.pronunciationId)).toMatch(/^https:\/\/cdn\.example\.invalid\/tts\/fake-voice\/en-US\/[0-9a-f]{64}\.mp3$/);
+      expect(await audioOf(b)).toBe(await audioOf(a.pronunciationId));
+      expect(await audioOf(c.pronunciationId)).not.toBe(await audioOf(a.pronunciationId));
+      expect((await generate().expect(200)).body).toMatchObject({ generated: [], failed: [], remaining: 0 });
+    });
+
+    it('targets ids, skips other accents and keeps audio unless overwrite', async () => {
+      const a = await createWord('probe');
+      const other = await createWord('apple');
+      const gb = (await api('post', `/admin/word-types/${a.typeId}/pronunciations`).send({ accentLocale: 'en-GB', ipa: '/x/' }).expect(201)).body.id as string;
+
+      const byWord = (await generate({ wordIds: [a.wordId] }).expect(200)).body;
+      expect(byWord.generated.map((g: Json) => g.pronunciationId)).toEqual([a.pronunciationId]);
+      expect(await audioOf(other.pronunciationId)).toBeNull();
+      expect(await audioOf(gb)).toBeNull();
+
+      await api('patch', `/admin/pronunciations/${a.pronunciationId}`).send({ audioAssetKey: 'https://cdn.example.invalid/manual.mp3' }).expect(200);
+      const kept = (await generate({ pronunciationIds: [a.pronunciationId, gb] }).expect(200)).body;
+      expect(kept).toMatchObject({ generated: [], skippedIds: [a.pronunciationId, gb] });
+      expect(await audioOf(a.pronunciationId)).toBe('https://cdn.example.invalid/manual.mp3');
+
+      const redone = (await generate({ pronunciationIds: [a.pronunciationId], overwrite: true }).expect(200)).body;
+      expect(redone.generated).toHaveLength(1);
+      expect(await audioOf(a.pronunciationId)).toContain('/tts/fake-voice/');
+
+      await generate({ wordIds: [a.wordId], pronunciationIds: [gb] }).expect(400);
+      await generate({ limit: 51 }).expect(400);
+    });
+
+    it('fails without writing when the provider is down, and refuses learners', async () => {
+      const { pronunciationId } = await createWord('probe');
+      h.tts.error = new ApiError('TTS_PROVIDER_UNAVAILABLE', 'down');
+      expect((await generate().expect(503)).body.code).toBe('TTS_PROVIDER_UNAVAILABLE');
+      expect(await audioOf(pronunciationId)).toBeNull();
+      const learner = await h.token('learner');
+      await generate({}, learner).expect(403);
+      await api('get', '/admin/audio/status', learner).expect(403);
+    });
+
+    it('counts live snapshots that still miss the new audio until republished', async () => {
+      const { meaningId } = await publishWord('probe');
+      await generate().expect(200);
+      expect((await api('get', '/admin/audio/status').expect(200)).body).toMatchObject({ missing: 0, withAudio: 1, staleLivePublications: 1 });
+      await api('post', `/admin/meanings/${meaningId}/publish?locale=${VI}`).expect(200);
+      expect((await api('get', '/admin/audio/status').expect(200)).body.staleLivePublications).toBe(0);
+    });
+
+    it('uses the same number of queries for 1 and 20 words', async () => {
+      const measure = async (n: number) => {
+        await h.reset();
+        admin = await h.token('admin-1', 'admin');
+        await h.seed('topic-a', Array.from({ length: n }, (_, i) => seedWord(i, { audioUrl: undefined })));
+        await api('get', '/v1/me').expect(200);
+        return (await h.countQueries(() => generate({ limit: 50 }).expect(200).then(() => undefined))).queries;
+      };
+      expect(await measure(20)).toBe(await measure(1));
+    });
+  });
 });

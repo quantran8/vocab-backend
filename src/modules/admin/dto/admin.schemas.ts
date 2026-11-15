@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CEFR_LEVELS, CONTENT_STATUS, MEANING_POPULARITY, EDITORIAL_STATE, ITEM_STATUS, LEARNING_LANGUAGE, PARTS_OF_SPEECH, TEMPLATES, VARIANTS, ASSIGNABLE_ROLES } from '../../../common/constants/domain';
 import { ZodPipe } from '../../../common/http/zod.pipe';
+import { POLICY } from '../../../config/policy';
 import { hasLocaleCopy } from '../../practice-resolver/locale-copy';
 import { hasValidHighlight } from '../services/publication.service';
 
@@ -145,3 +146,13 @@ export type TopicMeaningIds = z.infer<typeof topicMeaningIdsSchema>;
 export const listUsersSchema = z.object({ page: z.coerce.number().int().min(1).default(1), perPage: z.coerce.number().int().min(1).max(100).default(50) });
 export const setRoleSchema = z.strictObject({ role: z.enum(ASSIGNABLE_ROLES).nullable() });
 export type SetRole = z.infer<typeof setRoleSchema>;
+
+const audioIds = z.array(z.uuid()).min(1).max(POLICY.audio.maxBatchSize);
+export const generateAudioSchema = z.strictObject({
+  pronunciationIds: audioIds.optional(),
+  wordIds: audioIds.optional(),
+  // false only fills pronunciations without audio; true re-voices the picked ones.
+  overwrite: z.boolean().default(false),
+  limit: z.number().int().min(1).max(POLICY.audio.maxBatchSize).default(POLICY.audio.defaultBatchSize),
+}).refine((b) => !(b.pronunciationIds && b.wordIds), 'Use pronunciationIds or wordIds, not both');
+export type GenerateAudio = z.infer<typeof generateAudioSchema>;

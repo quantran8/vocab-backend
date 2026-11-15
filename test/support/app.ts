@@ -13,6 +13,7 @@ import { AppModule } from '../../src/app.module';
 import { Clock } from '../../src/common/clock';
 import { VALIDITY } from '../../src/common/constants/domain';
 import { addHours } from '../../src/common/constants/time';
+import { configureCors } from '../../src/common/http/cors';
 import { createHttpAdapter } from '../../src/common/http/http-adapter';
 import { DB, Db, QueryStats } from '../../src/db/db';
 import { AdminService } from '../../src/modules/admin/services/admin.service';
@@ -29,6 +30,7 @@ export const CAPS = { audioPlayback: true, microphone: true };
 const ISSUER_PATH = '/auth/v1';
 export const ANON_KEY = 'test-anon-key';
 export const SERVICE_KEY = 'test-service-key';
+export const CORS_TEST_ORIGIN = 'https://admin.example.test';
 export const SEED_ADMIN = { USERNAME: 'admin123213', EMAIL: 'seeded-admin@example.com', PASSWORD: 'test-admin-password' };
 
 export interface FakeAuthUser {
@@ -239,6 +241,7 @@ export async function createHarness(): Promise<Harness> {
     ALLOW_PLACEHOLDER_AUDIO: 'true',
     ENABLE_CRON: 'false',
     RANKING_ENABLED: 'true',
+    CORS_ORIGINS: CORS_TEST_ORIGIN,
   });
 
   const clock = new TestClock();
@@ -253,6 +256,7 @@ export async function createHarness(): Promise<Harness> {
     .overrideProvider(AudioStorage).useValue(new FakeAudioStorage())
     .compile();
   const app = module.createNestApplication<NestFastifyApplication>(createHttpAdapter());
+  configureCors(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 
