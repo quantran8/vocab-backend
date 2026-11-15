@@ -100,9 +100,11 @@ describe('commit summary for the results screen', () => {
       const p = await plan();
       const { summary } = (await commit(p, answers(p, { override: fail })).expect(200)).body;
       expect(summary.newWords.total).toBe(1);
-      expect(summary.newWords.groups.revealed).toEqual([expect.objectContaining({
-        cause: expect.stringMatching(/^(out_of_tries|wrong_choice)$/), struggledAt: expect.stringMatching(/^(reading|writing|listening|speaking)$/),
-      })]);
+      const [revealed] = summary.newWords.groups.revealed;
+      expect(summary.newWords.groups.revealed).toHaveLength(1);
+      expect(revealed.cause).toMatch(/^(out_of_tries|wrong_choice)$/);
+      // A text recognition trains no form skill, so it may name none.
+      if (revealed.struggledAt) expect(revealed.struggledAt).toMatch(/^(spelling|listening|speaking)$/);
     });
 
     it('C66 a recording the learner could not do keeps the word smooth', async () => {
@@ -160,7 +162,7 @@ describe('commit summary for the results screen', () => {
       await onboard(6);
       await learn(3);
       h.clock.advance(24 * 3);
-      const { p, response } = await practiced('random_practice', undefined, { skills: ['writing'] });
+      const { p, response } = await practiced('random_practice', undefined, { skills: ['spelling'] });
       const { summary } = response.body;
       expect(summary).toMatchObject({ review: null, newWords: null });
       expect(summary.practice.total).toBe(summary.practice.groups.clean.length);
@@ -168,7 +170,7 @@ describe('commit summary for the results screen', () => {
       expect(summary.skillChanges).toMatchObject({ cleared: [], pendingConfirm: [], regressed: [] });
       expect(summary.skillChanges.leveledUp.length).toBeGreaterThan(0);
       expect(summary.needPractice).toEqual({ before: 0, after: 0 });
-      // Every word is due after three days: exactly the unprimed recalls count as its review.
+      // Every word is due after three days: exactly the clean, unprimed answers count as its review.
       const recalled = new Set((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).plan!.tasks
         .filter((t) => { const e = t.serverEvaluation as ServerEvaluation; return e.intent === ASSESSMENT_INTENT.MEANING_RECALL && !e.isPrimed; })
         .flatMap((t) => t.targets.flatMap((g) => g.meaningId ?? [])));
@@ -195,7 +197,7 @@ describe('commit summary for the results screen', () => {
       await onboard(6);
       await learn(1);
       h.clock.advance(30);
-      const { response } = await practiced('random_practice', fail);
+      const { response } = await practiced('random_practice', fail, { skills: ['spelling'] });
       const { summary } = response.body;
       expect(summary.practice.groups.missed.length).toBeGreaterThan(0);
       expect(summary.skillChanges.regressed.length).toBeGreaterThan(0);
@@ -206,7 +208,7 @@ describe('commit summary for the results screen', () => {
       await onboard(6);
       await learn(1);
       h.clock.advance(30);
-      await practiced('random_practice', fail);
+      await practiced('random_practice', fail, { skills: ['spelling'] });
 
       h.clock.advance(1);
       const early = (await practiced('weak_words_practice')).response.body.summary;

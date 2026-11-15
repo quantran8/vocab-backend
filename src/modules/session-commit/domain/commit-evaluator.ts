@@ -1,4 +1,4 @@
-import { DELIVERY_MODE, DeliveryMode, OUTCOME, PROMPT_TYPE, TASK_PHASE, Template, TaskPhase } from '../../../common/constants/domain';
+import { DELIVERY_MODE, DeliveryMode, EVENT_ACTION, OUTCOME, PROMPT_TYPE, TASK_PHASE, Template, TaskPhase } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AnswerKey, ClientBody, evaluateTask, ReceiptView, TargetOutcome } from '../../practice-evaluator/evaluate';
 import { CommitBody } from '../../practice-evaluator/events';
@@ -133,8 +133,10 @@ const targetIndex = (targets: TargetRow[]) => new Map(targets.map((t) => [target
 export function sessionResult(evaluated: EvaluatedTask[], targets: TargetRow[], receipts: Map<string, { accuracyScore?: number | null }>) {
   const index = targetIndex(targets);
   return {
-    tasks: evaluated.map(({ task, deliveryMode, receiptId, targets: outcomes }) => ({
+    tasks: evaluated.map(({ task, deliveryMode, receiptId, targets: outcomes, rawEvents }) => ({
       taskId: task.id,
+      // Kept to calibrate the Easy thresholds.
+      firstSubmitMs: rawEvents.find((e) => e.action === EVENT_ACTION.SUBMIT)?.elapsedMs ?? null,
       template: task.template,
       variant: task.variant,
       intent: (task.serverEvaluation as ServerEvaluation).intent,
@@ -148,10 +150,26 @@ export function sessionResult(evaluated: EvaluatedTask[], targets: TargetRow[], 
   };
 }
 
+/** What the weight and the Easy threshold need from a task, read from the issued payload. */
+function answerShape({ task, rawEvents }: EvaluatedTask) {
+  const payload = task.clientPayload as ClientBody;
+  const key = task.serverEvaluation as AnswerKey;
+  const optionCount = payload.options?.length ?? payload.pairs?.left.length ?? null;
+  const firstSubmit = rawEvents.find((e) => e.action === EVENT_ACTION.SUBMIT);
+  return {
+    variant: task.variant ?? null,
+    optionCount,
+    firstSubmitMs: firstSubmit?.elapsedMs ?? null,
+    answerUnits: payload.tiles?.length ?? key.acceptedResponses?.[0]?.length ?? 0,
+  };
+}
+
 export function memoryDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]) {
   const index = targetIndex(targets);
-  const facts = evaluated.flatMap(({ task, targets: outcomes }) => {
+  const facts = evaluated.flatMap((e) => {
+    const { task, targets: outcomes } = e;
     const server = task.serverEvaluation as ServerEvaluation;
+    const shape = answerShape(e);
     return outcomes.map((o): MemoryFact => ({
       taskId: task.id,
       ordinal: task.ordinal,
@@ -161,6 +179,8 @@ export function memoryDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]) {
       hintCount: o.hintCount,
       attemptCount: o.attemptCount,
       isPrimed: server.isPrimed,
+      promptIsTargetAudio: server.promptIsTargetAudio,
+      ...shape,
     }));
   });
   return reduceMemory(facts);

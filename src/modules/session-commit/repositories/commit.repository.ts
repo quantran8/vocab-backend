@@ -4,7 +4,7 @@ import { CHECKPOINT_STATE, CONTENT_STATUS, EvidenceReason, NEW_WORD_OVERRIDE_MOD
 import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate, Tx } from '../../../db/db';
 import { checkpointChallenges, learningSessions } from '../../../db/schema';
-import { SrsState } from '../../memory-srs/srs';
+import { SrsState } from '../../memory-srs/fsrs';
 import { backlogSql, scopeMembershipSql } from '../../review-load/repositories/review-scope.sql';
 import { SessionPlan } from '../../session-planner/domain/session-plan';
 import { lpContextColumnsSql, parseLpContext, RawLpContext } from '../../learning-points/repositories/effort.repository';
@@ -126,8 +126,7 @@ export class CommitRepository {
           WHERE r.session_id = s.id AND r.consumed_at IS NULL AND r.expires_at > ${now}::timestamptz), '[]'::json) AS receipts,
         COALESCE((SELECT json_agg(json_build_object(
             'meaningId', p.meaning_id, 'learnedAt', p.learned_at, 'lastReviewedAt', p.last_reviewed_at, 'nextReviewAt', p.next_review_at,
-            'intervalHours', p.interval_hours, 'unaidedStreak', p.unaided_streak, 'lapseCount', p.lapse_count,
-            'recognitionGraceUsed', p.recognition_grace_used))
+            'stability', p.stability, 'difficulty', p.difficulty, 'lapseCount', p.lapse_count))
           FROM (
             SELECT * FROM user_meaning_progress
             WHERE user_id = ${userId}::uuid AND meaning_id IN (${planMeanings})
@@ -208,25 +207,25 @@ export class CommitRepository {
           id uuid, task_id uuid, target_ordinal smallint, skill varchar, reasons jsonb, validity varchar, passed boolean,
           meaning_id uuid, pronunciation_id uuid, assessed_at timestamptz, assessment_receipt_id uuid, evaluator_version varchar)
       ), observations AS (
-        INSERT INTO memory_observations (session_id, user_id, meaning_id, signal, is_primed, source_task_ids, observed_at)
-        SELECT ${sessionId}::uuid, ${userId}::uuid, x.meaning_id, x.signal, x.is_primed, x.source_task_ids, ${now}::timestamptz
-        FROM p, jsonb_to_recordset(p.d->'memory') AS x(meaning_id uuid, signal varchar, is_primed boolean, source_task_ids jsonb)
+        INSERT INTO memory_observations (session_id, user_id, meaning_id, signal, is_primed, source_task_ids, grade, evidence_weight, observed_at)
+        SELECT ${sessionId}::uuid, ${userId}::uuid, x.meaning_id, x.signal, x.is_primed, x.source_task_ids, x.grade, x.evidence_weight, ${now}::timestamptz
+        FROM p, jsonb_to_recordset(p.d->'memory') AS x(
+          meaning_id uuid, signal varchar, is_primed boolean, source_task_ids jsonb, grade varchar, evidence_weight numeric)
       ), progress AS (
         INSERT INTO user_meaning_progress (
-          user_id, meaning_id, learned_at, learned_session_id, last_reviewed_at, next_review_at, interval_hours,
-          unaided_streak, lapse_count, recognition_grace_used, scheduler_version, learned_via_topic_id)
-        SELECT ${userId}::uuid, x.meaning_id, x.learned_at, x.learned_session_id, x.last_reviewed_at, x.next_review_at, x.interval_hours,
-               x.unaided_streak, x.lapse_count, x.recognition_grace_used, ${SCHEDULER_VERSION}::varchar, x.learned_via_topic_id
+          user_id, meaning_id, learned_at, learned_session_id, last_reviewed_at, next_review_at, stability,
+          difficulty, lapse_count, scheduler_version, learned_via_topic_id)
+        SELECT ${userId}::uuid, x.meaning_id, x.learned_at, x.learned_session_id, x.last_reviewed_at, x.next_review_at, x.stability,
+               x.difficulty, x.lapse_count, ${SCHEDULER_VERSION}::varchar, x.learned_via_topic_id
         FROM p, jsonb_to_recordset(p.d->'progress') AS x(
           meaning_id uuid, learned_at timestamptz, learned_session_id uuid, last_reviewed_at timestamptz, next_review_at timestamptz,
-          interval_hours numeric, unaided_streak int, lapse_count int, recognition_grace_used boolean, learned_via_topic_id uuid)
+          stability numeric, difficulty numeric, lapse_count int, learned_via_topic_id uuid)
         ON CONFLICT (user_id, meaning_id) DO UPDATE SET
           last_reviewed_at = EXCLUDED.last_reviewed_at,
           next_review_at = EXCLUDED.next_review_at,
-          interval_hours = EXCLUDED.interval_hours,
-          unaided_streak = EXCLUDED.unaided_streak,
+          stability = EXCLUDED.stability,
+          difficulty = EXCLUDED.difficulty,
           lapse_count = EXCLUDED.lapse_count,
-          recognition_grace_used = EXCLUDED.recognition_grace_used,
           scheduler_version = EXCLUDED.scheduler_version,
           version = user_meaning_progress.version + 1
       ), consumed AS (

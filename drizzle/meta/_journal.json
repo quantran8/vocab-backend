@@ -20,6 +20,7 @@
     { "idx": 15, "version": "7", "when": 1761868800015, "tag": "0015_challenge_map", "breakpoints": true },
     { "idx": 16, "version": "7", "when": 1761868800016, "tag": "0016_scope_review_load", "breakpoints": true },
     { "idx": 17, "version": "7", "when": 1761868800017, "tag": "0017_ranking_tier", "breakpoints": true },
-    { "idx": 18, "version": "7", "when": 1761868800018, "tag": "0018_reviews_per_session", "breakpoints": true }
+    { "idx": 18, "version": "7", "when": 1761868800018, "tag": "0018_reviews_per_session", "breakpoints": true },
+    { "idx": 19, "version": "7", "when": 1761868800019, "tag": "0019_fsrs_form_skills", "breakpoints": true }
   ]
 }

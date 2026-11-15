@@ -128,7 +128,10 @@ describe('C43 C44 all 7 templates with both prompt types', () => {
 
 describe('merged variants', () => {
   const silent = (task: ResolvedTask) =>
-    reduceMemory([{ taskId: 't', ordinal: 0, meaningId: 'm', intent: task.serverEvaluation.intent, outcome: OUTCOME.CORRECT, hintCount: 0, isPrimed: false }]);
+    reduceMemory([{
+      taskId: 't', ordinal: 0, meaningId: 'm', intent: task.serverEvaluation.intent, outcome: OUTCOME.CORRECT, hintCount: 0, attemptCount: 1, isPrimed: false,
+      variant: task.variant, optionCount: null, promptIsTargetAudio: task.serverEvaluation.promptIsTargetAudio, firstSubmitMs: null, answerUnits: 0,
+    }]);
   const audioOnly = { promptVariants: { audio: { url: AUDIO, locale: 'en-US', isTargetAudio: true } } };
   const answer = (task: ResolvedTask) =>
     evaluateTask({

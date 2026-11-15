@@ -109,7 +109,7 @@ Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo
 
 | Topic | Current behavior | Why |
 | --- | --- | --- |
-| `shaky` **Learning** | Assisted recall (including a primed unaided recall) and recognition-only success share one group | Both left the word not proven: SRS either halves the interval or only grants the 24 h grace. Splitting them would show a difference the schedule does not make |
+| `shaky` **Learning** | Superseded by "FSRS and weighted evidence": groups follow correctness. A clean select is `solid`; help, a retry, priming or a wrong pick before a clean recall is `shaky` | Learners saw all-correct sessions reported as not remembered |
 | `known` outside the total **iOS** | `newWords.total` counts smooth + retried + revealed; known words show separately | Known words skip learning, so they say nothing about how smoothly learning went |
 | New-word edge cases **Learning** | "I know this word" (`knownLearnSteps`) is `known`, like a passed check. A recording `assessed_failed` is `retried`; `invalid`/`unavailable` is skipped. A word with no remaining task is `smooth` | The spec names only the check path and the unavailable case |
 | Labels read at commit | `lemma` and `gloss` come from the active publication for the learner's current `explanation_locale` (user override applied), read inside the existing `loadSession` statement; nothing is stored in the plan | Zero extra queries and no fallback for plans issued before the change; the spec asked for the commit-time locale anyway |
@@ -117,6 +117,21 @@ Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo
 | Practice unit | One `practice` item per skill evidence row, so a Weak task is one (word, skill) pair | Matches "a task with skill evidence"; a `match` produces several rows, all excluded as `weak_template` |
 | `pendingConfirm` | A clean pass on a skill whose issue is under 12 h old; `confirmableAt` = issue time + `POLICY.memory.recoveryHours` | Without it, a Weak session right after a bad Daily looks broken: the answer is right but the word stays flagged |
 | `needPractice` cost | `before` is computed inside `writeCommit` (pre-write snapshot); `after` is one extra statement for Random/Weak only that patches the stored response | Retries and commit-status must replay the first answer; the count stays constant in Meanings |
+
+## FSRS and weighted evidence
+
+Plan: `docs/FSRS_PLAN.md`. Supersedes the trial SRS rows above (memory grading, Daily due SRS, recognition grace, review skill tasks) and the four-skill verification where they conflict.
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Scheduler **Learning** | FSRS-6 (`src/modules/memory-srs/fsrs.ts`, default weights in `POLICY.fsrs`), desired retention 0.9, next review clamped to 12 h–90 d. One `applyReview` for every mode: an early review earns little because retrievability is still high | The trial formulas were hand-tuned; FSRS ships parameters trained on large review logs and needs no data to start |
+| Evidence classes **Learning** | A clean answer counts by class: `recall_produce` (typing) 1.0, `recall_assembled` (fly_reorder) 0.7, `recognize_context` (cloze_select) 0.4, `recognize` (select, match) 0.3. Fewer choices scale down (n = 1 gives 0); a target-audio prompt ×1.2, capped at the next class. Answers in one session combine as 1 − Π(1 − w) | Most templates are recognition; ignoring them left words due forever. Same-nature templates share a weight |
+| Grades **Learning** | Any miss → Again. Help, a retry, priming, or a wrong pick before a clean recall → Hard. Otherwise Good, scaling the stability gain by the combined weight. Weight 0 (only classless tasks) → the schedule is untouched, `last_reviewed_at` included | Failing an easy task is strong evidence of forgetting; passing one is weak evidence of remembering |
+| Easy **iOS** **Learning** | Optional `elapsedMs` on every event (ms since the task was shown, non-decreasing). A clean first-try recall (typing or fly_reorder) under `baseMs + perUnitMs × length` is Easy. No timing, no Easy | Speed is the only Easy signal the app has; old clients keep working |
+| Daily review **Learning** | Exactly one meaning task per due word, picked by `POLICY.review.classPickWeight`; no skill bonus tasks, no recording/transcription. A due word with an open form-skill issue doubles the candidates that train it. Due words are ordered by lowest retrievability | Review is for memory; form skills have their own modes |
+| Form skills **iOS** | Skills are `listening`, `speaking`, `spelling` (was writing). `reading` is gone and rejected by the planner. Status is `not_verified` or `demonstrated` (one clean pass); `verified` and `fullyVerified` are gone. Issues and the 12 h recovery are unchanged | Reading and meaning-recall writing duplicated FSRS; the 2-session rule duplicated its spacing |
+| Word detail **iOS** | Each meaning has `memory: { stabilityDays, retrievability, nextReviewAt }` (null until learned) and `skills: { spelling, listening?, speaking? }` | Replaces the verified badge with how well the word holds now |
+| Data conversion | Migration 0019: stability = max(interval_hours / 24, 0.1), difficulty = min(10, D0(Good) + lapse_count); `reading` evidence deleted, `writing` renamed `spelling` | Little data so far; a replay would have to guess weights for old observations |
 
 ## Not implemented
 

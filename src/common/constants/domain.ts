@@ -44,6 +44,28 @@ export const TEMPLATE_VARIANTS: Record<Template, readonly Variant[]> = {
   [TEMPLATE.RECORDING]: [VARIANT.SCRIPTED_PRONUNCIATION],
 };
 
+// How much a correct answer proves the learner remembers a Meaning; same-nature templates share a class (match is a select).
+export const EVIDENCE_CLASS = {
+  RECALL_PRODUCE: 'recall_produce',
+  RECALL_ASSEMBLED: 'recall_assembled',
+  RECOGNIZE_CONTEXT: 'recognize_context',
+  RECOGNIZE: 'recognize',
+} as const;
+export type EvidenceClass = (typeof EVIDENCE_CLASS)[keyof typeof EVIDENCE_CLASS];
+
+/** Variants absent here test sound or spelling, not meaning, and give no memory evidence. */
+export const CLASS_BY_VARIANT: Partial<Record<Variant, EvidenceClass>> = {
+  [VARIANT.MEANING_RECALL]: EVIDENCE_CLASS.RECALL_PRODUCE,
+  [VARIANT.SPELLING_RECALL]: EVIDENCE_CLASS.RECALL_ASSEMBLED,
+  [VARIANT.SINGLE_BLANK]: EVIDENCE_CLASS.RECOGNIZE_CONTEXT,
+  [VARIANT.CONTEXT_MEANING]: EVIDENCE_CLASS.RECOGNIZE_CONTEXT,
+  [VARIANT.GLOSS]: EVIDENCE_CLASS.RECOGNIZE,
+  [VARIANT.REVERSE_GLOSS]: EVIDENCE_CLASS.RECOGNIZE,
+  [VARIANT.MEANING_CLASH]: EVIDENCE_CLASS.RECOGNIZE,
+  [VARIANT.MEANING_PAIRS]: EVIDENCE_CLASS.RECOGNIZE,
+  [VARIANT.WORD_PAIRS]: EVIDENCE_CLASS.RECOGNIZE,
+};
+
 export const PART_OF_SPEECH = {
   NOUN: 'noun',
   VERB: 'verb',
@@ -93,11 +115,18 @@ export const MEMORY_SIGNAL = {
 } as const;
 export type MemorySignal = (typeof MEMORY_SIGNAL)[keyof typeof MEMORY_SIGNAL];
 
+// FSRS ratings; the numeric grade the formulas use is FSRS_GRADE_VALUE.
+export const FSRS_GRADE = { AGAIN: 'again', HARD: 'hard', GOOD: 'good', EASY: 'easy' } as const;
+export type FsrsGrade = (typeof FSRS_GRADE)[keyof typeof FSRS_GRADE];
+export const FSRS_GRADE_VALUE: Record<FsrsGrade, 1 | 2 | 3 | 4> = {
+  [FSRS_GRADE.AGAIN]: 1, [FSRS_GRADE.HARD]: 2, [FSRS_GRADE.GOOD]: 3, [FSRS_GRADE.EASY]: 4,
+};
+
+// Form skills only: whether the learner remembers the meaning is FSRS's job.
 export const SKILL = {
   LISTENING: 'listening',
   SPEAKING: 'speaking',
-  READING: 'reading',
-  WRITING: 'writing',
+  SPELLING: 'spelling',
 } as const;
 export type Skill = (typeof SKILL)[keyof typeof SKILL];
 export const SKILLS = Object.values(SKILL);
@@ -105,7 +134,6 @@ export const SKILLS = Object.values(SKILL);
 export const SKILL_STATUS = {
   NOT_VERIFIED: 'not_verified',
   DEMONSTRATED: 'demonstrated',
-  VERIFIED: 'verified',
 } as const;
 export type SkillStatus = (typeof SKILL_STATUS)[keyof typeof SKILL_STATUS];
 
@@ -197,7 +225,6 @@ export const RESULT_CAUSE = {
   HINTED: 'hinted',
   RETRIED: 'retried',
   PRIMED: 'primed',
-  RECOGNIZED_ONLY: 'recognized_only',
   REVEALED: 'revealed',
   OUT_OF_TRIES: 'out_of_tries',
   WRONG_CHOICE: 'wrong_choice',
@@ -298,7 +325,7 @@ export type NewWordsBlockedReason = (typeof NEW_WORDS_BLOCKED_REASON)[keyof type
 
 export const PLAN_VERSION = 'plan-v0.4';
 export const EVALUATOR_VERSION = 'eval-v0.4';
-export const SCHEDULER_VERSION = 'srs-trial-v0.5';
+export const SCHEDULER_VERSION = 'fsrs6-weighted-v1';
 export const EVENT_SCHEMA_VERSION = 1;
 
 export const DEFAULT_LOCALE = 'vi-VN';
