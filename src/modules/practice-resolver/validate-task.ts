@@ -83,7 +83,8 @@ export function findTaskProblem(task: ResolvedTask): string | null {
     if (server.acceptedResponses!.some((a) => normalizeAnswer(a) === normalizeAnswer(ordered))) return 'Tiles reveal the answer order';
   }
 
-  const isBlindAudio = payload.prompt?.type === PROMPT_TYPE.AUDIO && server.promptIsTargetAudio && template !== TEMPLATE.RECORDING;
+  if (template === TEMPLATE.RECORDING && payload.prompt?.type === PROMPT_TYPE.AUDIO) return 'Recording prompt must not be audio';
+  const isBlindAudio = payload.prompt?.type === PROMPT_TYPE.AUDIO && server.promptIsTargetAudio;
   if (isBlindAudio) {
     const needles = server.answerTexts.map(normalizeAnswer);
     const { url } = (payload.prompt as Extract<Prompt, { type: 'audio' }>).audio;

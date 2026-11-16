@@ -127,8 +127,7 @@ function skillCandidates(target: MeaningSnapshot, input: PlanInput) {
   const { ctx } = input;
   return weighted(
     [
-      buildRecording(target, PROMPT_TYPE.TEXT, ctx),
-      buildRecording(target, PROMPT_TYPE.AUDIO, ctx),
+      buildRecording(target, ctx),
       buildTranscription(target, ctx),
       ...curatedTasks(input, target, false),
     ],
@@ -146,7 +145,7 @@ function taskForSkill(skill: Skill, target: MeaningSnapshot, { pool, ctx, rng }:
     case SKILL.LISTENING:
       return buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng);
     case SKILL.SPEAKING:
-      return buildRecording(target, pickModality(rng), ctx) ?? buildRecording(target, PROMPT_TYPE.TEXT, ctx);
+      return buildRecording(target, ctx);
   }
 }
 
@@ -227,7 +226,7 @@ function buildGloss(target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
 function buildNewSlot(slot: TaskSlot, target: MeaningSnapshot, input: PlanInput) {
   const { pool, ctx, rng } = input;
   if (slot.template === TEMPLATE.RECORDING) {
-    return buildRecording(target, pickModality(rng), ctx) ?? buildRecording(target, PROMPT_TYPE.TEXT, ctx);
+    return buildRecording(target, ctx);
   }
   if (slot.isFirstRecall) {
     const fly = slot.template === TEMPLATE.FLY_REORDER ? buildFlyReorder(target, ctx, rng) : null;
@@ -242,7 +241,7 @@ const canLearn = (target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) =>
     buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng) &&
       buildSelectReverse(target, pool, ctx, rng) &&
       buildTypingRecall(target, ctx) &&
-      buildRecording(target, PROMPT_TYPE.TEXT, ctx),
+      buildRecording(target, ctx),
   );
 
 const visibleText = ({ task }: PlannedTask) => {

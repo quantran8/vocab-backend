@@ -177,21 +177,19 @@ export function buildFlyReorder(target: MeaningSnapshot, ctx: ResolveContext, rn
   });
 }
 
-export function buildRecording(target: MeaningSnapshot, promptType: PromptType, ctx: ResolveContext) {
+// Text prompt only: an audio prompt would let the learner just repeat the clip.
+export function buildRecording(target: MeaningSnapshot, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
   if (!pronunciation) return null;
-  const playable = promptType === PROMPT_TYPE.AUDIO ? playablePronunciation(target, ctx) : null;
-  if (promptType === PROMPT_TYPE.AUDIO && !playable) return null;
   return assemble({
     template: TEMPLATE.RECORDING,
     variant: VARIANT.SCRIPTED_PRONUNCIATION,
     intent: ASSESSMENT_INTENT.PRONUNCIATION,
-    prompt: playable ? audioPrompt(playable.audioUrl, playable.accentLocale) : textPrompt(target.lemma),
+    prompt: textPrompt(target.lemma),
     body: { question: copyFor(ctx.locale, 'recording.question'), assessment: AZURE_ASSESSMENT },
     evaluation: { acceptedResponses: [target.lemma] },
     key: { referenceText: target.lemma, referenceLocale: pronunciation.accentLocale },
     answerTexts: [],
-    promptIsTargetAudio: Boolean(playable),
     targets: [{ meaningId: null, pronunciationId: pronunciation.id }],
   });
 }

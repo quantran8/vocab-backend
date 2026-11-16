@@ -83,7 +83,7 @@ export function resolveCurated(item: CuratedItem, promptType: PromptType, ctx: R
     const text = promptVariants.text.localized ? (localized.prompt as string | undefined) : promptVariants.text.text;
     const { highlight } = promptVariants.text;
     prompt = text ? { type: PROMPT_TYPE.TEXT, text, ...(highlight && { highlight }) } : null;
-  } else if (promptType === PROMPT_TYPE.AUDIO && promptVariants.audio && ctx.audioPlayback) {
+  } else if (promptType === PROMPT_TYPE.AUDIO && promptVariants.audio && ctx.audioPlayback && item.template !== TEMPLATE.RECORDING) {
     const url = resolveAudioUrl(promptVariants.audio.url, ctx.allowPlaceholderAudio);
     prompt = url ? { type: PROMPT_TYPE.AUDIO, audio: { url, locale: promptVariants.audio.locale } } : null;
     promptIsTargetAudio = promptVariants.audio.isTargetAudio;
