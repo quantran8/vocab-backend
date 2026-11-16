@@ -139,7 +139,9 @@ describe('scope completion and review load', () => {
       expect(me.settings.reviewsPerSession).toBe(6);
       await api('put', '/v1/me/settings').send({ reviewsPerSession: null }).expect(200);
       expect((await home()).reviewLoad.dueCap).toBe(8);
-      await api('put', '/v1/me/settings').send({ reviewsPerSession: 4 }).expect(400);
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: 1 }).expect(200);
+      expect((await home()).reviewLoad.dueCap).toBe(1);
+      await api('put', '/v1/me/settings').send({ reviewsPerSession: 0 }).expect(400);
       await api('put', '/v1/me/settings').send({ reviewsPerSession: 51 }).expect(400);
     });
 
