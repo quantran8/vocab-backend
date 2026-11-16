@@ -7,8 +7,8 @@ export const POLICY = {
   session: {
     ttlHours: 72,
     retentionHours: 30 * HOURS_PER_DAY,
-    // Reviews per daily session the learner may choose; unset follows dailyNewWordGoal, never below min.
-    reviewsPerSession: { min: 5, max: 50 },
+    // Reviews per daily session the learner may choose (min–max); unset follows dailyNewWordGoal, never below followMin.
+    reviewsPerSession: { min: 1, max: 50, followMin: 5 },
     practiceTaskCap: 10,
     maxEventsPerTask: 200,
     maxTasksPerCommit: 500,
