@@ -83,7 +83,7 @@ describe('generated tasks', () => {
     const fly = expectClean(buildFlyReorder(clarify, ctx, rng));
     expect(fly.clientPayload.tiles!.map((t) => t.text).join('')).not.toBe('clarify');
     expectClean(buildMatch([clarify, achieve], ctx, rng));
-    const recording = expectClean(buildRecording(clarify, PROMPT_TYPE.TEXT, ctx));
+    const recording = expectClean(buildRecording(clarify, ctx));
     expect(recording.clientPayload.evaluation).toEqual({ acceptedResponses: ['clarify'] });
     expect(recording.serverEvaluation.referenceText).toBe('clarify');
   });
@@ -96,14 +96,21 @@ describe('generated tasks', () => {
   });
 });
 
-describe('C43 C44 all 7 templates with both prompt types', () => {
-  it.each(TEMPLATES)('%s resolves text and audio', (template) => {
+describe('C43 C44 all templates with both prompt types', () => {
+  it.each(TEMPLATES.filter((t) => t !== TEMPLATE.RECORDING))('%s resolves text and audio', (template) => {
     const item = CURATED_BY_TEMPLATE[template];
     const text = expectClean(resolveCurated(item, PROMPT_TYPE.TEXT, ctx));
     const audio = expectClean(resolveCurated(item, PROMPT_TYPE.AUDIO, ctx));
     expect(text.clientPayload.prompt?.type).toBe(PROMPT_TYPE.TEXT);
     expect(audio.clientPayload.prompt?.type).toBe(PROMPT_TYPE.AUDIO);
     expect(resolveCurated(item, PROMPT_TYPE.AUDIO, { ...ctx, audioPlayback: false })).toBeNull();
+  });
+
+  it('recording is never served with an audio prompt', () => {
+    const item = CURATED_BY_TEMPLATE[TEMPLATE.RECORDING];
+    expect(expectClean(resolveCurated(item, PROMPT_TYPE.TEXT, ctx)).clientPayload.prompt?.type).toBe(PROMPT_TYPE.TEXT);
+    expect(resolveCurated(item, PROMPT_TYPE.AUDIO, ctx)).toBeNull();
+    expect(buildRecording(clarify, ctx)!.clientPayload.prompt).toEqual({ type: PROMPT_TYPE.TEXT, text: 'clarify' });
   });
 
   it('never ships pairTargets to the client', () => {
