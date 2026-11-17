@@ -3,7 +3,7 @@ import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { PERSONAL_COLLECTION_SLUG } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
 import { collectionLocalizations, collections, topicLocalizations, topicMeanings, topics } from '../../../db/schema';
-import { CatalogLocale, CreateCatalogEntry, PatchCatalogEntry } from '../dto/admin.schemas';
+import { CatalogLocale, CreateCollection, CreateTopic, PatchCollection, PatchTopic } from '../dto/admin.schemas';
 import { IN_USE, mapPgErrors } from '../domain/admin.errors';
 
 const SLUG_EXISTS = 'This slug already exists';
@@ -12,7 +12,7 @@ const SLUG_EXISTS = 'This slug already exists';
 const isCatalogCollection = ne(collections.slug, PERSONAL_COLLECTION_SLUG);
 const isCatalogTopic = (id: string) => and(eq(topics.id, id), isNull(topics.ownerUserId));
 
-const topicColumns = { id: topics.id, collectionId: topics.collectionId, slug: topics.slug, title: topics.title, status: topics.status };
+const topicColumns = { id: topics.id, collectionId: topics.collectionId, slug: topics.slug, title: topics.title, status: topics.status, iosIcon: topics.iosIcon };
 
 @Injectable()
 export class AdminCatalogRepository {
@@ -20,11 +20,11 @@ export class AdminCatalogRepository {
 
   async listCollections(limit: number, offset: number) {
     const { rows: [page] } = await this.db.execute<{ total: number; items: object[] }>(sql`
-      WITH filtered AS (SELECT id, slug, title, status FROM collections WHERE slug <> ${PERSONAL_COLLECTION_SLUG}),
+      WITH filtered AS (SELECT id, slug, title, status, color FROM collections WHERE slug <> ${PERSONAL_COLLECTION_SLUG}),
       page AS (SELECT * FROM filtered ORDER BY slug LIMIT ${limit} OFFSET ${offset})
       SELECT (SELECT count(*)::int FROM filtered) AS total, COALESCE(jsonb_agg(row ORDER BY row.slug), '[]') AS items
       FROM (
-        SELECT p.id, p.slug, p.title, p.status,
+        SELECT p.id, p.slug, p.title, p.status, p.color,
           (SELECT count(*)::int FROM topics t WHERE t.collection_id = p.id AND t.owner_user_id IS NULL) AS "topicCount",
           COALESCE((SELECT jsonb_agg(l.locale ORDER BY l.locale) FROM collection_localizations l WHERE l.collection_id = p.id), '[]') AS locales
         FROM page p
@@ -34,11 +34,11 @@ export class AdminCatalogRepository {
 
   async findCollection(id: string) {
     const { rows: [collection] } = await this.db.execute(sql`
-      SELECT c.id, c.slug, c.title, c.status,
+      SELECT c.id, c.slug, c.title, c.status, c.color,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('locale', l.locale, 'title', l.title, 'description', l.description) ORDER BY l.locale)
                   FROM collection_localizations l WHERE l.collection_id = c.id), '[]') AS localizations,
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
-            'id', t.id, 'slug', t.slug, 'title', t.title, 'status', t.status,
+            'id', t.id, 'slug', t.slug, 'title', t.title, 'status', t.status, 'iosIcon', t.ios_icon,
             'meaningCount', (SELECT count(*)::int FROM topic_meanings tm WHERE tm.topic_id = t.id),
             'locales', COALESCE((SELECT jsonb_agg(tl.locale ORDER BY tl.locale) FROM topic_localizations tl WHERE tl.topic_id = t.id), '[]')) ORDER BY t.slug)
           FROM topics t WHERE t.collection_id = c.id AND t.owner_user_id IS NULL), '[]') AS topics
@@ -46,12 +46,12 @@ export class AdminCatalogRepository {
     return collection;
   }
 
-  async insertCollection(body: CreateCatalogEntry) {
+  async insertCollection(body: CreateCollection) {
     const [row] = await mapPgErrors(this.db.insert(collections).values(body).returning(), { unique: SLUG_EXISTS });
     return row;
   }
 
-  async updateCollection(id: string, body: PatchCatalogEntry) {
+  async updateCollection(id: string, body: PatchCollection) {
     const [row] = await mapPgErrors(
       this.db.update(collections).set(body).where(and(eq(collections.id, id), isCatalogCollection)).returning(),
       { unique: SLUG_EXISTS },
@@ -89,21 +89,21 @@ export class AdminCatalogRepository {
     return deleted.length > 0;
   }
 
-  async insertTopic(collectionId: string, body: CreateCatalogEntry) {
+  async insertTopic(collectionId: string, body: CreateTopic) {
     const [row] = await mapPgErrors(this.db.insert(topics).values({ ...body, collectionId }).returning(topicColumns), { unique: SLUG_EXISTS });
     return row;
   }
 
   async findTopic(id: string) {
     const { rows: [topic] } = await this.db.execute(sql`
-      SELECT t.id, t.collection_id AS "collectionId", t.slug, t.title, t.status,
+      SELECT t.id, t.collection_id AS "collectionId", t.slug, t.title, t.status, t.ios_icon AS "iosIcon",
         COALESCE((SELECT jsonb_agg(jsonb_build_object('locale', l.locale, 'title', l.title, 'description', l.description) ORDER BY l.locale)
                   FROM topic_localizations l WHERE l.topic_id = t.id), '[]') AS localizations
       FROM topics t WHERE t.id = ${id}::uuid AND t.owner_user_id IS NULL`);
     return topic;
   }
 
-  async updateTopic(id: string, body: PatchCatalogEntry) {
+  async updateTopic(id: string, body: PatchTopic) {
     const [row] = await mapPgErrors(this.db.update(topics).set(body).where(isCatalogTopic(id)).returning(topicColumns), { unique: SLUG_EXISTS });
     return row;
   }

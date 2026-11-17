@@ -132,11 +132,18 @@ export type PatchItem = z.infer<typeof patchItemSchema>;
 
 const contentStatus = z.enum(Object.values(CONTENT_STATUS));
 export const listCatalogSchema = z.object(page);
-export const createCatalogEntrySchema = z.strictObject({ slug, title: z.string().trim().min(1), status: contentStatus.default(CONTENT_STATUS.DRAFT) });
-export type CreateCatalogEntry = z.infer<typeof createCatalogEntrySchema>;
-export const patchCatalogEntrySchema = z.strictObject({ slug: slug.optional(), title: z.string().trim().min(1).optional(), status: contentStatus.optional() })
-  .refine(notEmpty, NOTHING_TO_UPDATE);
-export type PatchCatalogEntry = z.infer<typeof patchCatalogEntrySchema>;
+const catalogEntry = { slug, title: z.string().trim().min(1), status: contentStatus.default(CONTENT_STATUS.DRAFT) };
+const patchEntry = { slug: slug.optional(), title: z.string().trim().min(1).optional(), status: contentStatus.optional() };
+const color = z.string().regex(/^#[0-9a-f]{6}$/i, 'Use #RRGGBB').transform((v) => v.toUpperCase()).nullable();
+const iosIcon = z.string().max(100).regex(/^[a-z0-9]+(\.[a-z0-9]+)*$/, 'Use an SF Symbol name, e.g. airplane.departure').nullable();
+export const createCollectionSchema = z.strictObject({ ...catalogEntry, color: color.optional() });
+export type CreateCollection = z.infer<typeof createCollectionSchema>;
+export const patchCollectionSchema = z.strictObject({ ...patchEntry, color: color.optional() }).refine(notEmpty, NOTHING_TO_UPDATE);
+export type PatchCollection = z.infer<typeof patchCollectionSchema>;
+export const createTopicSchema = z.strictObject({ ...catalogEntry, iosIcon: iosIcon.optional() });
+export type CreateTopic = z.infer<typeof createTopicSchema>;
+export const patchTopicSchema = z.strictObject({ ...patchEntry, iosIcon: iosIcon.optional() }).refine(notEmpty, NOTHING_TO_UPDATE);
+export type PatchTopic = z.infer<typeof patchTopicSchema>;
 export const catalogLocaleSchema = z.strictObject({ title: z.string().trim().min(1), description: z.string().trim().min(1).nullable().optional() });
 export type CatalogLocale = z.infer<typeof catalogLocaleSchema>;
 

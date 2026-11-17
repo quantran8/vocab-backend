@@ -20,6 +20,10 @@ export class CatalogController {
       learnedMeanings: progress.get(row.id)?.learned ?? 0,
       totalMeanings: progress.get(row.id)?.total ?? 0,
     });
-    return { collections: rows.map((c) => ({ ...view(c), topics: c.topics.map(view) })) };
+    return {
+      collections: rows.map((c) => ({
+        ...view(c), color: c.color, topics: c.topics.map((t) => ({ ...view(t), iosIcon: t.iosIcon })),
+      })),
+    };
   }
 }

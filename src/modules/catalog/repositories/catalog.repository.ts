@@ -17,7 +17,7 @@ export class CatalogRepository {
     return this.db.query.collections.findMany({
       where: (c) => eq(c.status, CONTENT_STATUS.PUBLISHED),
       orderBy: (c) => asc(c.slug),
-      columns: { id: true, slug: true, title: true },
+      columns: { id: true, slug: true, title: true, color: true },
       with: {
         localizations: {
           where: (l) => eq(l.locale, locale),
@@ -26,7 +26,7 @@ export class CatalogRepository {
         topics: {
           where: (t) => eq(t.status, CONTENT_STATUS.PUBLISHED),
           orderBy: (t) => asc(t.slug),
-          columns: { id: true, slug: true, title: true },
+          columns: { id: true, slug: true, title: true, iosIcon: true },
           with: {
             localizations: {
               where: (l) => eq(l.locale, locale),

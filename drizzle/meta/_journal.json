@@ -23,6 +23,7 @@
     { "idx": 18, "version": "7", "when": 1761868800018, "tag": "0018_reviews_per_session", "breakpoints": true },
     { "idx": 19, "version": "7", "when": 1761868800019, "tag": "0019_fsrs_form_skills", "breakpoints": true },
     { "idx": 20, "version": "7", "when": 1761868800020, "tag": "0020_pronunciation_per_meaning", "breakpoints": true },
-    { "idx": 21, "version": "7", "when": 1761868800021, "tag": "0021_reviews_per_session_min_one", "breakpoints": true }
+    { "idx": 21, "version": "7", "when": 1761868800021, "tag": "0021_reviews_per_session_min_one", "breakpoints": true },
+    { "idx": 22, "version": "7", "when": 1761868800022, "tag": "0022_catalog_appearance", "breakpoints": true }
   ]
 }

@@ -364,6 +364,18 @@ describe('admin API', () => {
       await api('delete', `/admin/collections/${id}/locales/${VI}`).expect(404);
     });
 
+    it('stores a collection color and a topic SF Symbol', async () => {
+      const id = (await api('post', '/admin/collections').send(entry('colors', { color: '#ff8800' })).expect(201)).body.id as string;
+      await api('post', '/admin/collections').send(entry('bad-color', { color: 'red' })).expect(400);
+      const topicId = (await api('post', `/admin/collections/${id}/topics`).send(entry('flight', { iosIcon: 'airplane.departure' })).expect(201)).body.id as string;
+      await api('post', `/admin/collections/${id}/topics`).send(entry('bad-icon', { iosIcon: 'Airplane Departure' })).expect(400);
+
+      expect((await api('get', `/admin/collections/${id}`).expect(200)).body).toMatchObject({ color: '#FF8800', topics: [{ iosIcon: 'airplane.departure' }] });
+      expect((await api('patch', `/admin/topics/${topicId}`).send({ iosIcon: 'globe' }).expect(200)).body.iosIcon).toBe('globe');
+      expect((await api('patch', `/admin/collections/${id}`).send({ color: null }).expect(200)).body.color).toBeNull();
+      expect((await api('get', `/admin/topics/${topicId}`).expect(200)).body.iosIcon).toBe('globe');
+    });
+
     it('deletes only drafts, and only when learners do not use them', async () => {
       const id = await collection();
       const topicId = await topic(id);

@@ -90,7 +90,7 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 |---|---|
 | Chọn level | `PUT /v1/me/levels` `{proficiencyLevel: "A1".."C2"}`; level chỉ dùng để sắp xếp từ mới (từ ≥ level trước), không loại từ nào |
 | Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
-| Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,topics:[{id,slug,title,description}]}]}`, đã localize theo `uiLocale` |
+| Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,color,topics:[{id,slug,title,description,iosIcon}]}]}`, đã localize theo `uiLocale`. `color` là `#RRGGBB` hoặc null; `iosIcon` là tên SF Symbol hoặc null. Null hoặc symbol không tồn tại trên máy thì app dùng màu/icon mặc định |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
 | Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7), `reviewsPerSession` (1–50 hoặc `null`; `null` theo `dailyNewWordGoal`, ít nhất 5) |
 

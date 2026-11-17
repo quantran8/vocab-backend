@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CONTENT_STATUS, DEFAULT_LOCALE, PERSONAL_COLLECTION_SLUG } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AdminCatalogRepository } from '../repositories/admin-catalog.repository';
-import { CatalogLocale, CreateCatalogEntry, PatchCatalogEntry } from '../dto/admin.schemas';
+import { CatalogLocale, CreateCollection, CreateTopic, PatchCollection, PatchTopic } from '../dto/admin.schemas';
 
 const DRAFT_DELETE_ONLY = 'Only a draft can be deleted; archive it instead';
 const COLLECTION_NOT_FOUND = 'Collection not found';
@@ -24,12 +24,12 @@ export class AdminCatalogService {
     return collection;
   }
 
-  createCollection(body: CreateCatalogEntry) {
+  createCollection(body: CreateCollection) {
     if (body.slug === PERSONAL_COLLECTION_SLUG) throw new ApiError('VALIDATION_FAILED', SLUG_RESERVED);
     return this.repository.insertCollection(body);
   }
 
-  async patchCollection(id: string, body: PatchCatalogEntry) {
+  async patchCollection(id: string, body: PatchCollection) {
     if (body.slug === PERSONAL_COLLECTION_SLUG) throw new ApiError('VALIDATION_FAILED', SLUG_RESERVED);
     const row = await this.repository.updateCollection(id, body);
     if (!row) throw new ApiError('NOT_FOUND', COLLECTION_NOT_FOUND);
@@ -55,7 +55,7 @@ export class AdminCatalogService {
     if (!(await this.repository.deleteCollectionLocale(collectionId, locale))) throw new ApiError('NOT_FOUND', LOCALE_NOT_FOUND);
   }
 
-  async createTopic(collectionId: string, body: CreateCatalogEntry) {
+  async createTopic(collectionId: string, body: CreateTopic) {
     await this.assertCollection(collectionId);
     return this.repository.insertTopic(collectionId, body);
   }
@@ -66,7 +66,7 @@ export class AdminCatalogService {
     return topic;
   }
 
-  async patchTopic(id: string, body: PatchCatalogEntry) {
+  async patchTopic(id: string, body: PatchTopic) {
     const row = await this.repository.updateTopic(id, body);
     if (!row) throw new ApiError('NOT_FOUND', TOPIC_NOT_FOUND);
     return row;
