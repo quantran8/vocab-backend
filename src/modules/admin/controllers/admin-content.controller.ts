@@ -7,9 +7,9 @@ import {
 import { ZodPipe } from '../../../common/http/zod.pipe';
 import { SUPPORTED_LOCALES } from '../../practice-resolver/locale-copy';
 import {
-  CatalogLocale, catalogLocaleSchema, CreateCatalogEntry, createCatalogEntrySchema, ExampleBody, exampleSchema, listCatalogSchema, ListItems, listItemsSchema,
-  ListMeanings, listMeaningsSchema, listUsersSchema, ListWords, listWordsSchema, localePipe, MeaningBody, meaningSchema, PatchCatalogEntry, patchCatalogEntrySchema,
-  PatchItem, patchItemSchema, PatchMeaning, patchMeaningSchema, PatchPronunciation, patchPronunciationSchema, PatchWord, patchWordSchema, PronunciationBody,
+  CatalogLocale, catalogLocaleSchema, CreateCollection, createCollectionSchema, CreateTopic, createTopicSchema, ExampleBody, exampleSchema, listCatalogSchema, ListItems, listItemsSchema,
+  ListMeanings, listMeaningsSchema, listUsersSchema, ListWords, listWordsSchema, localePipe, MeaningBody, meaningSchema, PatchCollection, patchCollectionSchema,
+  PatchItem, patchItemSchema, PatchTopic, patchTopicSchema, PatchMeaning, patchMeaningSchema, PatchPronunciation, patchPronunciationSchema, PatchWord, patchWordSchema, PronunciationBody,
   pronunciationSchema, SetRole, setRoleSchema, TopicMeaningIds, topicMeaningIdsSchema, WordTypeBody, wordTypeSchema,
 } from '../dto/admin.schemas';
 import { AdminCatalogService } from '../services/admin-catalog.service';
@@ -185,7 +185,7 @@ export class AdminCatalogController {
   }
 
   @Post('collections')
-  createCollection(@Body(new ZodPipe(createCatalogEntrySchema)) body: CreateCatalogEntry) {
+  createCollection(@Body(new ZodPipe(createCollectionSchema)) body: CreateCollection) {
     return this.catalog.createCollection(body);
   }
 
@@ -195,7 +195,7 @@ export class AdminCatalogController {
   }
 
   @Patch('collections/:id')
-  patchCollection(@Param('id', uuid) id: string, @Body(new ZodPipe(patchCatalogEntrySchema)) body: PatchCatalogEntry) {
+  patchCollection(@Param('id', uuid) id: string, @Body(new ZodPipe(patchCollectionSchema)) body: PatchCollection) {
     return this.catalog.patchCollection(id, body);
   }
 
@@ -217,7 +217,7 @@ export class AdminCatalogController {
   }
 
   @Post('collections/:id/topics')
-  createTopic(@Param('id', uuid) id: string, @Body(new ZodPipe(createCatalogEntrySchema)) body: CreateCatalogEntry) {
+  createTopic(@Param('id', uuid) id: string, @Body(new ZodPipe(createTopicSchema)) body: CreateTopic) {
     return this.catalog.createTopic(id, body);
   }
 
@@ -227,7 +227,7 @@ export class AdminCatalogController {
   }
 
   @Patch('topics/:id')
-  patchTopic(@Param('id', uuid) id: string, @Body(new ZodPipe(patchCatalogEntrySchema)) body: PatchCatalogEntry) {
+  patchTopic(@Param('id', uuid) id: string, @Body(new ZodPipe(patchTopicSchema)) body: PatchTopic) {
     return this.catalog.patchTopic(id, body);
   }
 

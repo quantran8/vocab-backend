@@ -62,6 +62,7 @@ export const collections = pgTable('collections', {
   slug: text('slug').notNull().unique('collections_slug_key'),
   title: text('title').notNull(),
   status: varchar('status', { length: 16 }).$type<ContentStatus>().notNull().default(CONTENT_STATUS.DRAFT),
+  color: varchar('color', { length: 7 }),
 });
 
 export const topics = pgTable('topics', {
@@ -71,6 +72,8 @@ export const topics = pgTable('topics', {
   title: text('title').notNull(),
   status: varchar('status', { length: 16 }).$type<ContentStatus>().notNull().default(CONTENT_STATUS.DRAFT),
   ownerUserId: uuid('owner_user_id'),
+  /** SF Symbol name; other platforms get their own column. */
+  iosIcon: varchar('ios_icon', { length: 100 }),
 }, (t) => [unique('topics_collection_id_slug_key').on(t.collectionId, t.slug)]);
 
 export const collectionLocalizations = pgTable('collection_localizations', {
