@@ -31,6 +31,8 @@ export const POLICY = {
   },
   newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
   practice: {
+    // Longer words get typing instead: tiles past this count render too small on the phone.
+    flyReorderMaxTiles: 8,
     // Retries after a wrong answer before the app moves on. match counts per left item; recording counts speech assessments.
     maxRetries: {
       [TEMPLATE.SELECT]: 1,
