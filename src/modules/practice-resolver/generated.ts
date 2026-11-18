@@ -157,7 +157,7 @@ const SHUFFLE_ATTEMPTS = 5;
 
 export function buildFlyReorder(target: MeaningSnapshot, ctx: ResolveContext, rng: Rng) {
   const graphemes = splitGraphemes(target.lemma);
-  if (graphemes.length < 2) return null;
+  if (graphemes.length < 2 || graphemes.length > POLICY.practice.flyReorderMaxTiles) return null;
   const scrambled = Array.from({ length: SHUFFLE_ATTEMPTS }, () => shuffle(graphemes, rng)).find((g) => g.join('') !== graphemes.join(''));
   if (!scrambled) return null;
   const acceptedResponses = [target.lemma];

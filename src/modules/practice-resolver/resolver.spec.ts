@@ -94,6 +94,11 @@ describe('generated tasks', () => {
     expect(buildFlyReorder(snapshot('a', 'x'), ctx, rng)).toBeNull();
     expect(buildFlyReorder(snapshot('aa', 'x'), ctx, rng)).toBeNull();
   });
+
+  it('flyReorder only takes words up to flyReorderMaxTiles graphemes', () => {
+    expect(buildFlyReorder(snapshot('abcdefgh', 'x'), ctx, rng)).not.toBeNull();
+    expect(buildFlyReorder(snapshot('abcdefghi', 'x'), ctx, rng)).toBeNull();
+  });
 });
 
 describe('C43 C44 all templates with both prompt types', () => {

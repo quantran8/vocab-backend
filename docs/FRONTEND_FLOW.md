@@ -243,7 +243,7 @@ Từ mới được chia thành nhóm 2-3 Meaning (tối đa `introBatchSize` = 
 
 1. `select/gloss` (sau khi cả nhóm đã có `learn` card)
 2. `select/reverseGloss`
-3. Recall: `typing/meaningRecall` hoặc `flyReorder/spellingRecall` (task này là "first recall", **bắt buộc có ít nhất một lần submit**)
+3. Recall: `typing/meaningRecall` hoặc `flyReorder/spellingRecall` (task này là "first recall", **bắt buộc có ít nhất một lần submit**). `flyReorder` chỉ dùng cho từ ≤ 8 grapheme (`POLICY.practice.flyReorderMaxTiles`), từ dài hơn luôn ra `typing` vì tile quá nhỏ trên UI
 4. `recording/scriptedPronunciation`
 5. `select/gloss` lần nữa
 
