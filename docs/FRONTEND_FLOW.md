@@ -160,6 +160,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   - `q` (tuỳ chọn, tối đa 64 ký tự) tìm trên từ tiếng Anh và nghĩa, không phân biệt hoa thường và dấu tiếng Việt.
   - Mỗi meaning có `meaningId`, `learnedAt`, `nextReviewAt` và `meaning: {partOfSpeech, text, ipa?, definition, audio?, examples}`, cùng dữ liệu với learn card (đã áp bản sửa của user). `audio` vắng khi không phát được.
   - `meaningCount`: tổng số meaning của từ mà user thấy được (cùng phạm vi với `GET /v1/words/{wordId}`), để hiện "1 / 4 nghĩa đã học". `meanings` chỉ gồm nghĩa đã học.
+  - `ipaVaries`: `true` khi các meaning user thấy được (cả nghĩa chưa học, cùng phạm vi với `meaningCount`) có IPA mặc định khác nhau; meaning không có IPA tính là một cách đọc riêng. App chỉ hiện IPA ở dòng từ khi `false`. Server cũ không gửi trường này.
   - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
 - `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
 - `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).

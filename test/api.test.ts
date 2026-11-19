@@ -593,7 +593,7 @@ describe('Vocab Flow API', () => {
       expect(learned).toContain(first.id);
       expect(learned).not.toContain(second.id);
       const bank = (await api('get', '/v1/me/words').expect(200)).body.words.find((w: { lemma: string }) => w.lemma === 'bank');
-      expect(bank).toMatchObject({ meaningCount: 2, meanings: [expect.anything()] });
+      expect(bank).toMatchObject({ meaningCount: 2, ipaVaries: true, meanings: [expect.anything()] });
 
       h.clock.advance(24);
       const tomorrow = await plan();

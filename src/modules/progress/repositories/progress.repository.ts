@@ -96,7 +96,7 @@ export class ProgressRepository {
           OR ${foldedColumn(sql`COALESCE(override->>'meaningText', snapshot->>'meaningText')`)} LIKE ${searchPattern(query)})`
       : sql`true`;
     // The publication join sits inside `learned` so a page is always full while more words remain.
-    const { rows } = await this.db.execute<RawMeaningRow & { meaningCount: number }>(sql`
+    const { rows } = await this.db.execute<RawMeaningRow & { meaningCount: number; senses: Pick<RawMeaningRow, 'snapshot' | 'override'>[] }>(sql`
       WITH learned AS (
         SELECT ump.meaning_id, ump.learned_at, ump.next_review_at, wt.word_id, p.snapshot, o.content AS override
         FROM user_meaning_progress ump
@@ -113,19 +113,22 @@ export class ProgressRepository {
         ORDER BY last_learned DESC, word_id LIMIT ${limit} OFFSET ${offset}
       ), totals AS (
         -- Same visibility as wordMeanings, so the count matches the word detail.
-        SELECT page.word_id, count(*)::int AS meaning_count
+        SELECT page.word_id, count(*)::int AS meaning_count,
+               jsonb_agg(jsonb_build_object('snapshot', p.snapshot, 'override', o.content)) AS senses
         FROM page
         JOIN word_types wt ON wt.word_id = page.word_id
         JOIN meanings m ON m.type_id = wt.id
         JOIN user_settings s ON s.user_id = ${userId}::uuid
         JOIN active_meaning_publications a ON a.meaning_id = m.id AND a.locale = s.explanation_locale
+        JOIN meaning_publications p ON p.id = a.publication_id
         LEFT JOIN user_meaning_progress ump ON ump.meaning_id = m.id AND ump.user_id = s.user_id
+        LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = m.id AND o.locale = s.explanation_locale
         WHERE (a.recalled_at IS NULL OR ump.user_id IS NOT NULL)
           AND (m.owner_user_id IS NULL OR m.owner_user_id = s.user_id)
         GROUP BY page.word_id
       )
       SELECT l.word_id AS "wordId", l.meaning_id AS "meaningId", l.snapshot, l.override,
-             l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt", t.meaning_count AS "meaningCount"
+             l.learned_at AS "learnedAt", l.next_review_at AS "nextReviewAt", t.meaning_count AS "meaningCount", t.senses
       FROM learned l
       JOIN page ON page.word_id = l.word_id
       JOIN totals t ON t.word_id = l.word_id
