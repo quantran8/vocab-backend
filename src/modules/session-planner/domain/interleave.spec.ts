@@ -13,20 +13,27 @@ describe('planNewMeanings', () => {
     for (const m of [0, 1, 2]) {
       const mine = tasks(slots).filter((t) => t.meaningIndex === m).map((t) => t.template);
       expect(mine.filter((t) => t === TEMPLATE.SELECT)).toHaveLength(3);
-      expect(mine).toContain(TEMPLATE.RECORDING);
+      expect(mine).not.toContain(TEMPLATE.RECORDING);
       expect(mine.filter((t) => t === TEMPLATE.TYPING || t === TEMPLATE.FLY_REORDER)).toHaveLength(1);
+    }
+  });
+
+  it('adds one recording per Meaning only when speaking is on', () => {
+    const slots = planNewMeanings(3, seeded(7), true);
+    for (const m of [0, 1, 2]) {
+      expect(tasks(slots).filter((t) => t.meaningIndex === m && t.template === TEMPLATE.RECORDING)).toHaveLength(1);
     }
   });
 
   it('C34 interleaves instead of grouping AAAAA/BBBBB', () => {
     for (let seed = 1; seed < 50; seed += 1) {
-      const order = tasks(planNewMeanings(3, seeded(seed))).map((t) => t.meaningIndex);
+      const order = tasks(planNewMeanings(3, seeded(seed), seed % 2 === 0)).map((t) => t.meaningIndex);
       order.slice(1).forEach((value, i) => expect(value).not.toBe(order[i]));
     }
   });
 
   it('keeps recall after select and before recording', () => {
-    const list = tasks(planNewMeanings(2, seeded(3)));
+    const list = tasks(planNewMeanings(2, seeded(3), true));
     for (const m of [0, 1]) {
       const mine = list.filter((t) => t.meaningIndex === m);
       expect(mine[2].isFirstRecall).toBe(true);

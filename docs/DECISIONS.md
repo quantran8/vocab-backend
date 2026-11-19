@@ -111,7 +111,7 @@ Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo
 | --- | --- | --- |
 | `shaky` **Learning** | Superseded by "FSRS and weighted evidence": groups follow correctness. A clean select is `solid`; help, a retry, priming or a wrong pick before a clean recall is `shaky` | Learners saw all-correct sessions reported as not remembered |
 | `known` outside the total **iOS** | `newWords.total` counts smooth + retried + revealed; known words show separately | Known words skip learning, so they say nothing about how smoothly learning went |
-| New-word edge cases **Learning** | "I know this word" (`knownLearnSteps`) is `known`, like a passed check. A recording `assessed_failed` is `retried`; `invalid`/`unavailable` is skipped. A word with no remaining task is `smooth` | The spec names only the check path and the unavailable case |
+| New-word edge cases **Learning** | "I know this word" (`knownLearnSteps`) is `known`, like a passed check. A recording never decides a group (see "Daily speaking"). A word with no remaining task is `smooth` | The spec names only the check path and the unavailable case |
 | Labels read at commit | `lemma` and `gloss` come from the active publication for the learner's current `explanation_locale` (user override applied), read inside the existing `loadSession` statement; nothing is stored in the plan | Zero extra queries and no fallback for plans issued before the change; the spec asked for the commit-time locale anyway |
 | Per-word `cause` **iOS** | Weaker review and new-word items carry `cause` + `struggledAt`, from the answers that gave the deciding signal only (a later clean answer never explains a weak group) | A group name alone did not tell learners why a word was there; "Not solid yet" covers four different situations |
 | Practice unit | One `practice` item per skill evidence row, so a Weak task is one (word, skill) pair | Matches "a task with skill evidence"; a `match` produces several rows, all excluded as `weak_template` |
@@ -132,6 +132,20 @@ Plan: `docs/FSRS_PLAN.md`. Supersedes the trial SRS rows above (memory grading, 
 | Form skills **iOS** | Skills are `listening`, `speaking`, `spelling` (was writing). `reading` is gone and rejected by the planner. Status is `not_verified` or `demonstrated` (one clean pass); `verified` and `fullyVerified` are gone. Issues and the 12 h recovery are unchanged | Reading and meaning-recall writing duplicated FSRS; the 2-session rule duplicated its spacing |
 | Word detail **iOS** | Each meaning has `memory: { stabilityDays, retrievability, nextReviewAt }` (null until learned) and `skills: { spelling, listening?, speaking? }` | Replaces the verified badge with how well the word holds now |
 | Data conversion | Migration 0019: stability = max(interval_hours / 24, 0.1), difficulty = min(10, D0(Good) + lapse_count); `reading` evidence deleted, `writing` renamed `spelling` | Little data so far; a replay would have to guess weights for old observations |
+
+## Daily speaking
+
+Daily runs on FSRS, and FSRS measures memory of a Meaning. A `recording` (`scripted_pronunciation`) shows the word and asks the learner to read it, so it is no retrieval and carries no memory evidence. Speaking in Daily is therefore the learner's choice and is shown as practice only.
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Setting **iOS** | `user_settings.daily_speaking`, default `false`. Asked in onboarding, changeable any time with `PUT /v1/me/settings {dailySpeaking}`. Read at plan time; a session already planned keeps its tasks | Learners who do not want to speak are not slowed down by a task that does not move their progress |
+| Plan **Learning** | Off: no `recording` in Daily. On, and `capabilities.microphone`: new words get the recording round (gloss → reverse → recall → recording → gloss), and up to `POLICY.review.dailySpeakingCap` due words get one recording, placed after that word's meaning task. Random and Weak are unchanged | The recording shows the word, so before a recall it would prime it |
+| Learnable new words | A missing pronunciation no longer blocks a new Meaning (C29/C30 mandatory groups are select, reverse select and recall); it just has no recording | A task that never moves memory should not decide what can be learned |
+| No effect on progress **Learning** | A recording targets the Pronunciation, not the Meaning: no memory observation, no FSRS change, no LP. Results groups (`review`, `newWords`) ignore recordings, passed or failed | What the learner is told in onboarding: speaking right or wrong never changes how a word is progressing |
+| Speaking never feeds FSRS | No meaning-cued speaking task is scored, in FSRS or in the speaking skill. Rejected: a miss cannot tell forgetting from weak pronunciation or ASR error (homophones such as bass/base, synonyms). In FSRS it could only count as "no evidence", so a learner who remembers well but speaks poorly gets no memory signal; in the skill, forgetting the word would open a speaking issue | Memory is measured by text tasks; speaking measures pronunciation only |
+| Meaning cue on recordings **iOS** | A recording of a learned word (Daily due words, Random, Weak) carries `meaningCue {text, question}`: the client shows the meaning for an unscored try at saying the word, then reveals it for the scored read-aloud. A new word's recording has no cue | Retrieval practice without polluting either measure; a new word was just shown on its Learn card, so a cue would test nothing |
+| Speaking skill | New-word recordings stay `new_practice` (never a pass or failure). Due-word recordings are normal speaking evidence: they can demonstrate the skill or open a speaking issue, which Weak then practises | Speaking is the one skill Daily can train only by opt-in; review recordings are the learner's real attempts |
 
 ## Not implemented
 

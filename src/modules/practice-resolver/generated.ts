@@ -178,7 +178,8 @@ export function buildFlyReorder(target: MeaningSnapshot, ctx: ResolveContext, rn
 }
 
 // Text prompt only: an audio prompt would let the learner just repeat the clip.
-export function buildRecording(target: MeaningSnapshot, ctx: ResolveContext) {
+/** With `meaningCue`, the client first shows the meaning for an unscored try; only the read-aloud is scored. */
+export function buildRecording(target: MeaningSnapshot, ctx: ResolveContext, { meaningCue }: { meaningCue: boolean }) {
   const pronunciation = pronunciationFor(target, ctx.accent);
   if (!pronunciation) return null;
   return assemble({
@@ -186,7 +187,11 @@ export function buildRecording(target: MeaningSnapshot, ctx: ResolveContext) {
     variant: VARIANT.SCRIPTED_PRONUNCIATION,
     intent: ASSESSMENT_INTENT.PRONUNCIATION,
     prompt: textPrompt(target.lemma),
-    body: { question: copyFor(ctx.locale, 'recording.question'), assessment: AZURE_ASSESSMENT },
+    body: {
+      question: copyFor(ctx.locale, 'recording.question'),
+      assessment: AZURE_ASSESSMENT,
+      ...(meaningCue && { meaningCue: { text: target.meaningText, question: copyFor(ctx.locale, 'recording.meaningCue.question') } }),
+    },
     evaluation: { acceptedResponses: [target.lemma] },
     key: { referenceText: target.lemma, referenceLocale: pronunciation.accentLocale },
     answerTexts: [],

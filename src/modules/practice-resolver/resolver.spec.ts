@@ -1,4 +1,4 @@
-import { DELIVERY_MODE, OUTCOME, PROMPT_TYPE, TEMPLATE, TEMPLATES, VARIANT } from '../../common/constants/domain';
+import { ASSESSMENT_INTENT, DELIVERY_MODE, OUTCOME, PROMPT_TYPE, TEMPLATE, TEMPLATES, VARIANT } from '../../common/constants/domain';
 import { reduceMemory } from '../memory-srs/memory-reducer';
 import { evaluateTask } from '../practice-evaluator/evaluate';
 import { TaskEvent } from '../practice-evaluator/events';
@@ -83,9 +83,17 @@ describe('generated tasks', () => {
     const fly = expectClean(buildFlyReorder(clarify, ctx, rng));
     expect(fly.clientPayload.tiles!.map((t) => t.text).join('')).not.toBe('clarify');
     expectClean(buildMatch([clarify, achieve], ctx, rng));
-    const recording = expectClean(buildRecording(clarify, ctx));
+    const recording = expectClean(buildRecording(clarify, ctx, { meaningCue: false }));
     expect(recording.clientPayload.evaluation).toEqual({ acceptedResponses: ['clarify'] });
     expect(recording.serverEvaluation.referenceText).toBe('clarify');
+    expect(recording.clientPayload.meaningCue).toBeUndefined();
+  });
+
+  it('a recording with a meaning cue shows the meaning first and is scored the same', () => {
+    const cued = expectClean(buildRecording(clarify, ctx, { meaningCue: true }));
+    expect(cued.clientPayload.meaningCue).toEqual({ text: clarify.meaningText, question: expect.any(String) });
+    expect(cued.clientPayload.evaluation).toEqual({ acceptedResponses: ['clarify'] });
+    expect(cued.serverEvaluation).toMatchObject({ intent: ASSESSMENT_INTENT.PRONUNCIATION, referenceText: 'clarify' });
   });
 
   it('flyReorder splits repeated and combining graphemes', () => {
@@ -115,7 +123,7 @@ describe('C43 C44 all templates with both prompt types', () => {
     const item = CURATED_BY_TEMPLATE[TEMPLATE.RECORDING];
     expect(expectClean(resolveCurated(item, PROMPT_TYPE.TEXT, ctx)).clientPayload.prompt?.type).toBe(PROMPT_TYPE.TEXT);
     expect(resolveCurated(item, PROMPT_TYPE.AUDIO, ctx)).toBeNull();
-    expect(buildRecording(clarify, ctx)!.clientPayload.prompt).toEqual({ type: PROMPT_TYPE.TEXT, text: 'clarify' });
+    expect(buildRecording(clarify, ctx, { meaningCue: true })!.clientPayload.prompt).toEqual({ type: PROMPT_TYPE.TEXT, text: 'clarify' });
   });
 
   it('never ships pairTargets to the client', () => {

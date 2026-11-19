@@ -55,6 +55,7 @@ export const userSettings = pgTable('user_settings', {
   leaderboardVisible: boolean('leaderboard_visible').notNull().default(false),
   /** Reviews per daily session; null follows the new-word goal (see reviewsPerSession). */
   reviewsPerSession: smallint('reviews_per_session'),
+  dailySpeaking: boolean('daily_speaking').notNull().default(false),
 });
 
 export const collections = pgTable('collections', {

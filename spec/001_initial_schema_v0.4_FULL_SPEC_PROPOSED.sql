@@ -41,6 +41,7 @@ CREATE TABLE user_settings (
     new_word_override_until TIMESTAMPTZ,
     leaderboard_visible BOOLEAN NOT NULL DEFAULT false,
     reviews_per_session SMALLINT CHECK (reviews_per_session BETWEEN 5 AND 50), -- NULL follows daily_new_word_goal
+    daily_speaking BOOLEAN NOT NULL DEFAULT false, -- opt-in recordings in Daily; never move memory
     CHECK ((new_word_override IS NULL) = (new_word_override_mode IS NULL)),
     CHECK ((new_word_override_until IS NOT NULL) = (new_word_override_mode IS NOT DISTINCT FROM 'until_date'))
 );

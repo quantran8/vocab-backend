@@ -28,6 +28,8 @@ export const POLICY = {
     },
     // A due word with an open form-skill issue favours tasks that train that skill.
     skillGapBoost: 2,
+    // Daily with speaking on: at most this many due words also get a recording [TRIAL].
+    dailySpeakingCap: 5,
   },
   newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
   practice: {

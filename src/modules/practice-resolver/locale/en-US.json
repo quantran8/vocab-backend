@@ -9,5 +9,6 @@
   "flyReorder.clue.question": "Arrange the letters to form the English word:",
   "match.title": "Match the pairs.",
   "recording.question": "Read this word aloud.",
+  "recording.meaningCue.question": "Which English word means this? Try saying it before you see the word.",
   "topic.personal.name": "Your words"
 }

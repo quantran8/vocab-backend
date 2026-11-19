@@ -33,6 +33,7 @@ describe('Vocab Flow API', () => {
   const commit = (p: { sessionId: string }, body: object, token = auth) =>
     api('post', `/v1/sessions/${p.sessionId}/commit`, token).send(body);
   const goal = (n: number) => api('put', '/v1/me/settings').send({ dailyNewWordGoal: n }).expect(200);
+  const speakInDaily = () => api('put', '/v1/me/settings').send({ dailySpeaking: true }).expect(200);
 
   async function learnOne(n = 1) {
     await goal(n);
@@ -254,8 +255,35 @@ describe('Vocab Flow API', () => {
       const steps = await firstRecallSteps(p.sessionId);
       for (const step of steps) expect([TEMPLATE.TYPING, TEMPLATE.FLY_REORDER]).toContain(step.template);
       const templates = tasksOf(p).map((t) => t.template);
-      expect(templates.filter((t) => t === TEMPLATE.RECORDING)).toHaveLength(3);
+      expect(templates.filter((t) => t === TEMPLATE.RECORDING)).toHaveLength(0);
       expect(templates.filter((t) => t === TEMPLATE.SELECT)).toHaveLength(9);
+    });
+
+    it('dailySpeaking adds a recording per new word, and none without a microphone', async () => {
+      await onboard(words(6));
+      await goal(3);
+      expect((await api('get', '/v1/me')).body.settings.dailySpeaking).toBe(false);
+      await speakInDaily();
+      expect((await api('get', '/v1/me')).body.settings.dailySpeaking).toBe(true);
+      const recordings = (p: object) => tasksOf(p).filter((t) => t.template === TEMPLATE.RECORDING);
+      expect(recordings(await plan())).toHaveLength(3);
+      expect(recordings(await plan('daily', auth, { audioPlayback: true, microphone: false }))).toHaveLength(0);
+      await api('put', '/v1/me/settings').send({ dailySpeaking: false }).expect(200);
+      expect(recordings(await plan())).toHaveLength(0);
+    });
+
+    it('a failed recording in Daily changes neither memory nor the result groups', async () => {
+      await onboard(words(4));
+      await speakInDaily();
+      await goal(1);
+      const p = await plan();
+      const takes = [{ seq: 1, action: 'transcribed', transcript: 'zzz' }];
+      const body = answers(p, { override: (t) => (t.template === TEMPLATE.RECORDING ? takes : undefined) });
+      const { summary } = (await commit(p, body).expect(200)).body;
+      expect(summary.newWords.groups.smooth).toHaveLength(1);
+      const recording = tasksOf(p).find((t) => t.template === TEMPLATE.RECORDING);
+      expect((await h.first(memoryObservations)).sourceTaskIds).not.toContain(recording.id);
+      expect(await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING))).toMatchObject({ passed: false });
     });
 
     it('audioPlayback=false never issues audio', async () => {
@@ -450,6 +478,7 @@ describe('Vocab Flow API', () => {
 
     it('receipts cannot be replayed from another task or forged', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const bogus = '0190b0a0-0000-7000-8000-000000000002';
@@ -467,6 +496,7 @@ describe('Vocab Flow API', () => {
 
     it('C31 assessed receipts become evidence only at Finish and are consumed', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const [task] = recordings(p);
@@ -482,6 +512,7 @@ describe('Vocab Flow API', () => {
 
     it('C20 invalid audio is not a failure', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const [task] = recordings(p);
@@ -494,6 +525,7 @@ describe('Vocab Flow API', () => {
 
     it('C61 provider outage is retryable 503, not a result', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       h.speech.next = new ApiError('SPEECH_PROVIDER_UNAVAILABLE');
@@ -504,6 +536,7 @@ describe('Vocab Flow API', () => {
 
     it('stops assessing once maxRetries is used, before calling the provider', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const [task] = recordings(p);
@@ -520,6 +553,7 @@ describe('Vocab Flow API', () => {
 
     it('transcribed takes are scored at Finish as Speaking evidence with no receipt', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const [task] = recordings(p);
@@ -533,6 +567,7 @@ describe('Vocab Flow API', () => {
 
     it('rejects non-recording tasks and foreign sessions', async () => {
       await onboard(words(4));
+      await speakInDaily();
       await goal(1);
       const p = await plan();
       const typingish = tasksOf(p).find((t) => t.template !== TEMPLATE.RECORDING);

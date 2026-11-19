@@ -156,12 +156,12 @@ describe('newWordSummary', () => {
     expect(groupOf(summary)).toEqual([{ group: 'smooth', struggledAt: undefined }]);
   });
 
-  it('a failed recording counts against the word it says', () => {
+  it('a failed recording does not lower the group: speaking in Daily is opt-in practice', () => {
     const summary = run([
       { id: '1', ordinal: 1, outcome: OUTCOME.CORRECT },
       { id: '2', ordinal: 2, intent: ASSESSMENT_INTENT.PRONUNCIATION, outcome: OUTCOME.ASSESSED_FAILED, target: { meaningId: null, pronunciationId: 'p-a' } },
     ]);
-    expect(groupOf(summary)).toEqual([{ group: 'retried', struggledAt: 'speaking', cause: 'not_passed' }]);
+    expect(groupOf(summary)).toEqual([{ group: 'smooth', struggledAt: undefined }]);
   });
 
   it('struggledAt is the worst task, the earlier one on a tie', () => {

@@ -38,6 +38,7 @@ const BODY_SCHEMAS: Record<Template, z.ZodType> = {
   [TEMPLATE.RECORDING]: z.strictObject({
     ...common,
     assessment: z.strictObject({ kind: z.literal('azurePronunciation') }),
+    meaningCue: z.strictObject({ text: z.string().trim().min(1), question: z.string().min(1) }).optional(),
     evaluation: z.strictObject({ acceptedResponses: z.tuple([z.string().min(1)]) }),
   }),
 };

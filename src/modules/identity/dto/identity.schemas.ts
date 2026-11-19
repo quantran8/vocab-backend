@@ -28,6 +28,7 @@ export const settingsSchema = z
     // null goes back to following dailyNewWordGoal.
     reviewsPerSession: z.number().int().min(POLICY.session.reviewsPerSession.min).max(POLICY.session.reviewsPerSession.max).nullable().optional(),
     leaderboardVisible: z.boolean().optional(),
+    dailySpeaking: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, 'No settings provided');
 

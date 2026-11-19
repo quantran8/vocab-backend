@@ -129,6 +129,8 @@ function answersByMeaning(counted: EvaluatedTask[], targets: TargetRow[], labels
   for (const evaluated of counted) {
     if (phase && evaluated.task.phase !== phase) continue;
     const server = evaluated.task.serverEvaluation as ServerEvaluation;
+    // Speaking in Daily is opt-in practice: it never decides a word's group.
+    if (server.intent === ASSESSMENT_INTENT.PRONUNCIATION) continue;
     for (const outcome of evaluated.targets) {
       const target = byTarget.get(`${evaluated.task.id}:${outcome.ordinal}`);
       if (!target) continue;
