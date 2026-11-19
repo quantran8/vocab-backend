@@ -17,7 +17,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "nest build && node --env-file-if-exists=.env dist/seed/seed.js",
     "db:seed:heteronyms": "nest build && node --env-file-if-exists=.env dist/seed/seed-heteronyms.js",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "content": "nest build && node --env-file-if-exists=.env dist/content-pipeline/cli.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

@@ -1,30 +1,44 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DB, Db, Executor } from '../../../db/db';
-import { activeMeaningPublications } from '../../../db/schema';
+import { activeMeaningPublications, exampleLocalizations, meaningLocalizations } from '../../../db/schema';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
+
+const snapshotShape = (locale: string) => ({
+  columns: { id: true, cefrLevel: true },
+  with: {
+    localizations: { where: eq(meaningLocalizations.locale, locale) },
+    examples: {
+      columns: { sourceText: true, targetLocator: true },
+      with: { localizations: { where: eq(exampleLocalizations.locale, locale), columns: { translationText: true } } },
+    },
+    pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
+    type: {
+      columns: { id: true, partOfSpeech: true },
+      with: { word: { columns: { id: true, lemma: true } } },
+    },
+  },
+} as const);
+
+export interface SnapshotSource {
+  id: string;
+  cefrLevel: string | null;
+  localizations: { meaningText: string; definitionText: string; editorialState: string }[];
+  examples: { sourceText: string; targetLocator: Record<string, unknown>; localizations: { translationText: string }[] }[];
+  pronunciations: { id: string; accentLocale: string; ipa: string | null; audioAssetKey: string | null }[];
+  type: { id: string; partOfSpeech: string; word: { id: string; lemma: string } };
+}
 
 @Injectable()
 export class PublicationRepository {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  findMeaningForSnapshot(meaningId: string, locale: string, executor: Executor = this.db) {
-    return executor.query.meanings.findFirst({
-      where: (m) => eq(m.id, meaningId),
-      columns: { id: true, cefrLevel: true },
-      with: {
-        localizations: { where: (l) => eq(l.locale, locale) },
-        examples: {
-          columns: { sourceText: true, targetLocator: true },
-          with: { localizations: { where: (l) => eq(l.locale, locale), columns: { translationText: true } } },
-        },
-        pronunciations: { columns: { id: true, accentLocale: true, ipa: true, audioAssetKey: true } },
-        type: {
-          columns: { id: true, partOfSpeech: true },
-          with: { word: { columns: { id: true, lemma: true } } },
-        },
-      },
-    });
+  findMeaningForSnapshot(meaningId: string, locale: string, executor: Executor = this.db): Promise<SnapshotSource | undefined> {
+    return executor.query.meanings.findFirst({ where: (m) => eq(m.id, meaningId), ...snapshotShape(locale) });
+  }
+
+  findMeaningsForSnapshot(meaningIds: string[], locale: string, executor: Executor = this.db): Promise<SnapshotSource[]> {
+    return executor.query.meanings.findMany({ where: (m) => inArray(m.id, meaningIds), ...snapshotShape(locale) });
   }
 
   // Revision and pointer move in one statement so concurrent publishes cannot share a revision.

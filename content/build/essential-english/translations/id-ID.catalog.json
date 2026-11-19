@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "Bahasa Inggris Esensial",
+    "description": "2.800 kata paling berguna dalam bahasa Inggris sehari-hari, dari A1 hingga B2."
+  },
+  "topics": {
+    "people-family": {
+      "title": "Orang dan Keluarga",
+      "description": "Anggota keluarga, teman, dan orang-orang di sekitarmu."
+    },
+    "relationships": {
+      "title": "Hubungan dan Kehidupan Sosial",
+      "description": "Berkenalan, membantu, dan bergaul dengan orang lain."
+    },
+    "feelings-character": {
+      "title": "Perasaan dan Kepribadian",
+      "description": "Emosi, suasana hati, dan sifat seseorang."
+    },
+    "body-health": {
+      "title": "Tubuh dan Kesehatan",
+      "description": "Tubuh, penyakit, kebugaran, dan perawatan."
+    },
+    "home-daily-life": {
+      "title": "Rumah dan Rutinitas Harian",
+      "description": "Ruangan, perabot, pekerjaan rumah, dan keseharian di rumah."
+    },
+    "food-drink": {
+      "title": "Makanan dan Minuman",
+      "description": "Waktu makan, memasak, rasa, dan restoran."
+    },
+    "clothes-appearance": {
+      "title": "Pakaian dan Penampilan",
+      "description": "Apa yang dikenakan orang dan bagaimana penampilan mereka."
+    },
+    "shopping-money": {
+      "title": "Belanja dan Uang",
+      "description": "Membeli, membayar, harga, dan keuangan pribadi."
+    },
+    "work-jobs": {
+      "title": "Pekerjaan dan Profesi",
+      "description": "Pekerjaan, tempat kerja, dan karier."
+    },
+    "business-economy": {
+      "title": "Bisnis dan Ekonomi",
+      "description": "Perusahaan, perdagangan, pasar, dan ekonomi."
+    },
+    "school-learning": {
+      "title": "Sekolah dan Belajar",
+      "description": "Belajar, kelas, ujian, dan pengetahuan."
+    },
+    "communication": {
+      "title": "Berbicara dan Berkomunikasi",
+      "description": "Berbicara, menulis, bertanya, dan menjelaskan."
+    },
+    "thinking-opinions": {
+      "title": "Pikiran dan Pendapat",
+      "description": "Gagasan, keyakinan, keputusan, dan pengetahuan."
+    },
+    "travel-transport": {
+      "title": "Perjalanan dan Transportasi",
+      "description": "Perjalanan, kendaraan, jalan, dan liburan."
+    },
+    "places-buildings": {
+      "title": "Tempat dan Bangunan",
+      "description": "Kota kecil, kota besar, negara, dan bangunan."
+    },
+    "nature-weather": {
+      "title": "Alam, Hewan, dan Cuaca",
+      "description": "Dunia alam, hewan, tumbuhan, dan cuaca."
+    },
+    "science-technology": {
+      "title": "Sains dan Teknologi",
+      "description": "Komputer, internet, mesin, dan sains."
+    },
+    "media-arts": {
+      "title": "Media, Seni, dan Hiburan",
+      "description": "Musik, film, buku, berita, dan seni."
+    },
+    "sports-free-time": {
+      "title": "Olahraga dan Waktu Luang",
+      "description": "Permainan, olahraga, hobi, dan bersenang-senang."
+    },
+    "society-law": {
+      "title": "Masyarakat, Hukum, dan Pemerintahan",
+      "description": "Pemerintah, aturan, kejahatan, dan kehidupan publik."
+    },
+    "time-events": {
+      "title": "Waktu dan Peristiwa",
+      "description": "Hari, tanggal, seberapa sering, dan kapan sesuatu terjadi."
+    },
+    "numbers-amounts": {
+      "title": "Angka dan Jumlah",
+      "description": "Kuantitas, ukuran, dan perbandingan."
+    },
+    "position-movement": {
+      "title": "Posisi dan Gerakan",
+      "description": "Di mana benda berada dan bagaimana benda bergerak."
+    },
+    "describing-things": {
+      "title": "Mendeskripsikan Benda",
+      "description": "Ukuran, bentuk, kualitas, dan sifat lainnya."
+    },
+    "everyday-actions": {
+      "title": "Kegiatan Sehari-hari",
+      "description": "Kata kerja umum untuk melakukan, membuat, dan menggunakan sesuatu."
+    },
+    "linking-words": {
+      "title": "Kata Penghubung dan Kata Fungsi",
+      "description": "Kata-kata kecil yang menghubungkan gagasan dan kalimat."
+    }
+  }
+}

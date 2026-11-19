@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "Inglês essencial",
+    "description": "As 2.800 palavras mais úteis do inglês do dia a dia, do A1 ao B2."
+  },
+  "topics": {
+    "people-family": {
+      "title": "Pessoas e família",
+      "description": "Familiares, amigos e as pessoas ao seu redor."
+    },
+    "relationships": {
+      "title": "Relacionamentos e vida social",
+      "description": "Conhecer pessoas, ajudar e se dar bem com os outros."
+    },
+    "feelings-character": {
+      "title": "Sentimentos e personalidade",
+      "description": "Emoções, humor e como as pessoas são."
+    },
+    "body-health": {
+      "title": "Corpo e saúde",
+      "description": "O corpo, doenças, forma física e cuidados."
+    },
+    "home-daily-life": {
+      "title": "Casa e rotina",
+      "description": "Cômodos, móveis, tarefas domésticas e o dia em casa."
+    },
+    "food-drink": {
+      "title": "Comida e bebida",
+      "description": "Refeições, culinária, sabores e restaurantes."
+    },
+    "clothes-appearance": {
+      "title": "Roupas e aparência",
+      "description": "O que as pessoas vestem e como elas são."
+    },
+    "shopping-money": {
+      "title": "Compras e dinheiro",
+      "description": "Comprar, pagar, preços e finanças pessoais."
+    },
+    "work-jobs": {
+      "title": "Trabalho e profissões",
+      "description": "Profissões, o local de trabalho e carreiras."
+    },
+    "business-economy": {
+      "title": "Negócios e economia",
+      "description": "Empresas, comércio, mercados e a economia."
+    },
+    "school-learning": {
+      "title": "Escola e aprendizado",
+      "description": "Estudo, aulas, provas e conhecimento."
+    },
+    "communication": {
+      "title": "Falar e se comunicar",
+      "description": "Falar, escrever, perguntar e explicar."
+    },
+    "thinking-opinions": {
+      "title": "Pensamentos e opiniões",
+      "description": "Ideias, crenças, decisões e conhecimento."
+    },
+    "travel-transport": {
+      "title": "Viagens e transporte",
+      "description": "Viagens, veículos, estradas e férias."
+    },
+    "places-buildings": {
+      "title": "Lugares e prédios",
+      "description": "Vilas, cidades, países e prédios."
+    },
+    "nature-weather": {
+      "title": "Natureza, animais e clima",
+      "description": "O mundo natural, animais, plantas e o clima."
+    },
+    "science-technology": {
+      "title": "Ciência e tecnologia",
+      "description": "Computadores, internet, máquinas e ciência."
+    },
+    "media-arts": {
+      "title": "Mídia, arte e entretenimento",
+      "description": "Música, filmes, livros, notícias e arte."
+    },
+    "sports-free-time": {
+      "title": "Esportes e lazer",
+      "description": "Jogos, esportes, hobbies e diversão."
+    },
+    "society-law": {
+      "title": "Sociedade, leis e governo",
+      "description": "Governo, regras, crimes e vida pública."
+    },
+    "time-events": {
+      "title": "Tempo e eventos",
+      "description": "Dias, datas, frequência e quando as coisas acontecem."
+    },
+    "numbers-amounts": {
+      "title": "Números e quantidades",
+      "description": "Quantidades, medidas e comparações."
+    },
+    "position-movement": {
+      "title": "Posição e movimento",
+      "description": "Onde as coisas estão e como se movem."
+    },
+    "describing-things": {
+      "title": "Descrevendo coisas",
+      "description": "Tamanho, forma, qualidade e outras características."
+    },
+    "everyday-actions": {
+      "title": "Ações do dia a dia",
+      "description": "Verbos comuns para fazer, criar e usar coisas."
+    },
+    "linking-words": {
+      "title": "Conectivos e palavras funcionais",
+      "description": "Palavras pequenas que ligam ideias e frases."
+    }
+  }
+}

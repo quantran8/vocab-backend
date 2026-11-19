@@ -1,0 +1,285 @@
+{"key":"and|conjunction","sourceHash":"c90af12c2c12552e","model":"claude-code","problems":[]}
+{"key":"of|preposition","sourceHash":"1b379b6449a8dc6a","model":"claude-code","problems":[]}
+{"key":"to|preposition","sourceHash":"a65d793b635abc22","model":"claude-code","problems":[]}
+{"key":"in|adverb","sourceHash":"d57c7312e8ceacd6","model":"claude-code","problems":[]}
+{"key":"in|preposition","sourceHash":"7f3380aadd5590ae","model":"claude-code","problems":[]}
+{"key":"it|noun","sourceHash":"9d8e9202be0d1d13","model":"claude-code","problems":[]}
+{"key":"it|pronoun","sourceHash":"e42ab777a54b60b2","model":"claude-code","problems":[{"key":"it|pronoun","gloss":"belonging to a thing","kind":"wrong_definition","note":"This sense is the possessive 'its', not 'it', and it has no examples. Remove this meaning from the 'it' entry."}]}
+{"key":"you|pronoun","sourceHash":"5895edc379e80c7d","model":"claude-code","problems":[]}
+{"key":"he|pronoun","sourceHash":"1f2f94bb020a5044","model":"claude-code","problems":[]}
+{"key":"for|conjunction","sourceHash":"61bad2d59d34c3f1","model":"claude-code","problems":[]}
+{"key":"for|preposition","sourceHash":"b13ac9937649eebf","model":"claude-code","problems":[{"key":"for|preposition","gloss":"with the purpose of","kind":"merged","note":"Definition says 'reason or purpose', but reason ('thank you for your help', 'famous for') and purpose ('for a swim') are different words in Spanish/Portuguese (por vs para). Limit the definition to purpose: 'Used to show the purpose of an action or thing.'"}]}
+{"key":"they|pronoun","sourceHash":"5e73d4737c0c558d","model":"claude-code","problems":[]}
+{"key":"not|adverb","sourceHash":"89b0becca0be9cf2","model":"claude-code","problems":[]}
+{"key":"that|adverb","sourceHash":"367d4e685fb263b9","model":"claude-code","problems":[{"key":"that|adverb","gloss":"not very","kind":"duplicate","note":"Same sense as 'to such a degree' (both examples there are negative too: 'didn't know ... that expensive'). Keep one meaning: either merge into 'to such a degree' with one negative example, or keep 'not very' and give 'to such a degree' only positive examples ('Is it really that far?', 'I can't walk that far')."}]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"9b234bf5f0456c9b","model":"claude-code","problems":[{"key":"that|pronoun","gloss":"that thing over there","kind":"wrong_part_of_speech","note":"'Look at that big dog over there!' uses 'that' as a determiner before a noun. Replace with a pronoun use, e.g. 'What's that in your hand?' or 'Can I have that, please?'."}]}
+{"key":"we|pronoun","sourceHash":"5047fc05a02823bc","model":"claude-code","problems":[]}
+{"key":"on|adverb","sourceHash":"753c4e248e1d4892","model":"claude-code","problems":[]}
+{"key":"on|preposition","sourceHash":"1fc42caff665d1fc","model":"claude-code","problems":[]}
+{"key":"with|preposition","sourceHash":"953c1b14df4bb26b","model":"claude-code","problems":[]}
+{"key":"this|pronoun","sourceHash":"2e5d9d7219cd0434","model":"claude-code","problems":[{"key":"this|pronoun","gloss":"this thing here","kind":"wrong_part_of_speech","note":"'This bag is too heavy for me.' uses 'this' as a determiner before a noun. Replace with a pronoun use, e.g. 'This is too heavy for me.'"},{"key":"this|pronoun","gloss":"the present period","kind":"wrong_part_of_speech","note":"'this week', 'this morning' are determiner uses; 'this' cannot stand alone as a pronoun in this sense. Remove this meaning from the pronoun entry (it belongs to a determiner entry)."}]}
+{"key":"i|pronoun","sourceHash":"d9bc0f0fffae4bec","model":"claude-code","problems":[]}
+{"key":"as|conjunction","sourceHash":"70283feb47a2e8d2","model":"claude-code","problems":[{"key":"as|conjunction","gloss":null,"kind":"missing_core","note":"Missing the A2 comparison 'as ... as' ('She is as tall as her brother.', 'Come as soon as you can.'), one of the most common uses of 'as'. Add it as a meaning (gloss e.g. 'equally ... as'); there is room (3 of 5 used)."}]}
+{"key":"as|preposition","sourceHash":"f7ec96f4baaba91a","model":"claude-code","problems":[]}
+{"key":"at|preposition","sourceHash":"b9601e64db392e46","model":"claude-code","problems":[{"key":"at|preposition","gloss":null,"kind":"missing_core","note":"Missing the A2 use after adjectives of skill: 'good at', 'bad at' ('She is good at maths.', 'I'm bad at drawing.'). Add it as a meaning; only 3 of 5 are used."}]}
+{"key":"she|pronoun","sourceHash":"eb8902087b86e2b3","model":"claude-code","problems":[]}
+{"key":"but|conjunction","sourceHash":"40525c235db15d7b","model":"claude-code","problems":[]}
+{"key":"but|preposition","sourceHash":"4926211c84724cf7","model":"claude-code","problems":[]}
+{"key":"from|preposition","sourceHash":"4d6d6b83ebd83b0e","model":"claude-code","problems":[{"key":"from|preposition","gloss":"starting place","kind":"merged","note":"Merges origin ('My friend is from Brazil' = where someone was born/lives; ja 出身, ko 출신, vi 'đến từ') with the starting point of a movement ('walked home from school'; ja から, ko 에서, vi 'từ'). Split into 'origin' (be from + country/city) and 'starting point' (go/walk/come from a place), each with its own two examples."},{"key":"from|preposition","gloss":null,"kind":"missing_core","note":"Add the distance/separation sense (A2): 'The station is two kilometres from here.', 'We live far from the city.' It is far more common for learners than 'made out of' (B1); drop or keep 'made out of' only if the cap allows."}]}
+{"key":"by|preposition","sourceHash":"e14a81932a984c09","model":"claude-code","problems":[]}
+{"key":"will|noun","sourceHash":"b2cfd5b619208b44","model":"claude-code","problems":[]}
+{"key":"or|conjunction","sourceHash":"c0681b424698627c","model":"claude-code","problems":[]}
+{"key":"say|noun","sourceHash":"d3588294b718a303","model":"claude-code","problems":[]}
+{"key":"say|verb","sourceHash":"165cced459e07615","model":"claude-code","problems":[]}
+{"key":"go|noun","sourceHash":"eb138af7f93609f7","model":"claude-code","problems":[]}
+{"key":"go|verb","sourceHash":"653cf93fd132a98c","model":"claude-code","problems":[{"key":"go|verb","gloss":"disappear","kind":"example_mismatch","note":"'All my money goes on rent and food.' shows 'be spent on', not 'disappear' (translated differently, e.g. vi 'tiêu vào', es 'se va en' vs 'desaparecer'). Replace it with a disappear example such as 'My bike has gone! Someone took it.' and remove 'be used until nothing is left' from the definition."}]}
+{"key":"so|adverb","sourceHash":"87c7aca97afbca4c","model":"claude-code","problems":[]}
+{"key":"so|conjunction","sourceHash":"93e1cfee6ba3a37c","model":"claude-code","problems":[]}
+{"key":"all|adverb","sourceHash":"2a6698253a2cfada","model":"claude-code","problems":[]}
+{"key":"all|pronoun","sourceHash":"fa8fde498e400764","model":"claude-code","problems":[{"key":"all|pronoun","gloss":"the whole amount","kind":"merged","note":"Merges 'the whole amount' ('ate all the cake'; vi 'hết', ja 全部) with 'the whole time' ('all day'; vi 'cả ngày', ja 一日中, es 'todo el día'). Keep this meaning to the amount sense with two amount examples (e.g. 'Who ate all the cake?', 'She spent all her money.') and change the definition to 'The whole amount of something'; if the time sense is kept, make it a separate meaning."}]}
+{"key":"if|conjunction","sourceHash":"9f47e8c3eccbf5c9","model":"claude-code","problems":[]}
+{"key":"one|pronoun","sourceHash":"0af485003e9251d2","model":"claude-code","problems":[{"key":"one|pronoun","gloss":null,"kind":"missing_core","note":"The number sense (A1) is missing: 'I have one brother and two sisters.', 'Only one person came.' Determiner uses go into the pronoun entry in this app, so add it as the first meaning and drop 'any person' (formal, B2) if the cap is a concern."}]}
+{"key":"about|adverb","sourceHash":"c0ba60d970a8889a","model":"claude-code","problems":[]}
+{"key":"about|preposition","sourceHash":"e382422ca79a2da5","model":"claude-code","problems":[{"key":"about|preposition","gloss":"in different parts of","kind":"duplicate","note":"Same sense as about|adverb 'around' (moving/lying in many places with no direction; same B1 level, same translation). Remove it from one entry; keep it in the adverb entry, or keep only the preposition one with examples that have an object ('walked about the town')."}]}
+{"key":"can|noun","sourceHash":"11e67f6492a5241e","model":"claude-code","problems":[]}
+{"key":"which|pronoun","sourceHash":"9504d966629baf4e","model":"claude-code","problems":[]}
+{"key":"there|adverb","sourceHash":"fbbdb590b6bd1e7f","model":"claude-code","problems":[]}
+{"key":"know|verb","sourceHash":"b06cbfd58ed91c26","model":"claude-code","problems":[]}
+{"key":"more|adverb","sourceHash":"d145bcd40a68b8a4","model":"claude-code","problems":[{"key":"more|adverb","gloss":"comparative form","kind":"wrong_level","note":"'more + adjective' to form comparatives ('more interesting than') is taught at A1/A2, not B1. Set to A2."},{"key":"more|adverb","gloss":"to a greater extent","kind":"wrong_level","note":"'I like this song more than the other one' / 'exercise more' is basic A2 usage. Set to A2."}]}
+{"key":"more|pronoun","sourceHash":"ff078cd163bda878","model":"claude-code","problems":[]}
+{"key":"get|verb","sourceHash":"625359db428ffdec","model":"claude-code","problems":[]}
+{"key":"who|pronoun","sourceHash":"1ab07c262ff3a5fd","model":"claude-code","problems":[]}
+{"key":"like|conjunction","sourceHash":"9de02c7e94125f90","model":"claude-code","problems":[]}
+{"key":"like|preposition","sourceHash":"532a7f960216c9cd","model":"claude-code","problems":[]}
+{"key":"like|verb","sourceHash":"666ac9fd36dd690f","model":"claude-code","problems":[]}
+{"key":"when|adverb","sourceHash":"64d479eb448c34cc","model":"claude-code","problems":[]}
+{"key":"when|conjunction","sourceHash":"07967a6f5dbf1fdf","model":"claude-code","problems":[]}
+{"key":"think|verb","sourceHash":"ab78fee4d39176dd","model":"claude-code","problems":[]}
+{"key":"make|noun","sourceHash":"2ed9567ab55ce6ad","model":"claude-code","problems":[]}
+{"key":"make|verb","sourceHash":"eae682801d3b4968","model":"claude-code","problems":[]}
+{"key":"time|noun","sourceHash":"e8957c5ffe2701ba","model":"claude-code","problems":[]}
+{"key":"time|verb","sourceHash":"bbcf7deab11000da","model":"claude-code","problems":[]}
+{"key":"see|verb","sourceHash":"10d499800d4f7168","model":"claude-code","problems":[]}
+{"key":"what|pronoun","sourceHash":"02632d072d99d364","model":"claude-code","problems":[]}
+{"key":"up|adverb","sourceHash":"1d823505103dd420","model":"claude-code","problems":[{"key":"up|adverb","gloss":"to a higher place","kind":"wrong_level","note":"Basic up (stand up, get up, look up, go up) is A1, not A2; set cefrLevel to A1."}]}
+{"key":"up|preposition","sourceHash":"38e993155e2ec441","model":"claude-code","problems":[]}
+{"key":"some|pronoun","sourceHash":"b61445a23f6f8958","model":"claude-code","problems":[]}
+{"key":"other|pronoun","sourceHash":"e6557c2e958270c7","model":"claude-code","problems":[]}
+{"key":"out|adverb","sourceHash":"abca7894939fe224","model":"claude-code","problems":[]}
+{"key":"good|adjective","sourceHash":"441ba5060ea16970","model":"claude-code","problems":[]}
+{"key":"good|noun","sourceHash":"be87bdc3cdcfed81","model":"claude-code","problems":[{"key":"good|noun","gloss":"products for sale","kind":"wrong_definition","note":"This sense exists only in the plural 'goods' (never 'a good'); say so in the definition, e.g. 'goods: things that are made to be sold', and lower to B1 if the level list allows."}]}
+{"key":"people|noun","sourceHash":"335e679236e05148","model":"claude-code","problems":[]}
+{"key":"year|noun","sourceHash":"f910cee0cd2d1a1a","model":"claude-code","problems":[{"key":"year|noun","gloss":null,"kind":"missing_core","note":"Add the A1 age sense 'years old' (She is ten years old.; a five-year-old boy). Many target languages use a different word for age (tuổi, 歳, 살, 岁) than for a calendar year, so it needs its own meaning."}]}
+{"key":"take|noun","sourceHash":"d30fdf67f8004c53","model":"claude-code","problems":[]}
+{"key":"take|verb","sourceHash":"1c0fb9145b8070ae","model":"claude-code","problems":[{"key":"take|verb","gloss":"get with your hand","kind":"merged","note":"'Take my hand' means hold/grasp (nắm, 握る), while 'She took a cake from the plate' means pick up/remove (lấy, 取る). Make the meaning 'pick up or remove with your hand' and replace 'Take my hand' with an example like 'He took a pen from his bag.'"},{"key":"take|verb","gloss":null,"kind":"missing_core","note":"Add the A1 light-verb sense 'do an action': take a photo, take a shower, take a test, take medicine. It is among the most frequent uses and is translated with different verbs (chụp, tắm, làm bài, uống). Keep it ahead of any rarer meaning when trimming to 5."}]}
+{"key":"no|adverb","sourceHash":"c61e79c384e326d7","model":"claude-code","problems":[]}
+{"key":"no|pronoun","sourceHash":"ce18e5893c1cedb2","model":"claude-code","problems":[]}
+{"key":"well|adjective","sourceHash":"030b09aa11eb6cdd","model":"claude-code","problems":[{"key":"well|adjective","gloss":"fine","kind":"example_mismatch","note":"'Everything is well at home' is unnatural; native speakers say 'Everything is fine/OK at home'. Replace with e.g. 'All is well here, so don't worry about us.' or 'I hope you are all well.'"}]}
+{"key":"well|adverb","sourceHash":"18cd0e0d5605cd23","model":"claude-code","problems":[{"key":"well|adverb","gloss":null,"kind":"missing_core","note":"Add 'as well' = also (A2): 'I'd like a coffee, and a cake as well.' It is very common and translated as 'also' (cũng, también), unlike any kept sense."}]}
+{"key":"because|conjunction","sourceHash":"c54779b3702f627f","model":"claude-code","problems":[]}
+{"key":"very|adjective","sourceHash":"c33f10f51f114722","model":"claude-code","problems":[{"key":"very|adjective","gloss":"extreme","kind":"duplicate","note":"'the very top/back/end' teaches the same emphasis on an extreme point as very|adverb 'absolutely (before best, first)' ('the very best/first'); learners translate both the same way. Drop this adjective meaning and keep only 'exact' for the adjective, or move the 'very end/top' examples into the adverb meaning."}]}
+{"key":"very|adverb","sourceHash":"06c856cee31aff92","model":"claude-code","problems":[]}
+{"key":"just|adverb","sourceHash":"cbc135b496be5880","model":"claude-code","problems":[]}
+{"key":"come|verb","sourceHash":"3296fcbed0d5b9e4","model":"claude-code","problems":[{"key":"come|verb","gloss":"arrive","kind":"example_mismatch","note":"'What time did your parents get home? They came at ten.' is unnatural (answer would be 'They got back at ten'). Replace with e.g. 'Your letter came this morning.' or 'The train finally came at six.'"}]}
+{"key":"work|noun","sourceHash":"a00918587be1e940","model":"claude-code","problems":[]}
+{"key":"work|verb","sourceHash":"ab9646868540396e","model":"claude-code","problems":[]}
+{"key":"use|noun","sourceHash":"586951ee9eee66a8","model":"claude-code","problems":[]}
+{"key":"use|verb","sourceHash":"c9e507e5cee8b20a","model":"claude-code","problems":[]}
+{"key":"than|conjunction","sourceHash":"27167c485bf057bd","model":"claude-code","problems":[]}
+{"key":"than|preposition","sourceHash":"cb4fd8deb97d0165","model":"claude-code","problems":[]}
+{"key":"now|adverb","sourceHash":"48acffcfdd1bda58","model":"claude-code","problems":[]}
+{"key":"now|conjunction","sourceHash":"688081c66d8591d7","model":"claude-code","problems":[]}
+{"key":"then|adverb","sourceHash":"e820b152b1609789","model":"claude-code","problems":[]}
+{"key":"also|adverb","sourceHash":"8d1487b30fb81c99","model":"claude-code","problems":[]}
+{"key":"into|preposition","sourceHash":"887ee646fceaa7f0","model":"claude-code","problems":[]}
+{"key":"only|adjective","sourceHash":"a29c26ea11082d15","model":"claude-code","problems":[]}
+{"key":"only|adverb","sourceHash":"d3b61cecaa449e49","model":"claude-code","problems":[]}
+{"key":"look|noun","sourceHash":"684307a53bab9993","model":"claude-code","problems":[{"key":"look|noun","gloss":null,"kind":"missing_core","note":"The word has only a noun entry; the verb look (far more common) is missing. Add a look|verb entry with at least: 'turn your eyes to see' (A1, look at), 'seem/appear' (A1, You look tired), and 'search for' (A1, look for: I'm looking for my keys)."},{"key":"look|noun","gloss":"appearance","kind":"example_mismatch","note":"'He got his good looks from his handsome father' uses plural 'looks' = a person's physical attractiveness, a different sense from 'the look of this old hotel'. Replace it with a singular example of how something appears, e.g. 'I like the look of your new haircut.'"},{"key":"look|noun","gloss":null,"kind":"missing_core","note":"The 'search' sense of the noun is missing (have a look for: 'I had a look for your keys but couldn't find them'). Either add it to the noun, or make sure the verb entry teaches look for = search."}]}
+{"key":"the|pronoun","sourceHash":"2da0f8e97bbde5f3","model":"claude-code","problems":[{"key":"the|pronoun","gloss":null,"kind":"wrong_part_of_speech","note":"'the' is a determiner (definite article), not a pronoun; every meaning and example uses it before a noun or adjective. Change the part of speech to determiner."}]}
+{"key":"a|pronoun","sourceHash":"296235b85f765a8a","model":"claude-code","problems":[{"key":"a|pronoun","gloss":null,"kind":"wrong_part_of_speech","note":"'a' is a determiner (indefinite article), not a pronoun; every example uses it before a noun. Change the part of speech to determiner."}]}
+{"key":"that|adverb","sourceHash":"367d4e685fb263b9","model":"claude-code","problems":[{"key":"that|adverb","gloss":"to such a degree","kind":"example_mismatch","note":"Example 1 (\"I didn't know the trip was that expensive\") is negative, which blurs it with the separate meaning \"not very\". Use two non-negative examples such as \"Is it really that cold outside?\" so the two meanings stay distinct."}]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"9b234bf5f0456c9b","model":"claude-code","problems":[]}
+{"key":"this|pronoun","sourceHash":"2e5d9d7219cd0434","model":"claude-code","problems":[]}
+{"key":"it|noun","sourceHash":"9d8e9202be0d1d13","model":"claude-code","problems":[]}
+{"key":"it|pronoun","sourceHash":"04f881ceeec73109","model":"claude-code","problems":[]}
+{"key":"for|conjunction","sourceHash":"61bad2d59d34c3f1","model":"claude-code","problems":[]}
+{"key":"for|preposition","sourceHash":"bbbc4eced9822e02","model":"claude-code","problems":[{"key":"for|preposition","gloss":null,"kind":"missing_core","note":"Add the A1 reason sense 'because of' (Thank you for your help. / The city is famous for its food. / Sorry for being late.). Spanish/Portuguese use 'por' here, not 'para', and Vietnamese uses 'vì'; it is more needed than 'in support of' (B1), which can be dropped to stay within 5."}]}
+{"key":"that|adverb","sourceHash":"c9845b3b56e15be0","model":"claude-code","problems":[]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"9b234bf5f0456c9b","model":"claude-code","problems":[]}
+{"key":"as|conjunction","sourceHash":"482708b879226b86","model":"claude-code","problems":[{"key":"as|conjunction","gloss":"equally as","kind":"example_mismatch","note":"'as soon as you can' is a fixed time phrase (= ngay khi / en cuanto), not a comparison of equality. Replace it with a real as...as comparison, e.g. 'My bag is as heavy as yours.'"}]}
+{"key":"as|preposition","sourceHash":"f7ec96f4baaba91a","model":"claude-code","problems":[]}
+{"key":"at|preposition","sourceHash":"6bc7f155a4f82745","model":"claude-code","problems":[]}
+{"key":"from|preposition","sourceHash":"1b91ea4fdf0e3fbd","model":"claude-code","problems":[]}
+{"key":"go|noun","sourceHash":"eb138af7f93609f7","model":"claude-code","problems":[]}
+{"key":"go|verb","sourceHash":"00b78d54ad3c54ef","model":"claude-code","problems":[{"key":"go|verb","gloss":null,"kind":"missing_core","note":"Add the A1/A2 future use 'be going to' (I'm going to visit my aunt tomorrow. / It's going to rain.). It translates differently from 'travel' (Vietnamese 'sẽ', Japanese つもり, Chinese 要/打算) and is far more common than 'disappear' (B1), which can be dropped to stay within 5."}]}
+{"key":"all|adverb","sourceHash":"2a6698253a2cfada","model":"claude-code","problems":[]}
+{"key":"all|pronoun","sourceHash":"ffda2d79d1a614b5","model":"claude-code","problems":[]}
+{"key":"one|pronoun","sourceHash":"f5b8255e444ec869","model":"claude-code","problems":[]}
+{"key":"about|adverb","sourceHash":"c0ba60d970a8889a","model":"claude-code","problems":[]}
+{"key":"about|preposition","sourceHash":"a7730d46f43aab9d","model":"claude-code","problems":[]}
+{"key":"up|adverb","sourceHash":"438b24bda2dcdf12","model":"claude-code","problems":[]}
+{"key":"up|preposition","sourceHash":"38e993155e2ec441","model":"claude-code","problems":[]}
+{"key":"good|adjective","sourceHash":"441ba5060ea16970","model":"claude-code","problems":[]}
+{"key":"good|noun","sourceHash":"13dcbdefe515e070","model":"claude-code","problems":[]}
+{"key":"year|noun","sourceHash":"633065e7077d3919","model":"claude-code","problems":[{"key":"year|noun","gloss":"school year","kind":"example_mismatch","note":"'She is in her final year at university' shows a year of a course (a grade level), not the period when schools have classes as the definition says. Replace with an example of the period, e.g. 'The new school year begins next week.'"}]}
+{"key":"take|noun","sourceHash":"d30fdf67f8004c53","model":"claude-code","problems":[]}
+{"key":"take|verb","sourceHash":"5e4ccc08dc753f20","model":"claude-code","problems":[{"key":"take|verb","gloss":null,"kind":"missing_core","note":"Add the A1 sense 'go with someone to a place' (I'll take you to the station. / She takes her son to school every day.) as its own meaning. 'carry with you' covers only things; for people Vietnamese uses 'đưa', Japanese 連れて行く, Korean 데려가다, Chinese 带…去 rather than the carry-an-object words, so do not merge it into 'carry with you'. The entry is at its 5-meaning limit, so drop whichever current sense the editor judges least needed."}]}
+{"key":"well|adjective","sourceHash":"7e2935feb1e02db2","model":"claude-code","problems":[]}
+{"key":"well|adverb","sourceHash":"0305d5997d868fc1","model":"claude-code","problems":[{"key":"well|adverb","gloss":null,"kind":"missing_core","note":"The very common A1/A2 discourse use 'Well, ...' (Well, I think it's a good idea. / Well, let me see.) is not taught anywhere; add it as an interjection entry (or a meaning here if the app has no interjection entry). It is far more frequent for learners than 'very probably' (B2)."}]}
+{"key":"very|adjective","sourceHash":"e1fb05efb25bbb49","model":"claude-code","problems":[]}
+{"key":"very|adverb","sourceHash":"06c856cee31aff92","model":"claude-code","problems":[]}
+{"key":"come|verb","sourceHash":"41e669772bdac287","model":"claude-code","problems":[]}
+{"key":"look|noun","sourceHash":"1bb6ff772aaba5cc","model":"claude-code","problems":[]}
+{"key":"look|verb","sourceHash":"d509ddd78833389a","model":"claude-code","problems":[]}
+{"key":"more|adverb","sourceHash":"d145bcd40a68b8a4","model":"claude-code","problems":[]}
+{"key":"more|pronoun","sourceHash":"ff078cd163bda878","model":"claude-code","problems":[]}
+{"key":"for|conjunction","sourceHash":"61bad2d59d34c3f1","model":"claude-code","problems":[]}
+{"key":"for|preposition","sourceHash":"23ced0ac13275521","model":"claude-code","problems":[]}
+{"key":"as|conjunction","sourceHash":"396106022ded8503","model":"claude-code","problems":[]}
+{"key":"as|preposition","sourceHash":"f7ec96f4baaba91a","model":"claude-code","problems":[]}
+{"key":"go|noun","sourceHash":"eb138af7f93609f7","model":"claude-code","problems":[]}
+{"key":"go|verb","sourceHash":"b46eea2061214bfd","model":"claude-code","problems":[]}
+{"key":"year|noun","sourceHash":"f07f8b451f556bbd","model":"claude-code","problems":[]}
+{"key":"take|noun","sourceHash":"d30fdf67f8004c53","model":"claude-code","problems":[]}
+{"key":"take|verb","sourceHash":"2401cd8508830512","model":"claude-code","problems":[]}
+{"key":"well|adjective","sourceHash":"7e2935feb1e02db2","model":"claude-code","problems":[]}
+{"key":"well|adverb","sourceHash":"017c771fc275f5dd","model":"claude-code","problems":[]}
+{"key":"and|conjunction","sourceHash":"db98450ded64eea2","model":"claude-code","problems":[]}
+{"key":"of|preposition","sourceHash":"fcdf8af6ea19915c","model":"claude-code","problems":[{"key":"of|preposition","gloss":"about","kind":"example_mismatch","note":"\"I often think of my home country\" teaches the phrase \"think of\", not this sense of of. Replace it with a noun + of example, e.g. \"We heard the news of the storm on the radio.\""}]}
+{"key":"to|preposition","sourceHash":"502997face976bc0","model":"claude-code","problems":[{"key":"to|preposition","gloss":"towards an end point","kind":"merged","note":"Mixes direction to a place (walk to school; JA へ/に) with the end of a time or range (from nine to six; JA まで, VI đến tận). Keep this meaning for destination and move \"from nine to six\" into a separate meaning \"until / as far as\" with its own examples."}]}
+{"key":"in|adverb","sourceHash":"d57c7312e8ceacd6","model":"claude-code","problems":[]}
+{"key":"in|preposition","sourceHash":"aca39477c7122cea","model":"claude-code","problems":[]}
+{"key":"it|noun","sourceHash":"0db6e8c2923ea765","model":"claude-code","problems":[]}
+{"key":"it|pronoun","sourceHash":"04f881ceeec73109","model":"claude-code","problems":[]}
+{"key":"you|pronoun","sourceHash":"268a73ccba3a1a0d","model":"claude-code","problems":[]}
+{"key":"he|pronoun","sourceHash":"8c6c0cd560c9d616","model":"claude-code","problems":[]}
+{"key":"for|conjunction","sourceHash":"61bad2d59d34c3f1","model":"claude-code","problems":[]}
+{"key":"for|preposition","sourceHash":"e7a676006c81c839","model":"claude-code","problems":[]}
+{"key":"they|pronoun","sourceHash":"266737bc43d6f612","model":"claude-code","problems":[]}
+{"key":"that|adverb","sourceHash":"ae0d0326ea8b9e97","model":"claude-code","problems":[]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"b23c7e2e93586091","model":"claude-code","problems":[{"key":"that|pronoun","gloss":"the thing just mentioned","kind":"example_mismatch","note":"\"You can come with us? That is great news!\" is unnatural (statement-question, odd context). Replace with e.g. \"You passed the exam? That's great news!\""}]}
+{"key":"we|pronoun","sourceHash":"15f36da075a5228b","model":"claude-code","problems":[]}
+{"key":"on|adverb","sourceHash":"3b9853179ad817c6","model":"claude-code","problems":[{"key":"on|adverb","gloss":"wearing on the body","kind":"example_mismatch","note":"\"Put your coat on\" teaches the phrasal verb \"put on\". Replace with a non-phrasal use, e.g. \"He had no shoes on, so his feet were cold.\""}]}
+{"key":"on|preposition","sourceHash":"1ca45430c1a3c8de","model":"claude-code","problems":[{"key":"on|preposition","gloss":"on top of a surface","kind":"wrong_definition","note":"\"Held up by the top of something\" excludes the very common \"a picture on the wall\". Change to \"touching or fixed to a surface\" and keep gloss \"on a surface\"."},{"key":"on|preposition","gloss":null,"kind":"missing_core","note":"Add the A1–A2 transport meaning \"in or onto a bus, train, plane\" (I met her on the bus; Get on the train is phrasal, avoid it). Entry has 4 of 5 meanings, so nothing needs dropping."}]}
+{"key":"with|preposition","sourceHash":"951af5662a692d39","model":"claude-code","problems":[]}
+{"key":"this|pronoun","sourceHash":"80346d0b2bdd7933","model":"claude-code","problems":[{"key":"this|pronoun","gloss":"this one here","kind":"merged","note":"Mixes the thing near the speaker (Is this your pen?; JA これ/この) with the present time (this week; JA 今週, KO 이번). Split \"this week/this morning\" into a separate meaning \"the present or coming period\"."},{"key":"this|pronoun","gloss":null,"kind":"missing_core","note":"Add the A1 use for introducing someone or saying who you are on the phone: \"This is my sister, Mai.\" / \"Hello, this is Tom.\""}]}
+{"key":"as|conjunction","sourceHash":"396106022ded8503","model":"claude-code","problems":[]}
+{"key":"as|preposition","sourceHash":"2bbf95edc019435c","model":"claude-code","problems":[{"key":"as|preposition","gloss":null,"kind":"missing_core","note":"Add the common meaning \"used for the purpose of / in the role of a thing\": \"We used the box as a table.\" Entry has 2 of 5 meanings, nothing to drop."}]}
+{"key":"at|preposition","sourceHash":"f5c76051ba77fe47","model":"claude-code","problems":[]}
+{"key":"but|conjunction","sourceHash":"b27112de04d97c96","model":"claude-code","problems":[]}
+{"key":"but|preposition","sourceHash":"4926211c84724cf7","model":"claude-code","problems":[]}
+{"key":"from|preposition","sourceHash":"21b0dc8ee2cd82fd","model":"claude-code","problems":[{"key":"from|preposition","gloss":"starting point","kind":"merged","note":"Mixes origin (Where are you from? = đến từ / 出身) with the start of movement or time (walked home from school = từ / から). Split into \"origin: where someone or something comes from\" (I'm from Seoul) and \"starting point of movement or time\" (from school, from Monday)."}]}
+{"key":"by|preposition","sourceHash":"45dc48ba5de1b104","model":"claude-code","problems":[]}
+{"key":"will|noun","sourceHash":"2dccd096d8d1eef4","model":"claude-code","problems":[]}
+{"key":"or|conjunction","sourceHash":"549707430a29c719","model":"claude-code","problems":[]}
+{"key":"say|noun","sourceHash":"d3588294b718a303","model":"claude-code","problems":[]}
+{"key":"say|verb","sourceHash":"2be7b1d9dd2794b6","model":"claude-code","problems":[]}
+{"key":"go|noun","sourceHash":"eb138af7f93609f7","model":"claude-code","problems":[]}
+{"key":"go|verb","sourceHash":"00b78d54ad3c54ef","model":"claude-code","problems":[]}
+{"key":"all|adverb","sourceHash":"2a6698253a2cfada","model":"claude-code","problems":[]}
+{"key":"all|pronoun","sourceHash":"e75fddb4045410da","model":"claude-code","problems":[{"key":"all|pronoun","gloss":"every part or member","kind":"merged","note":"Mixes 'every person or thing in a group' (All my friends = tất cả / 全部) with 'the whole of a period or amount' (all day = suốt cả ngày / 一日中). Split into two meanings: 'every one in a group' with the friends example, and 'the whole of' (all day, all the money) with the rain example plus one more."}]}
+{"key":"one|pronoun","sourceHash":"b7ba46ee585e79f0","model":"claude-code","problems":[]}
+{"key":"about|adverb","sourceHash":"170243a2a1891031","model":"claude-code","problems":[]}
+{"key":"about|preposition","sourceHash":"ccd9fc1e50d51819","model":"claude-code","problems":[]}
+{"key":"which|pronoun","sourceHash":"5f9fff03dc0dcf4b","model":"claude-code","problems":[]}
+{"key":"there|adverb","sourceHash":"d9c543c550b01951","model":"claude-code","problems":[]}
+{"key":"know|verb","sourceHash":"b41805efba83582d","model":"claude-code","problems":[]}
+{"key":"more|adverb","sourceHash":"a10bfee5b68df8a9","model":"claude-code","problems":[]}
+{"key":"more|pronoun","sourceHash":"ff078cd163bda878","model":"claude-code","problems":[]}
+{"key":"get|verb","sourceHash":"22b5467b69faa349","model":"claude-code","problems":[]}
+{"key":"like|conjunction","sourceHash":"9de02c7e94125f90","model":"claude-code","problems":[]}
+{"key":"like|preposition","sourceHash":"9e6e924d4b0a4f1c","model":"claude-code","problems":[]}
+{"key":"like|verb","sourceHash":"666ac9fd36dd690f","model":"claude-code","problems":[]}
+{"key":"think|verb","sourceHash":"b85ae6db7269d1cd","model":"claude-code","problems":[]}
+{"key":"make|noun","sourceHash":"2ed9567ab55ce6ad","model":"claude-code","problems":[]}
+{"key":"make|verb","sourceHash":"fb256beb07f58543","model":"claude-code","problems":[]}
+{"key":"time|noun","sourceHash":"03b33685d37b3c6f","model":"claude-code","problems":[]}
+{"key":"time|verb","sourceHash":"bbcf7deab11000da","model":"claude-code","problems":[]}
+{"key":"see|verb","sourceHash":"13ad907bf6b724e6","model":"claude-code","problems":[]}
+{"key":"what|pronoun","sourceHash":"aa973dc74bfce586","model":"claude-code","problems":[]}
+{"key":"up|adverb","sourceHash":"9ae1601bef57f803","model":"claude-code","problems":[]}
+{"key":"up|preposition","sourceHash":"38e993155e2ec441","model":"claude-code","problems":[]}
+{"key":"some|pronoun","sourceHash":"431a074b635b5ed2","model":"claude-code","problems":[]}
+{"key":"out|adverb","sourceHash":"4301770f9ac9ab7d","model":"claude-code","problems":[{"key":"out|adverb","gloss":null,"kind":"missing_core","note":"Add the common B1 meaning 'no longer burning or shining' (The fire is out. All the lights went out in the storm.); the entry has only 2 of 5 meanings, so nothing needs dropping."}]}
+{"key":"take|noun","sourceHash":"5858dea17662a8ac","model":"claude-code","problems":[]}
+{"key":"take|verb","sourceHash":"edbcc1307db962e1","model":"claude-code","problems":[{"key":"take|verb","gloss":null,"kind":"missing_core","note":"Missing the A1 'do or have an action' meaning (take a photo, take a shower, take a test, take medicine). The entry is at maxMeanings, so drop 'accept' (B1) to make room."},{"key":"take|verb","gloss":"travel by","kind":"wrong_definition","note":"Remove 'or road' from the definition. Taking a road means choosing a route, which is a different sense. Use 'To travel using a bus, train, taxi or plane.'"}]}
+{"key":"no|adverb","sourceHash":"e3850aa6b07e2fc3","model":"claude-code","problems":[{"key":"no|adverb","gloss":null,"kind":"missing_core","note":"No entry teaches the A1 determiner use 'not any' (I have no money, There's no milk, No smoking). Add a pronoun entry for it, because pronoun entries carry determiner use."},{"key":"no|adverb","gloss":"refusal or disagreement","kind":"wrong_definition","note":"Change the gloss to 'negative answer' to match the definition. The second example ('Are you hungry?' ... she said no) is a plain negative reply, not a refusal or a disagreement."}]}
+{"key":"well|adjective","sourceHash":"d039e44c2e02f02a","model":"claude-code","problems":[]}
+{"key":"well|adverb","sourceHash":"f131afdb6b6d796d","model":"claude-code","problems":[]}
+{"key":"very|adjective","sourceHash":"9ca54f615c88961b","model":"claude-code","problems":[]}
+{"key":"very|adverb","sourceHash":"06c856cee31aff92","model":"claude-code","problems":[{"key":"very|adverb","gloss":"absolutely (before best, first)","kind":"duplicate","note":"'the very first/last/same' has the same core idea as the adjective meanings 'extreme' (the very beginning) and 'exact' (the very person). Limit this meaning to superlatives (very best, very worst): remove first, last and same from the definition and gloss, and replace 'She was the very first person...' with a superlative example."}]}
+{"key":"just|adverb","sourceHash":"3caa3633cb2825db","model":"claude-code","problems":[]}
+{"key":"come|verb","sourceHash":"4d8debaab84ead37","model":"claude-code","problems":[]}
+{"key":"work|noun","sourceHash":"c9ff829f7dcf4588","model":"claude-code","problems":[]}
+{"key":"work|verb","sourceHash":"ebcd03c420aceabb","model":"claude-code","problems":[]}
+{"key":"use|noun","sourceHash":"0ee4529b87bee3ae","model":"claude-code","problems":[]}
+{"key":"use|verb","sourceHash":"2a7f47dda44a1bdb","model":"claude-code","problems":[]}
+{"key":"than|conjunction","sourceHash":"053bfd0daf95179f","model":"claude-code","problems":[]}
+{"key":"than|preposition","sourceHash":"cb4fd8deb97d0165","model":"claude-code","problems":[]}
+{"key":"now|adverb","sourceHash":"bc2f5656e73ca6e4","model":"claude-code","problems":[]}
+{"key":"now|conjunction","sourceHash":"688081c66d8591d7","model":"claude-code","problems":[]}
+{"key":"into|preposition","sourceHash":"fa3ee5b8b1f5b112","model":"claude-code","problems":[]}
+{"key":"look|noun","sourceHash":"1bb6ff772aaba5cc","model":"claude-code","problems":[]}
+{"key":"look|verb","sourceHash":"fe3b3b5c3e1a4023","model":"claude-code","problems":[]}
+{"key":"want|noun","sourceHash":"69bd46c9e37506d3","model":"claude-code","problems":[]}
+{"key":"want|verb","sourceHash":"db1bbae2c7c567bf","model":"claude-code","problems":[{"key":"want|verb","gloss":"be searched for","kind":"example_mismatch","note":"This sense is almost always passive (be wanted by/for). 'Police in three countries wanted him for many crimes' is unnatural; replace it with 'He is wanted in three countries for many crimes.'"}]}
+{"key":"of|preposition","sourceHash":"fc75382aedfd4815","model":"claude-code","problems":[{"key":"of|preposition","gloss":"made from","kind":"example_mismatch","note":"Both examples are the fixed phrase \"be made of\", which is taught as a separate phrase entry. Drop this meaning (the phrase entry covers it)."}]}
+{"key":"to|preposition","sourceHash":"f6dc3d57a4ffe2e6","model":"claude-code","problems":[{"key":"to|preposition","gloss":"until an end point","kind":"duplicate","note":"\"from nine to six\" is translated \"đến\", the same as \"towards a place\" (walk to school = đến trường). Drop this meaning or merge it into \"towards a place\"."}]}
+{"key":"for|conjunction","sourceHash":"ae59c827a4aa8ea9","model":"claude-code","problems":[]}
+{"key":"for|preposition","sourceHash":"e7a676006c81c839","model":"claude-code","problems":[]}
+{"key":"that|adverb","sourceHash":"ae0d0326ea8b9e97","model":"claude-code","problems":[]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"30dffb071b633337","model":"claude-code","problems":[{"key":"that|pronoun","gloss":"the thing just mentioned","kind":"duplicate","note":"Translated \"đó/điều đó\", the same as \"that thing over there\" (đó/kia). Merge into one meaning: the person or thing there, or the one just mentioned."}]}
+{"key":"on|adverb","sourceHash":"93258abe2cdcc061","model":"claude-code","problems":[]}
+{"key":"on|preposition","sourceHash":"d484701c9d9ac423","model":"claude-code","problems":[{"key":"on|preposition","gloss":"travelling in a vehicle","kind":"duplicate","note":"\"on the bus/train\" is \"trên xe buýt/tàu\", the same \"trên\" as \"on a surface\". Drop this meaning."},{"key":"on|preposition","gloss":"through a device","kind":"duplicate","note":"\"on TV\" is \"trên TV\", the same \"trên\" as \"on a surface\". Drop this meaning."}]}
+{"key":"this|pronoun","sourceHash":"faed575d10c38ced","model":"claude-code","problems":[{"key":"this|pronoun","gloss":"the present period","kind":"duplicate","note":"\"this week/this morning\" is \"tuần này/sáng nay\", the same \"này\" as \"this one here\" (this bag = cái túi này). Merge into \"this one here\" or drop."},{"key":"this|pronoun","gloss":"introducing someone","kind":"duplicate","note":"\"This is my sister\" is \"Đây là...\", the same \"đây\" as \"Is this your pen?\" in \"this one here\". Merge into \"this one here\" or drop."}]}
+{"key":"as|conjunction","sourceHash":"396106022ded8503","model":"claude-code","problems":[{"key":"as|conjunction","gloss":"equally as","kind":"wrong_definition","note":"This is the \"as ... as\" comparison pattern (first \"as\" is an adverb), a grammar pattern taught as its own phrase entry. Drop this meaning."}]}
+{"key":"as|preposition","sourceHash":"28d465d6a95327c8","model":"claude-code","problems":[{"key":"as|preposition","gloss":"when someone was","kind":"duplicate","note":"\"As a child\" is \"Khi còn nhỏ\", the same \"khi\" as the conjunction meaning \"while\" (As I opened the door = Khi tôi mở cửa). Drop this meaning."},{"key":"as|preposition","gloss":"having the use of","kind":"duplicate","note":"\"used a box as a table\" is \"dùng hộp làm bàn\", the same \"làm\" as \"in the job of\" (works as a nurse = làm y tá). Merge into one meaning \"in the role or function of\"."}]}
+{"key":"from|preposition","sourceHash":"efd2407eae055491","model":"claude-code","problems":[{"key":"from|preposition","gloss":"starting point","kind":"duplicate","note":"Translated \"từ\", the same as \"coming from a place\" (I'm from Seoul = tôi đến từ Seoul). Merge both into one meaning \"starting place or origin\", or drop one."}]}
+{"key":"go|noun","sourceHash":"eb138af7f93609f7","model":"claude-code","problems":[{"key":"go|noun","gloss":"attempt","kind":"example_mismatch","note":"Both examples are the fixed phrase \"have a go\", taught as a separate phrase entry. Drop this meaning."}]}
+{"key":"go|verb","sourceHash":"f08165f95d7dbfc7","model":"claude-code","problems":[]}
+{"key":"all|adverb","sourceHash":"2a6698253a2cfada","model":"claude-code","problems":[]}
+{"key":"all|pronoun","sourceHash":"9e4651604eb4112e","model":"claude-code","problems":[{"key":"all|pronoun","gloss":"the whole of","kind":"duplicate","note":"\"all her money\" is \"tất cả tiền\", the same \"tất cả\" as \"every one in a group\". Limit this meaning to the whole of a time or thing (cả: all day, all night) and replace the money example with one like \"We worked in the garden all morning.\", or merge it into \"every one in a group\"."}]}
+{"key":"when|adverb","sourceHash":"56683c5885cebfe5","model":"claude-code","problems":[]}
+{"key":"when|conjunction","sourceHash":"07967a6f5dbf1fdf","model":"claude-code","problems":[]}
+{"key":"see|verb","sourceHash":"d9b5f721a582668a","model":"claude-code","problems":[]}
+{"key":"up|adverb","sourceHash":"9ae1601bef57f803","model":"claude-code","problems":[{"key":"up|adverb","gloss":"to a higher level","kind":"duplicate","note":"\"Prices have gone up\"/\"turn the music up\" are \"tăng lên\"/\"vặn to lên\", the same \"lên\" as \"to a higher place\"; both examples are also phrasal verbs (go up, turn up). Drop this meaning."},{"key":"up|adverb","gloss":"to a higher place","kind":"example_mismatch","note":"\"Everyone stood up\" is the phrasal verb \"stand up\". Replace with a free use, e.g. \"He climbed up to the top of the tree.\""}]}
+{"key":"up|preposition","sourceHash":"72ab6f6a8768326a","model":"claude-code","problems":[]}
+{"key":"out|adverb","sourceHash":"72ece37230bbeb8b","model":"claude-code","problems":[{"key":"out|adverb","gloss":"away from inside or home","kind":"example_mismatch","note":"\"Let's go out for dinner\" is the phrasal verb \"go out\". Replace with a free use, e.g. \"She walked out of the room without a word.\""},{"key":"out|adverb","gloss":"no longer burning","kind":"example_mismatch","note":"\"All the lights went out\" is the phrasal verb \"go out\". Replace with \"be out\", e.g. \"Is the fire out yet? The room is getting cold.\""}]}
+{"key":"good|adjective","sourceHash":"8165e5ab02ea808a","model":"claude-code","problems":[]}
+{"key":"good|noun","sourceHash":"13dcbdefe515e070","model":"claude-code","problems":[]}
+{"key":"take|noun","sourceHash":"5858dea17662a8ac","model":"claude-code","problems":[{"key":"take|noun","gloss":"single filming","kind":"wrong_level","note":"Film-making term, not B1 vocabulary; set cefrLevel to B2."}]}
+{"key":"take|verb","sourceHash":"53384e3b72a0c201","model":"claude-code","problems":[]}
+{"key":"no|adverb","sourceHash":"432cdd371a6a4cb4","model":"claude-code","problems":[]}
+{"key":"very|adjective","sourceHash":"9ca54f615c88961b","model":"claude-code","problems":[]}
+{"key":"very|adverb","sourceHash":"53ef33f0a61ef8c2","model":"claude-code","problems":[]}
+{"key":"come|verb","sourceHash":"aeb8177f840f3f9a","model":"claude-code","problems":[]}
+{"key":"into|preposition","sourceHash":"2cdda15298da1217","model":"claude-code","problems":[]}
+{"key":"want|noun","sourceHash":"69bd46c9e37506d3","model":"claude-code","problems":[]}
+{"key":"want|verb","sourceHash":"853f3840513fedcc","model":"claude-code","problems":[]}
+{"key": "up|adverb", "sourceHash": "9ae1601bef57f803", "model": "claude-code", "problems": [{"key": "up|adverb", "gloss": "to a higher level", "kind": "duplicate", "note": "\"Prices have gone up\"/\"turn the music up\" are \"tăng lên\"/\"vặn to lên\", the same \"lên\" as \"to a higher place\"; both examples are also phrasal verbs (go up, turn up). Drop this meaning."}]}
+{"key": "out|adverb", "sourceHash": "72ece37230bbeb8b", "model": "claude-code", "problems": []}
+{"key":"of|preposition","sourceHash":"284c9c2d24614e72","model":"claude-code","problems":[]}
+{"key":"to|preposition","sourceHash":"2d2faaab392492aa","model":"claude-code","problems":[]}
+{"key":"that|adverb","sourceHash":"ae0d0326ea8b9e97","model":"claude-code","problems":[]}
+{"key":"that|conjunction","sourceHash":"8c57c0e234546184","model":"claude-code","problems":[]}
+{"key":"that|pronoun","sourceHash":"7f06183957c40fb1","model":"claude-code","problems":[]}
+{"key":"on|adverb","sourceHash":"93258abe2cdcc061","model":"claude-code","problems":[]}
+{"key":"on|preposition","sourceHash":"00f43b452c8632e1","model":"claude-code","problems":[]}
+{"key":"this|pronoun","sourceHash":"93695607727d1c8f","model":"claude-code","problems":[]}
+{"key":"as|conjunction","sourceHash":"e9fc222a14812509","model":"claude-code","problems":[]}
+{"key":"as|preposition","sourceHash":"71c43326996cd8d1","model":"claude-code","problems":[]}
+{"key":"from|preposition","sourceHash":"52822724e5ab303f","model":"claude-code","problems":[{"key":"from|preposition","gloss":"sent or given by","kind":"duplicate","note":"A letter from my grandmother uses the same idea and translation as the origin/starting-point meaning (Vietnamese 'từ', Spanish 'de', Japanese 'から'). Merge it into 'starting place or origin' (e.g. move 'I got a nice letter from my grandmother.' there) and drop this meaning."}]}
+{"key":"go|noun","sourceHash":"64591f3779f9648d","model":"claude-code","problems":[]}
+{"key":"go|verb","sourceHash":"f08165f95d7dbfc7","model":"claude-code","problems":[]}
+{"key":"all|adverb","sourceHash":"2a6698253a2cfada","model":"claude-code","problems":[]}
+{"key":"all|pronoun","sourceHash":"fca0736e7e069cdf","model":"claude-code","problems":[]}
+{"key":"up|adverb","sourceHash":"0a211a0a42151a18","model":"claude-code","problems":[]}
+{"key":"up|preposition","sourceHash":"72ab6f6a8768326a","model":"claude-code","problems":[]}
+{"key":"take|noun","sourceHash":"49135635b786faaf","model":"claude-code","problems":[]}
+{"key":"take|verb","sourceHash":"53384e3b72a0c201","model":"claude-code","problems":[]}
+{"key":"from|preposition","sourceHash":"baa4d56b0efe192c","model":"claude-code","problems":[]}

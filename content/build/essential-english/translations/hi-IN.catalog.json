@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "ज़रूरी अंग्रेज़ी",
+    "description": "रोज़मर्रा की अंग्रेज़ी के 2,800 सबसे उपयोगी शब्द, A1 से B2 तक।"
+  },
+  "topics": {
+    "people-family": {
+      "title": "लोग और परिवार",
+      "description": "परिवार के सदस्य, दोस्त और आपके आसपास के लोग।"
+    },
+    "relationships": {
+      "title": "रिश्ते और सामाजिक जीवन",
+      "description": "दूसरों से मिलना, उनकी मदद करना और मिलजुलकर रहना।"
+    },
+    "feelings-character": {
+      "title": "भावनाएँ और व्यक्तित्व",
+      "description": "भावनाएँ, मूड और लोगों का स्वभाव।"
+    },
+    "body-health": {
+      "title": "शरीर और स्वास्थ्य",
+      "description": "शरीर, बीमारी, फ़िटनेस और देखभाल।"
+    },
+    "home-daily-life": {
+      "title": "घर और दिनचर्या",
+      "description": "कमरे, फ़र्नीचर, घर के काम और घर पर बीता दिन।"
+    },
+    "food-drink": {
+      "title": "खाना-पीना",
+      "description": "भोजन, खाना बनाना, स्वाद और रेस्टोरेंट।"
+    },
+    "clothes-appearance": {
+      "title": "कपड़े और रूप-रंग",
+      "description": "लोग क्या पहनते हैं और कैसे दिखते हैं।"
+    },
+    "shopping-money": {
+      "title": "खरीदारी और पैसा",
+      "description": "खरीदना, भुगतान करना, कीमतें और निजी पैसा।"
+    },
+    "work-jobs": {
+      "title": "काम और नौकरी",
+      "description": "नौकरियाँ, कार्यस्थल और करियर।"
+    },
+    "business-economy": {
+      "title": "व्यापार और अर्थव्यवस्था",
+      "description": "कंपनियाँ, व्यापार, बाज़ार और अर्थव्यवस्था।"
+    },
+    "school-learning": {
+      "title": "स्कूल और पढ़ाई",
+      "description": "पढ़ाई, कक्षाएँ, परीक्षाएँ और ज्ञान।"
+    },
+    "communication": {
+      "title": "बातचीत और संवाद",
+      "description": "बोलना, लिखना, पूछना और समझाना।"
+    },
+    "thinking-opinions": {
+      "title": "सोच और राय",
+      "description": "विचार, मान्यताएँ, फ़ैसले और ज्ञान।"
+    },
+    "travel-transport": {
+      "title": "यात्रा और परिवहन",
+      "description": "सफ़र, वाहन, सड़कें और छुट्टियाँ।"
+    },
+    "places-buildings": {
+      "title": "जगहें और इमारतें",
+      "description": "कस्बे, शहर, देश और इमारतें।"
+    },
+    "nature-weather": {
+      "title": "प्रकृति, जानवर और मौसम",
+      "description": "प्राकृतिक दुनिया, जानवर, पौधे और मौसम।"
+    },
+    "science-technology": {
+      "title": "विज्ञान और तकनीक",
+      "description": "कंप्यूटर, इंटरनेट, मशीनें और विज्ञान।"
+    },
+    "media-arts": {
+      "title": "मीडिया, कला और मनोरंजन",
+      "description": "संगीत, फ़िल्में, किताबें, समाचार और कला।"
+    },
+    "sports-free-time": {
+      "title": "खेल और खाली समय",
+      "description": "गेम, खेल, शौक और मौज-मस्ती।"
+    },
+    "society-law": {
+      "title": "समाज, कानून और सरकार",
+      "description": "सरकार, नियम, अपराध और सार्वजनिक जीवन।"
+    },
+    "time-events": {
+      "title": "समय और घटनाएँ",
+      "description": "दिन, तारीखें, कितनी बार और कब कुछ होता है।"
+    },
+    "numbers-amounts": {
+      "title": "संख्याएँ और मात्राएँ",
+      "description": "मात्राएँ, माप और तुलना।"
+    },
+    "position-movement": {
+      "title": "स्थिति और गति",
+      "description": "चीज़ें कहाँ हैं और कैसे चलती हैं।"
+    },
+    "describing-things": {
+      "title": "चीज़ों का वर्णन",
+      "description": "आकार, आकृति, गुणवत्ता और अन्य गुण।"
+    },
+    "everyday-actions": {
+      "title": "रोज़मर्रा के काम",
+      "description": "करने, बनाने और इस्तेमाल करने की आम क्रियाएँ।"
+    },
+    "linking-words": {
+      "title": "जोड़ने वाले और व्याकरणिक शब्द",
+      "description": "छोटे शब्द जो विचारों और वाक्यों को जोड़ते हैं।"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "cefrj",
+    "file": "cefrj-vocabulary-profile-1.5.csv",
+    "url": "https://raw.githubusercontent.com/openlanguageprofiles/olp-en-cefrj/master/cefrj-vocabulary-profile-1.5.csv",
+    "license": "Free for research and commercial use with citation",
+    "attribution": "CEFR-J Wordlist Version 1.5. Compiled by Yukio Tono, Tokyo University of Foreign Studies.",
+    "sha256": "b0dd3c635f1c9a4fdf1490c7e5b7c48e8bbe55b652ad0c9860a95f98e10ae498"
+  },
+  {
+    "id": "ovp",
+    "file": "octanove-vocabulary-profile-c1c2-1.0.csv",
+    "url": "https://raw.githubusercontent.com/openlanguageprofiles/olp-en-cefrj/master/octanove-vocabulary-profile-c1c2-1.0.csv",
+    "license": "CC BY-SA 4.0",
+    "attribution": "Octanove Vocabulary Profile C1/C2 ver 1.0, Octanove Labs.",
+    "sha256": "18c33a407f2f89f7b8de9671c6d45fe3ea0bce45e7d2d7dcaab48d73e0f7b380"
+  },
+  {
+    "id": "ngsl-stats",
+    "file": "NGSL_12_stats.csv",
+    "url": "https://www.newgeneralservicelist.com/s/NGSL_12_stats.csv",
+    "license": "CC BY-SA 4.0",
+    "attribution": "New General Service List 1.2 by Browne, C., Culligan, B., and Phillips, J.",
+    "sha256": "2098bab8955a120a9766c6282a51d7d578c6cb0a7d946600d2ffb73ba25a0b44"
+  },
+  {
+    "id": "ngsl-forms",
+    "file": "NGSL_12_lemmatized_for_teaching.csv",
+    "url": "https://www.newgeneralservicelist.com/s/NGSL_12_lemmatized_for_teaching.csv",
+    "license": "CC BY-SA 4.0",
+    "attribution": "New General Service List 1.2 by Browne, C., Culligan, B., and Phillips, J.",
+    "sha256": "b54e297244988237457e04f823aa8dca68e3d646938dc76d383e099f04cb7666"
+  },
+  {
+    "id": "oewn",
+    "file": "english-wordnet-2025-json.zip",
+    "url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025-json.zip",
+    "license": "CC BY 4.0",
+    "attribution": "Open English WordNet 2025 Edition, Global WordNet Association.",
+    "unzip": true,
+    "sha256": "7d749f6e2c39e6970e4997839dcf6e42fd281f3c2fae0171d2192bae8cfa4b51"
+  },
+  {
+    "id": "oewn-index",
+    "file": "english-wordnet-2025-index.sense-fixed.zip",
+    "url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025-index.sense-fixed.zip",
+    "license": "CC BY 4.0",
+    "attribution": "Open English WordNet 2025 Edition, Global WordNet Association.",
+    "unzip": true,
+    "sha256": "38b16326159f51853626b7d24a44c453fa88ab33f06fce5ec8fc5996d1c2be93"
+  },
+  {
+    "id": "pwn",
+    "file": "WNdb-3.0.tar.gz",
+    "url": "https://wordnetcode.princeton.edu/3.0/WNdb-3.0.tar.gz",
+    "license": "WordNet 3.0 license (BSD-style)",
+    "attribution": "WordNet 3.0 Copyright 2006 by Princeton University. All rights reserved.",
+    "untar": [
+      "dict/index.sense"
+    ],
+    "sha256": "658b1ba191f5f98c2e9bae3e25c186013158f30ef779f191d2a44e5d25046dc8"
+  },
+  {
+    "id": "cmudict",
+    "file": "cmudict.dict",
+    "url": "https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict",
+    "license": "BSD-2-Clause",
+    "attribution": "The CMU Pronouncing Dictionary, Carnegie Mellon University.",
+    "sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22"
+  },
+  {
+    "id": "britfone",
+    "file": "britfone.main.3.0.1.csv",
+    "url": "https://raw.githubusercontent.com/JoseLlarena/Britfone/master/britfone.main.3.0.1.csv",
+    "license": "MIT",
+    "attribution": "Britfone 3.0.1 by Jose Llarena.",
+    "sha256": "59f197e98520856d1cc88e380beb54e4314d8712efc4d588b6778819c502d920"
+  }
+]

@@ -5,3 +5,10 @@ dist/
 !.env.example
 coverage/
 src/generated/
+
+# Content pipeline: rebuildable from content/sources (docs/content-pipeline.md)
+content/sources/oewn/
+content/sources/oewn-index/
+content/build/lexicon.json
+content/build/*/load-report.json
+content/build/*/tasks/

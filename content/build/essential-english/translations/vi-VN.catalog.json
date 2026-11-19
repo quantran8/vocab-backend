@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "Tiếng Anh thiết yếu",
+    "description": "2.800 từ hữu ích nhất trong tiếng Anh hằng ngày, từ trình độ A1 đến B2."
+  },
+  "topics": {
+    "people-family": {
+      "title": "Con người & Gia đình",
+      "description": "Các thành viên trong gia đình, bạn bè và những người xung quanh bạn."
+    },
+    "relationships": {
+      "title": "Quan hệ & Đời sống xã hội",
+      "description": "Gặp gỡ, giúp đỡ và hòa hợp với người khác."
+    },
+    "feelings-character": {
+      "title": "Cảm xúc & Tính cách",
+      "description": "Cảm xúc, tâm trạng và tính cách con người."
+    },
+    "body-health": {
+      "title": "Cơ thể & Sức khỏe",
+      "description": "Cơ thể, bệnh tật, rèn luyện thể chất và chăm sóc sức khỏe."
+    },
+    "home-daily-life": {
+      "title": "Nhà cửa & Sinh hoạt hằng ngày",
+      "description": "Phòng ốc, đồ nội thất, việc nhà và một ngày ở nhà."
+    },
+    "food-drink": {
+      "title": "Đồ ăn & Thức uống",
+      "description": "Bữa ăn, nấu nướng, hương vị và nhà hàng."
+    },
+    "clothes-appearance": {
+      "title": "Quần áo & Ngoại hình",
+      "description": "Trang phục và vẻ ngoài của con người."
+    },
+    "shopping-money": {
+      "title": "Mua sắm & Tiền bạc",
+      "description": "Mua bán, thanh toán, giá cả và tiền bạc cá nhân."
+    },
+    "work-jobs": {
+      "title": "Công việc & Nghề nghiệp",
+      "description": "Nghề nghiệp, nơi làm việc và sự nghiệp."
+    },
+    "business-economy": {
+      "title": "Kinh doanh & Kinh tế",
+      "description": "Công ty, thương mại, thị trường và nền kinh tế."
+    },
+    "school-learning": {
+      "title": "Trường học & Học tập",
+      "description": "Việc học, lớp học, thi cử và kiến thức."
+    },
+    "communication": {
+      "title": "Trò chuyện & Giao tiếp",
+      "description": "Nói, viết, hỏi và giải thích."
+    },
+    "thinking-opinions": {
+      "title": "Suy nghĩ & Quan điểm",
+      "description": "Ý tưởng, niềm tin, quyết định và hiểu biết."
+    },
+    "travel-transport": {
+      "title": "Du lịch & Giao thông",
+      "description": "Chuyến đi, phương tiện, đường sá và kỳ nghỉ."
+    },
+    "places-buildings": {
+      "title": "Địa điểm & Công trình",
+      "description": "Thị trấn, thành phố, đất nước và các tòa nhà."
+    },
+    "nature-weather": {
+      "title": "Thiên nhiên, Động vật & Thời tiết",
+      "description": "Thế giới tự nhiên, động vật, cây cối và thời tiết."
+    },
+    "science-technology": {
+      "title": "Khoa học & Công nghệ",
+      "description": "Máy tính, internet, máy móc và khoa học."
+    },
+    "media-arts": {
+      "title": "Truyền thông, Nghệ thuật & Giải trí",
+      "description": "Âm nhạc, phim ảnh, sách, tin tức và nghệ thuật."
+    },
+    "sports-free-time": {
+      "title": "Thể thao & Thời gian rảnh",
+      "description": "Trò chơi, thể thao, sở thích và vui chơi."
+    },
+    "society-law": {
+      "title": "Xã hội, Pháp luật & Nhà nước",
+      "description": "Chính quyền, luật lệ, tội phạm và đời sống cộng đồng."
+    },
+    "time-events": {
+      "title": "Thời gian & Sự kiện",
+      "description": "Ngày, ngày tháng, mức độ thường xuyên và thời điểm sự việc xảy ra."
+    },
+    "numbers-amounts": {
+      "title": "Số & Số lượng",
+      "description": "Số lượng, đo lường và so sánh."
+    },
+    "position-movement": {
+      "title": "Vị trí & Chuyển động",
+      "description": "Vị trí của sự vật và cách chúng di chuyển."
+    },
+    "describing-things": {
+      "title": "Miêu tả sự vật",
+      "description": "Kích thước, hình dạng, chất lượng và các đặc điểm khác."
+    },
+    "everyday-actions": {
+      "title": "Hành động hằng ngày",
+      "description": "Các động từ thông dụng để làm, tạo ra và sử dụng đồ vật."
+    },
+    "linking-words": {
+      "title": "Từ nối & Từ chức năng",
+      "description": "Những từ nhỏ dùng để nối các ý và các câu."
+    }
+  }
+}

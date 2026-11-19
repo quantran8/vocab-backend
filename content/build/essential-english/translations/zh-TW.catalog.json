@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "必備英語",
+    "description": "日常英語中最實用的 2,800 個單字，從 A1 到 B2。"
+  },
+  "topics": {
+    "people-family": {
+      "title": "人物與家庭",
+      "description": "家人、朋友和身邊的人。"
+    },
+    "relationships": {
+      "title": "人際關係與社交",
+      "description": "認識他人、互相幫忙與和睦相處。"
+    },
+    "feelings-character": {
+      "title": "情感與個性",
+      "description": "情緒、心情和人的性格。"
+    },
+    "body-health": {
+      "title": "身體與健康",
+      "description": "身體、疾病、健身與保健。"
+    },
+    "home-daily-life": {
+      "title": "居家與日常",
+      "description": "房間、家具、家事和在家的一天。"
+    },
+    "food-drink": {
+      "title": "飲食",
+      "description": "餐點、烹飪、味道和餐廳。"
+    },
+    "clothes-appearance": {
+      "title": "服裝與外表",
+      "description": "穿著打扮與外貌。"
+    },
+    "shopping-money": {
+      "title": "購物與金錢",
+      "description": "購買、付款、價格和個人理財。"
+    },
+    "work-jobs": {
+      "title": "工作與職業",
+      "description": "職業、職場和職涯。"
+    },
+    "business-economy": {
+      "title": "商業與經濟",
+      "description": "公司、貿易、市場和經濟。"
+    },
+    "school-learning": {
+      "title": "學校與學習",
+      "description": "讀書、上課、考試和知識。"
+    },
+    "communication": {
+      "title": "說話與溝通",
+      "description": "說、寫、問和解釋。"
+    },
+    "thinking-opinions": {
+      "title": "思考與意見",
+      "description": "想法、信念、決定和知識。"
+    },
+    "travel-transport": {
+      "title": "旅行與交通",
+      "description": "旅程、交通工具、道路和假期。"
+    },
+    "places-buildings": {
+      "title": "地點與建築",
+      "description": "鄉鎮、城市、國家和建築物。"
+    },
+    "nature-weather": {
+      "title": "自然、動物與天氣",
+      "description": "自然界、動物、植物和天氣。"
+    },
+    "science-technology": {
+      "title": "科學與科技",
+      "description": "電腦、網路、機器和科學。"
+    },
+    "media-arts": {
+      "title": "媒體、藝術與娛樂",
+      "description": "音樂、電影、書籍、新聞和藝術。"
+    },
+    "sports-free-time": {
+      "title": "運動與休閒",
+      "description": "遊戲、運動、嗜好和娛樂。"
+    },
+    "society-law": {
+      "title": "社會、法律與政府",
+      "description": "政府、規則、犯罪和公共生活。"
+    },
+    "time-events": {
+      "title": "時間與事件",
+      "description": "日子、日期、頻率和事情發生的時間。"
+    },
+    "numbers-amounts": {
+      "title": "數字與數量",
+      "description": "數量、測量和比較。"
+    },
+    "position-movement": {
+      "title": "位置與移動",
+      "description": "東西在哪裡以及如何移動。"
+    },
+    "describing-things": {
+      "title": "描述事物",
+      "description": "大小、形狀、品質和其他特性。"
+    },
+    "everyday-actions": {
+      "title": "日常動作",
+      "description": "表示做、製作和使用的常用動詞。"
+    },
+    "linking-words": {
+      "title": "連接詞與功能詞",
+      "description": "用來連接想法與句子的短小詞語。"
+    }
+  }
+}

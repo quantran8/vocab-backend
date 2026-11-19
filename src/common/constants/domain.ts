@@ -329,6 +329,8 @@ export const SCHEDULER_VERSION = 'fsrs6-weighted-v1';
 export const EVENT_SCHEMA_VERSION = 1;
 
 export const DEFAULT_LOCALE = 'vi-VN';
+/** Every uiLocale the app ships; learning content must exist in all of them. Markets: iOS LOCALIZATION_MARKETS.md. */
+export const APP_LOCALES = ['vi-VN', 'en-US', 'hi-IN', 'es-MX', 'ja-JP', 'pt-BR', 'ko-KR', 'zh-TW', 'th-TH', 'ar-SA', 'id-ID'] as const;
 export const DEFAULT_ACCENT = 'en-US';
 export const LEARNING_LANGUAGE = 'en';
 

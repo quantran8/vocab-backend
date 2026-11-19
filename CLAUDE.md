@@ -1,6 +1,6 @@
 # Vocab Flow backend
 
-NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open decisions: `docs/DECISIONS.md`.
+NestJS (Fastify) + Drizzle ORM + Supabase (Postgres, Auth). Spec: `spec/`. Open decisions: `docs/DECISIONS.md`. Content: `docs/content-sources.md` (sources), `docs/content-pipeline.md` (rules), `content/README.md` (how to run `pnpm content`).
 
 ## Commands
 

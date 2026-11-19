@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "基本の英語",
+    "description": "日常英語で特に役立つ2,800語を、A1からB2まで学べます。"
+  },
+  "topics": {
+    "people-family": {
+      "title": "人と家族",
+      "description": "家族、友だち、身の回りの人。"
+    },
+    "relationships": {
+      "title": "人間関係と社会生活",
+      "description": "人と出会い、助け合い、仲良く付き合うこと。"
+    },
+    "feelings-character": {
+      "title": "気持ちと性格",
+      "description": "感情、気分、人柄。"
+    },
+    "body-health": {
+      "title": "体と健康",
+      "description": "体、病気、フィットネス、ケア。"
+    },
+    "home-daily-life": {
+      "title": "家と日常生活",
+      "description": "部屋、家具、家事、家での一日。"
+    },
+    "food-drink": {
+      "title": "食べ物と飲み物",
+      "description": "食事、料理、味、レストラン。"
+    },
+    "clothes-appearance": {
+      "title": "服装と外見",
+      "description": "身に着けるものと見た目。"
+    },
+    "shopping-money": {
+      "title": "買い物とお金",
+      "description": "買う、支払う、値段、個人のお金。"
+    },
+    "work-jobs": {
+      "title": "仕事と職業",
+      "description": "職業、職場、キャリア。"
+    },
+    "business-economy": {
+      "title": "ビジネスと経済",
+      "description": "会社、貿易、市場、経済。"
+    },
+    "school-learning": {
+      "title": "学校と学び",
+      "description": "勉強、授業、試験、知識。"
+    },
+    "communication": {
+      "title": "話す・伝える",
+      "description": "話す、書く、尋ねる、説明する。"
+    },
+    "thinking-opinions": {
+      "title": "考えと意見",
+      "description": "アイデア、信念、決断、知識。"
+    },
+    "travel-transport": {
+      "title": "旅行と交通",
+      "description": "旅、乗り物、道路、休暇。"
+    },
+    "places-buildings": {
+      "title": "場所と建物",
+      "description": "町、都市、国、建物。"
+    },
+    "nature-weather": {
+      "title": "自然・動物・天気",
+      "description": "自然界、動物、植物、天気。"
+    },
+    "science-technology": {
+      "title": "科学と技術",
+      "description": "コンピューター、インターネット、機械、科学。"
+    },
+    "media-arts": {
+      "title": "メディア・芸術・娯楽",
+      "description": "音楽、映画、本、ニュース、芸術。"
+    },
+    "sports-free-time": {
+      "title": "スポーツと余暇",
+      "description": "ゲーム、スポーツ、趣味、楽しみ。"
+    },
+    "society-law": {
+      "title": "社会・法律・政治",
+      "description": "政府、規則、犯罪、公共生活。"
+    },
+    "time-events": {
+      "title": "時間と出来事",
+      "description": "曜日、日付、頻度、物事が起こるタイミング。"
+    },
+    "numbers-amounts": {
+      "title": "数と量",
+      "description": "数量、測定、比較。"
+    },
+    "position-movement": {
+      "title": "位置と動き",
+      "description": "物のある場所と動き方。"
+    },
+    "describing-things": {
+      "title": "物の様子を表す",
+      "description": "大きさ、形、品質などの性質。"
+    },
+    "everyday-actions": {
+      "title": "日常の動作",
+      "description": "「する・作る・使う」を表す基本動詞。"
+    },
+    "linking-words": {
+      "title": "つなぎの言葉・機能語",
+      "description": "考えや文をつなぐ短い言葉。"
+    }
+  }
+}

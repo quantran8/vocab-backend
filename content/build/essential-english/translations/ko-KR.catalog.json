@@ -1,0 +1,113 @@
+{
+  "sourceHash": "5043ad42a5106d47",
+  "collection": {
+    "title": "필수 영어",
+    "description": "A1부터 B2까지, 일상 영어에서 가장 유용한 단어 2,800개를 배워요."
+  },
+  "topics": {
+    "people-family": {
+      "title": "사람과 가족",
+      "description": "가족, 친구, 그리고 주변 사람들."
+    },
+    "relationships": {
+      "title": "인간관계와 사회생활",
+      "description": "사람을 만나고, 돕고, 잘 어울리기."
+    },
+    "feelings-character": {
+      "title": "감정과 성격",
+      "description": "감정, 기분, 그리고 사람의 성격."
+    },
+    "body-health": {
+      "title": "신체와 건강",
+      "description": "몸, 질병, 운동, 건강 관리."
+    },
+    "home-daily-life": {
+      "title": "집과 일상",
+      "description": "방, 가구, 집안일, 집에서의 하루."
+    },
+    "food-drink": {
+      "title": "음식과 음료",
+      "description": "식사, 요리, 맛, 식당."
+    },
+    "clothes-appearance": {
+      "title": "옷과 외모",
+      "description": "사람들이 입는 옷과 겉모습."
+    },
+    "shopping-money": {
+      "title": "쇼핑과 돈",
+      "description": "구매, 결제, 가격, 개인 돈 관리."
+    },
+    "work-jobs": {
+      "title": "일과 직업",
+      "description": "직업, 직장, 경력."
+    },
+    "business-economy": {
+      "title": "비즈니스와 경제",
+      "description": "회사, 무역, 시장, 경제."
+    },
+    "school-learning": {
+      "title": "학교와 학습",
+      "description": "공부, 수업, 시험, 지식."
+    },
+    "communication": {
+      "title": "말하기와 소통",
+      "description": "말하기, 쓰기, 묻기, 설명하기."
+    },
+    "thinking-opinions": {
+      "title": "생각과 의견",
+      "description": "아이디어, 신념, 결정, 지식."
+    },
+    "travel-transport": {
+      "title": "여행과 교통",
+      "description": "여행, 탈것, 도로, 휴가."
+    },
+    "places-buildings": {
+      "title": "장소와 건물",
+      "description": "마을, 도시, 나라, 건물."
+    },
+    "nature-weather": {
+      "title": "자연, 동물, 날씨",
+      "description": "자연 세계, 동물, 식물, 날씨."
+    },
+    "science-technology": {
+      "title": "과학과 기술",
+      "description": "컴퓨터, 인터넷, 기계, 과학."
+    },
+    "media-arts": {
+      "title": "미디어, 예술, 엔터테인먼트",
+      "description": "음악, 영화, 책, 뉴스, 예술."
+    },
+    "sports-free-time": {
+      "title": "스포츠와 여가",
+      "description": "게임, 스포츠, 취미, 즐거운 시간."
+    },
+    "society-law": {
+      "title": "사회, 법, 정부",
+      "description": "정부, 규칙, 범죄, 공공 생활."
+    },
+    "time-events": {
+      "title": "시간과 사건",
+      "description": "요일, 날짜, 빈도, 일이 일어나는 때."
+    },
+    "numbers-amounts": {
+      "title": "수와 양",
+      "description": "수량, 측정, 비교."
+    },
+    "position-movement": {
+      "title": "위치와 움직임",
+      "description": "사물이 있는 곳과 움직이는 방식."
+    },
+    "describing-things": {
+      "title": "사물 묘사하기",
+      "description": "크기, 모양, 품질 등 여러 특징."
+    },
+    "everyday-actions": {
+      "title": "일상 동작",
+      "description": "하기, 만들기, 사용하기를 나타내는 기본 동사."
+    },
+    "linking-words": {
+      "title": "연결어와 기능어",
+      "description": "생각과 문장을 이어 주는 짧은 단어."
+    }
+  }
+}
