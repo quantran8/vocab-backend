@@ -90,11 +90,16 @@ function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudi
   };
 }
 
+/** Over every visible Meaning, learned or not; a Meaning without IPA counts as its own pronunciation. */
+const ipaVaries = (senses: Pick<RawMeaningRow, 'snapshot' | 'override'>[]) =>
+  new Set(senses.map(({ snapshot, override }) => defaultPronunciation(applyOverride(snapshot, override ?? undefined))?.ipa ?? '')).size > 1;
+
 /** The library row: content and review dates only, so listing never reads skill evidence. */
-const wordSummary = (rows: MeaningRow[], meaningCount: number, allowPlaceholderAudio: boolean) => ({
+const wordSummary = (rows: MeaningRow[], meaningCount: number, ipaVaries: boolean, allowPlaceholderAudio: boolean) => ({
   wordId: rows[0].wordId,
   lemma: rows[0].snapshot.lemma,
   meaningCount,
+  ipaVaries,
   meanings: rows.map((row) => ({
     meaningId: row.meaningId,
     meaning: senseView(row.snapshot, allowPlaceholderAudio),
@@ -140,9 +145,14 @@ export class ProgressService {
 
   async words(userId: string, limit: number, offset: number, query?: string) {
     const rows = await this.repository.learnedWordsPage(userId, limit, offset, query);
-    const counts = new Map(rows.map((r) => [r.wordId, r.meaningCount]));
+    const totals = new Map(rows.map((r) => [r.wordId, r]));
     const groups = Map.groupBy(parseMeaningRows(rows), (r) => r.wordId).values();
-    return { words: [...groups].map((group) => wordSummary(group, counts.get(group[0].wordId)!, this.config.allowPlaceholderAudio)) };
+    return {
+      words: [...groups].map((group) => {
+        const { meaningCount, senses } = totals.get(group[0].wordId)!;
+        return wordSummary(group, meaningCount, ipaVaries(senses), this.config.allowPlaceholderAudio);
+      }),
+    };
   }
 
   wordStats(userId: string) {
