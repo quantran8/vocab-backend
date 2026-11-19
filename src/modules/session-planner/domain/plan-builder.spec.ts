@@ -26,6 +26,7 @@ describe('Weak focuses on the skill with an issue', () => {
     expect(only(SKILL.SPELLING).map((s) => s.task.serverEvaluation.intent)).toEqual([ASSESSMENT_INTENT.MEANING_RECALL]);
     expect(only(SKILL.LISTENING)[0].task).toMatchObject({ template: TEMPLATE.SELECT, serverEvaluation: { promptIsTargetAudio: true } });
     expect(only(SKILL.SPEAKING).map((s) => s.task.template)).toEqual([TEMPLATE.RECORDING]);
+    expect(only(SKILL.SPEAKING)[0].task.clientPayload.meaningCue).toBeDefined();
   });
 
   it('asks recall first so another task of the word cannot prime it', () => {
@@ -75,6 +76,52 @@ describe('Daily review', () => {
         expect([TEMPLATE.RECORDING, TEMPLATE.MATCH]).not.toContain(task.template);
       }
     }
+  });
+
+  it('speaking on adds capped recordings, each after its word\'s meaning task', () => {
+    const many = Array.from({ length: POLICY.review.dailySpeakingCap + 3 }, (_, i) => snapshot(`word${i}`));
+    for (let seed = 0; seed < 20; seed += 1) {
+      let state = seed + 1;
+      const rng = () => ((state = (state * 16807) % 2147483647) / 2147483647);
+      const steps = daily({ reviewTargets: many, speaking: true }, rng);
+      const recordings = steps.filter((s) => s.task.template === TEMPLATE.RECORDING);
+      expect(recordings).toHaveLength(POLICY.review.dailySpeakingCap);
+      for (const { task } of recordings) expect(task.clientPayload.meaningCue).toBeDefined();
+      for (const recording of recordings) {
+        const pronunciationId = recording.task.targets[0].pronunciationId;
+        const meaning = steps.findIndex((s) => s.task.template !== TEMPLATE.RECORDING && `p-${s.task.targets[0].meaningId!.slice(2)}` === pronunciationId);
+        expect(meaning).toBeLessThan(steps.indexOf(recording));
+      }
+      expect(steps.filter((s) => s.task.template !== TEMPLATE.RECORDING)).toHaveLength(many.length);
+    }
+  });
+
+  it('speaking off, or outside Daily, adds no recording', () => {
+    expect(daily({ speaking: false }).some((s) => s.task.template === TEMPLATE.RECORDING)).toBe(false);
+    const learning = buildPlan({
+      mode: SESSION_MODE.DAILY, newTargets: [snapshot('borrow')], reviewTargets: [], pool, curated: [], proficiency: null, rng: () => 0.5,
+      ctx: { locale: 'vi-VN', accent: 'en-US', audioPlayback: true, allowPlaceholderAudio: true },
+    });
+    expect(learning.some((s) => s.kind === 'task' && s.task.template === TEMPLATE.RECORDING)).toBe(false);
+  });
+
+  it('a new word\'s recording is read from the word, with no meaning cue', () => {
+    const steps = buildPlan({
+      mode: SESSION_MODE.DAILY, newTargets: [snapshot('borrow')], reviewTargets: [], pool, curated: [], proficiency: null, rng: () => 0.5, speaking: true,
+      ctx: { locale: 'vi-VN', accent: 'en-US', audioPlayback: true, allowPlaceholderAudio: true },
+    }).filter((s): s is PlannedTask => s.kind === 'task' && s.task.template === TEMPLATE.RECORDING);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].task.clientPayload.meaningCue).toBeUndefined();
+  });
+
+  it('a new word without a pronunciation is still learnable', () => {
+    const silent = { ...snapshot('borrow'), pronunciations: [] };
+    const steps = buildPlan({
+      mode: SESSION_MODE.DAILY, newTargets: [silent], reviewTargets: [], pool, curated: [], proficiency: null, rng: () => 0.5, speaking: true,
+      ctx: { locale: 'vi-VN', accent: 'en-US', audioPlayback: true, allowPlaceholderAudio: true },
+    });
+    expect(steps.filter((s) => s.kind === 'learn')).toHaveLength(1);
+    expect(steps.some((s) => s.kind === 'task' && s.task.template === TEMPLATE.RECORDING)).toBe(false);
   });
 
   it('an open listening issue favours audio prompts', () => {

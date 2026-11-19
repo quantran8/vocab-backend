@@ -92,11 +92,12 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 | Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
 | Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,color,topics:[{id,slug,title,description,iosIcon}]}]}`, đã localize theo `uiLocale`. `color` là `#RRGGBB` hoặc null; `iosIcon` là tên SF Symbol hoặc null. Null hoặc symbol không tồn tại trên máy thì app dùng màu/icon mặc định |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
-| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7), `reviewsPerSession` (1–50 hoặc `null`; `null` theo `dailyNewWordGoal`, ít nhất 5) |
+| Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7), `reviewsPerSession` (1–50 hoặc `null`; `null` theo `dailyNewWordGoal`, ít nhất 5), `dailySpeaking` (boolean) |
 
 - `explanationLocale` quyết định ngôn ngữ của nghĩa, câu hỏi và nội dung trong task. Đổi locale ảnh hưởng đến session sau đó, không ảnh hưởng session đã plan.
 - `dailyNewWordGoal` là số từ mới **mỗi session** daily, không phải mỗi ngày: hoàn tất một session thì luôn có thể plan session tiếp theo.
 - `reviewsPerSession` là số từ ôn tối đa mỗi session daily (kể cả review-only). `null` (mặc định) nghĩa là theo `dailyNewWordGoal`, nhưng không dưới 5. `GET /me` trả lại giá trị đã chọn; số đang áp dụng là `reviewLoad.dueCap` trong `learn-home`.
+- `dailySpeaking` (mặc định `false`) bật bài luyện nói (`recording`) trong Daily: mỗi từ mới có một lượt đọc to, và tối đa `5` từ ôn mỗi session có thêm một lượt. Hỏi ở bước onboarding và cho đổi bất cứ lúc nào trong Cài đặt; áp dụng từ session plan sau. Cần nói rõ với user: **đúng hay sai phần nói không ảnh hưởng tiến độ học của từ** (lịch ôn, nhóm kết quả, LP), chỉ giúp luyện phát âm. Thiết bị gửi `capabilities.microphone=false` thì Daily không có recording dù đã bật.
 - `weeklySessionGoal` là số buổi học mỗi tuần user chọn (mặc định 7). Chỉ dùng để hiển thị (`checkpointSessionsRequired`, độ dài chặng Journey cũ): không còn mở challenge, và không ảnh hưởng Challenge Map. `dailyNewWordGoal` cũng không ảnh hưởng Challenge Map.
 
 ### Bài test xếp level
@@ -194,7 +195,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 | `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
 | `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
 
-`capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì task `recording` **vẫn được phát hành**, client gửi event `unavailable` (xem 7.7).
+`capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì Daily không phát hành `recording`; ở các mode khác task `recording` **vẫn có thể được phát hành**, client gửi event `unavailable` (xem 7.7).
 
 **Practice theo kỹ năng:** mỗi từ đúng một task, mọi task đều luyện một trong các kỹ năng đã chọn. Chọn nhiều kỹ năng thì các kỹ năng chia lượt đều giữa các từ; từ không luyện được kỹ năng tới lượt (vd. không có audio cho `listening`) dùng kỹ năng khác đã chọn. Commit như session thường.
 
@@ -401,6 +402,14 @@ Xem 7.1.
   "assessment": { "kind": "azurePronunciation" },
   "evaluation": { "acceptedResponses": ["clarify"] } }   // text cần đọc, dùng để chấm on-device
 ```
+
+**`meaningCue`** (chỉ có ở recording của từ đã học: từ ôn trong Daily, Random, Weak; recording của từ mới không có):
+
+```jsonc
+"meaningCue": { "text": "làm rõ", "question": "Từ tiếng Anh nào có nghĩa này? Hãy thử nói trước khi xem từ." }
+```
+
+Có `meaningCue` thì làm hai bước: (1) chỉ hiện `meaningCue.text` + `question`, user thử nói từ tiếng Anh, **không chấm, không gửi event**, có nút "Xem từ"; (2) hiện `prompt` (từ cần đọc) và chấm như bình thường. Chỉ bước 2 tạo event và được tính. Không có `meaningCue` thì vào thẳng bước 2.
 
 Client chọn một trong hai cách chấm **cho mỗi task** (không trộn trong cùng một task):
 

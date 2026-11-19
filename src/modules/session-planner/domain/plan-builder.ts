@@ -27,6 +27,8 @@ export interface PlanInput {
   skills?: Skill[];
   // Daily: put an optional recall before each Learn card ("I know this").
   knownCheck?: boolean;
+  // Daily: the learner opted in to recordings; they train speaking only and never move memory.
+  speaking?: boolean;
   ctx: ResolveContext;
   rng: Rng;
 }
@@ -60,7 +62,7 @@ const PHASE_BY_MODE: Record<SessionMode, TaskPhase> = {
   [SESSION_MODE.WEAK_WORDS_PRACTICE]: TASK_PHASE.WEAK_WORDS_PRACTICE,
 };
 
-const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance, classPickWeight, skillGapBoost } = POLICY.review;
+const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance, classPickWeight, skillGapBoost, dailySpeakingCap } = POLICY.review;
 
 function buildCard(target: MeaningSnapshot, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
@@ -127,7 +129,7 @@ function skillCandidates(target: MeaningSnapshot, input: PlanInput) {
   const { ctx } = input;
   return weighted(
     [
-      buildRecording(target, ctx),
+      buildRecording(target, ctx, { meaningCue: true }),
       buildTranscription(target, ctx),
       ...curatedTasks(input, target, false),
     ],
@@ -145,7 +147,7 @@ function taskForSkill(skill: Skill, target: MeaningSnapshot, { pool, ctx, rng }:
     case SKILL.LISTENING:
       return buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng);
     case SKILL.SPEAKING:
-      return buildRecording(target, ctx);
+      return buildRecording(target, ctx, { meaningCue: true });
   }
 }
 
@@ -217,6 +219,23 @@ function reviewTasks(input: PlanInput): ResolvedTask[] {
   return shuffle(tasks, rng);
 }
 
+// Each recording goes after its word's meaning task: it shows the word, so it would prime a recall.
+function withRecordings(tasks: ResolvedTask[], input: PlanInput) {
+  const { reviewTargets, ctx, rng } = input;
+  const recordings = shuffle(reviewTargets, rng)
+    .flatMap((target) => {
+      const recording = buildRecording(target, ctx, { meaningCue: true });
+      return recording ? [{ meaningId: target.meaningId, recording }] : [];
+    })
+    .slice(0, dailySpeakingCap);
+  const result = [...tasks];
+  for (const { meaningId, recording } of recordings) {
+    const after = result.findIndex((task) => task.targets.some((t) => t.meaningId === meaningId));
+    result.splice(after + 1 + Math.floor(rng() * (result.length - after)), 0, recording);
+  }
+  return result;
+}
+
 function buildGloss(target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
   return (
     buildSelectGloss(target, pool, pickModality(rng), ctx, rng) ?? buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng)
@@ -226,7 +245,8 @@ function buildGloss(target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
 function buildNewSlot(slot: TaskSlot, target: MeaningSnapshot, input: PlanInput) {
   const { pool, ctx, rng } = input;
   if (slot.template === TEMPLATE.RECORDING) {
-    return buildRecording(target, ctx);
+    // The Learn card just showed the word, so a meaning cue would test nothing.
+    return buildRecording(target, ctx, { meaningCue: false });
   }
   if (slot.isFirstRecall) {
     const fly = slot.template === TEMPLATE.FLY_REORDER ? buildFlyReorder(target, ctx, rng) : null;
@@ -235,13 +255,12 @@ function buildNewSlot(slot: TaskSlot, target: MeaningSnapshot, input: PlanInput)
   return slot.variant === VARIANT.REVERSE_GLOSS ? buildSelectReverse(target, pool, ctx, rng) : buildGloss(target, input);
 }
 
-// C29/C30: a Meaning lacking any mandatory group is dropped before issue.
+// C29/C30: a Meaning lacking any mandatory group is dropped before issue. Recording is optional, so it is not one.
 const canLearn = (target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) =>
   Boolean(
     buildSelectGloss(target, pool, PROMPT_TYPE.TEXT, ctx, rng) &&
       buildSelectReverse(target, pool, ctx, rng) &&
-      buildTypingRecall(target, ctx) &&
-      buildRecording(target, ctx),
+      buildTypingRecall(target, ctx),
   );
 
 const visibleText = ({ task }: PlannedTask) => {
@@ -270,11 +289,13 @@ export function buildPlan(input: PlanInput): PlannedStep[] {
     return planned;
   };
 
-  for (const task of reviewTasks(input)) addTask(task, PHASE_BY_MODE[input.mode]);
+  const review = reviewTasks(input);
+  const speaking = input.mode === SESSION_MODE.DAILY && input.speaking === true;
+  for (const task of speaking ? withRecordings(review, input) : review) addTask(task, PHASE_BY_MODE[input.mode]);
 
   const learnable = input.newTargets.filter((target) => canLearn(target, input));
   const learnSteps = new Map<number, PlannedLearn>();
-  for (const slot of planNewMeanings(learnable.length, input.rng)) {
+  for (const slot of planNewMeanings(learnable.length, input.rng, speaking)) {
     const target = learnable[slot.meaningIndex];
     if (slot.kind === 'learn') {
       // Placed right before the card, so nothing has shown the answer yet.

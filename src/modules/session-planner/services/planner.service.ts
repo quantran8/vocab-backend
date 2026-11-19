@@ -113,6 +113,7 @@ export class PlannerService {
       proficiency: learner.proficiencyLevel,
       skills,
       knownCheck: request.knownCheck,
+      speaking: settings.dailySpeaking && request.capabilities.microphone,
       rng: this.rng,
       ctx: {
         locale,

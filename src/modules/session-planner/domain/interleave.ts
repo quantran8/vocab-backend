@@ -35,18 +35,18 @@ function batchSizes(count: number) {
 }
 
 /** Per batch of 2-3 Meanings: their learn cards back to back, then the trial cycle interleaved. */
-export function planNewMeanings(count: number, rng: Rng): PlanSlot[] {
+export function planNewMeanings(count: number, rng: Rng, speaking = false): PlanSlot[] {
   const slots: PlanSlot[] = [];
   let offset = 0;
   for (const size of batchSizes(count)) {
-    slots.push(...planBatch(size, offset, rng));
+    slots.push(...planBatch(size, offset, rng, speaking));
     offset += size;
   }
   return slots;
 }
 
-/** Trial cycle per Meaning: gloss -> reverseGloss -> typing|flyReorder -> recording -> gloss, interleaved. */
-function planBatch(count: number, offset: number, rng: Rng): PlanSlot[] {
+/** Trial cycle per Meaning: gloss -> reverseGloss -> typing|flyReorder -> [recording] -> gloss, interleaved. */
+function planBatch(count: number, offset: number, rng: Rng, speaking: boolean): PlanSlot[] {
   const slots: PlanSlot[] = [];
   const task = (meaningIndex: number, template: Template, variant: Variant, isFirstRecall = false): TaskSlot => ({
     kind: 'task', meaningIndex: meaningIndex + offset, template, variant, isFirstRecall,
@@ -66,7 +66,7 @@ function planBatch(count: number, offset: number, rng: Rng): PlanSlot[] {
     const recall = pickRecall(rng);
     slots.push(task(i, recall.template, recall.variant, true));
   });
-  round((i) => slots.push(task(i, TEMPLATE.RECORDING, VARIANT.SCRIPTED_PRONUNCIATION)));
+  if (speaking) round((i) => slots.push(task(i, TEMPLATE.RECORDING, VARIANT.SCRIPTED_PRONUNCIATION)));
   round((i) => slots.push(task(i, TEMPLATE.SELECT, VARIANT.GLOSS)));
   return slots;
 }
