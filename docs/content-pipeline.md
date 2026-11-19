@@ -15,8 +15,8 @@ dùng chung cho `check` và `ingest`.
 |---|---|---|---|
 | `fetch` | URL trong `sources.ts` | `content/sources/*` + `manifest.json` (sha256, license) | Có: bản lưu nguồn, phòng URL gốc mất |
 | `lexicon` | `content/sources` | `content/build/lexicon.json` | Không: dựng lại được |
-| `tasks generate` / `review` / `rank` / `translate` | lexicon / generated | `content/build/<slug>/tasks/*.json` | Không |
-| `ingest` | `tasks/*.out.json` | `generated.jsonl`, `reviews.jsonl`, `ranks.jsonl`, `translations/<locale>.jsonl`, `<locale>.catalog.json` | **Có**: kết quả AI |
+| `tasks generate` / `review` / `rank` / `translate` / `translate-review` | lexicon / generated | `content/build/<slug>/tasks/*.json` | Không |
+| `ingest` | `tasks/*.out.json` | `generated.jsonl`, `reviews.jsonl`, `ranks.jsonl`, `translations/<locale>.jsonl`, `<locale>.reviews.jsonl`, `<locale>.catalog.json` | **Có**: kết quả AI |
 | `load` | tất cả | DB, `load-report.json` | Không |
 
 ## Quy tắc
@@ -31,8 +31,8 @@ dùng chung cho `check` và `ingest`.
 - **Chia nghĩa như từ điển cho người học** (Cambridge/Oxford Learner's): một nghĩa là một ý cốt lõi. Cùng ý cốt lõi thì gộp
   dù đối tượng khác nhau (take "cầm, nắm" gồm cầm tay, lấy sách; take "đem đi" gồm mang vật, dẫn người), bản dịch được ghi vài từ
   gần nghĩa. Tách khi ý cốt lõi khác nhau (get "nhận" / "mua"; year "năm" / "tuổi"). Mỗi meaning là một thẻ học, nên hai thẻ
-  của cùng một từ phải phân biệt được. Gloss chứa ";" hoặc "/" bị `check` từ chối. Trần số nghĩa theo độ phổ biến (`maxMeanings`:
-  5 cho 500 từ đầu NGSL, 3 cho phần còn lại).
+  của cùng một từ phải phân biệt được. Gloss chứa ";" hoặc "/" bị `check` từ chối. Giữ mọi nghĩa mà người học tới `maxLevel` hay gặp và từ điển cho người học liệt kê (get "hiểu", take "uống thuốc"), kể cả khi không nằm trong vài sense đầu; nghĩa gặp muộn được xếp level cao hơn thay vì bị bỏ. Nghĩa hiếm (take "trừ đi") thì bỏ. `maxMeanings` chỉ là trần an toàn:
+  8 cho 500 từ đầu NGSL, 4 cho phần còn lại.
 - **Cụm từ không phải nghĩa của từ đơn:** phrasal verb và cụm cố định (look for, take off, used to, as well) để dành cho mục cụm từ
   riêng (`phrasal_verb`) ở đợt sau.
 - **Trùng bản dịch** (`stages/clashes.ts`): hai nghĩa của cùng một từ có chung một từ tương đương tiếng Việt (bỏ phần trong ngoặc)
@@ -52,6 +52,9 @@ dùng chung cho `check` và `ingest`.
 - **Kiểm tra bằng code** (`rules.ts`): target của ví dụ phải là một dạng của từ, từ trong ví dụ không vượt level (cho
   lệch 2 từ), level không thấp hơn level nền và không vượt `maxLevel`, IPA hợp lệ và lấy từ CMUdict, sense có thật.
   Meaning lỗi luật **không được nạp**; xem bằng `report --verbose`, sửa bằng `tasks generate --retry-issues`.
+- **Review bản dịch** (`stages/translation-review.ts`): một lượt AI khác soát bản dịch theo từng từ, mỗi task một locale.
+  Kết quả lưu ở `translations/<locale>.reviews.jsonl`, gắn với hash của bản dịch. Bản bị từ chối được dịch lại kèm ghi chú
+  (`tasks translate`), tối đa `MAX_ATTEMPTS` lần. Bản chưa review hoặc bị từ chối không được nạp.
 - **Đủ mọi ngôn ngữ app hỗ trợ:** `APP_LOCALES` (constants) là danh sách duy nhất. Một task dịch trả về mọi locale còn
   thiếu của các meaning trong task; meaning thiếu bất kỳ locale nào thì không được nạp. Topic không còn meaning nào được chuyển về `draft`.
 - **Nạp:** một transaction, ghi theo lô. Gắn vào từ đã có cùng lemma (seed hoặc custom word) thay vì tạo trùng. Meaning

@@ -21,7 +21,7 @@ export interface CollectionSpec {
   select(entry: LexiconEntry): boolean;
   /** Senses above this level are left out. */
   maxLevel: CefrLevel;
-  /** Core words need more meanings; a low cap forces the model to merge senses. */
+  /** A safety ceiling, not a target: which meanings to keep is decided by how often learners meet them. */
   maxMeanings(entry: LexiconEntry): number;
   examplesPerMeaning: number;
   topics: TopicSpec[];

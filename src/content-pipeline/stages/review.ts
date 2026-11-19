@@ -10,9 +10,9 @@ import { FixRequest, previousMeanings } from './generate';
 
 export const reviewsPath = (spec: CollectionSpec) => join(collectionDir(spec.slug), 'reviews.jsonl');
 
-/** Changes whenever what a learner would see changes, so an edited entry needs a fresh review. */
+/** Changes whenever what a learner would see or the rules change, so an edited entry or a new prompt version needs a fresh review. */
 export const entryHash = (e: GeneratedEntry) => createHash('sha256')
-  .update(JSON.stringify([e.pos, e.skipped, e.meanings.map((m) => [m.gloss, m.definition, m.cefrLevel, m.examples.map((x) => x.text)])]))
+  .update(JSON.stringify([e.promptVersion, e.pos, e.skipped, e.meanings.map((m) => [m.gloss, m.definition, m.cefrLevel, m.examples.map((x) => x.text)])]))
   .digest('hex').slice(0, 16);
 
 export const PROBLEM_KINDS = ['merged', 'duplicate', 'example_mismatch', 'wrong_part_of_speech', 'missing_core', 'wrong_definition', 'wrong_level'] as const;
@@ -23,7 +23,7 @@ Each word comes with all its entries, one per part of speech, so you can compare
 - duplicate: two meanings of the word share the same core idea or would get the same translation, in one entry or across the word's parts of speech; they should be one meaning.
 - example_mismatch: an example shows another sense, or is unnatural.
 - wrong_part_of_speech: an example or definition uses the headword as another part of speech.
-- missing_core: a very common meaning that A1–B2 learners need is missing while a rarer one was kept (name the kept one to drop when the entry is at maxMeanings), or the entry was skipped although it is worth teaching. Never ask for a meaning that learners would translate with the same word as one the word already has (on "on the bus" next to on "on the table": both "trên"); as two cards they could not be told apart.
+- missing_core: a meaning that A1–B2 learners meet often and learner's dictionaries list is missing (get "understand", take "swallow medicine"), even when it is not among the first senses; when the entry is at maxMeanings, name the kept one to drop; or the entry was skipped although it is worth teaching. Never ask for a meaning that learners would translate with the same word as one the word already has (on "on the bus" next to on "on the table": both "trên"); as two cards they could not be told apart.
 - wrong_definition: the definition or gloss is wrong or misleading.
 - wrong_level: the CEFR level is clearly wrong. baselineLevel comes from the CEFR-J word list and is a floor: never ask for a level below it.
 For each problem give the entry key, the gloss of the meaning it concerns (null for a missing meaning or a skip), the kind, and a short note saying what to change. A word with no problems has problems: [].`;

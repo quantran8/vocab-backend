@@ -1,6 +1,7 @@
 import { EntryReview, GeneratedEntry, TranslatedMeaning } from '../build.types';
 import { CLASH_LOCALE, translationClashes } from './clashes';
-import { translationsPath } from './translate';
+import { localizedMeaning, TARGET_LOCALES, translationsPath, translationStores } from './translate';
+import { canRetranslate, isTranslationRejected, translationReviewStores } from './translation-review';
 import { CollectionSpec } from '../collections/collection.types';
 import { JsonlStore, readJson } from '../jsonl';
 import { Lexicon } from '../lexicon/lexicon.types';
@@ -31,12 +32,28 @@ export function report(spec: CollectionSpec, verbose: boolean) {
   const stuck = [...rejected].filter((k) => (store.rows.get(k)!.attempts ?? 1) >= MAX_ATTEMPTS);
   console.log(`review: ${rejected.size} entries rejected, ${stuck.length} of them after ${MAX_ATTEMPTS} attempts (need a human)`);
   const lexicon = readJson<Lexicon>(LEXICON_FILE);
-  const clashes = translationClashes(currentEntries(spec, lexicon, store), new JsonlStore<TranslatedMeaning>(translationsPath(spec, CLASH_LOCALE)));
+  const live = currentEntries(spec, lexicon, store);
+  const clashes = translationClashes(live, new JsonlStore<TranslatedMeaning>(translationsPath(spec, CLASH_LOCALE)));
   console.log(`translation clashes (${CLASH_LOCALE}): ${clashes.length}`);
   for (const c of clashes) console.log(`  ${c.problem}`);
   if (verbose || stuck.length) {
     for (const key of verbose ? rejected : stuck) {
       for (const p of reviews.rows.get(key)!.problems) console.log(`  ${key} ${p.kind}${p.gloss ? ` (${p.gloss})` : ''}: ${p.note}`);
+    }
+  }
+  // A translation rejected MAX_ATTEMPTS times is left for a human, like a stuck entry.
+  const translations = translationStores(spec);
+  const translationReviews = translationReviewStores(spec);
+  for (const locale of TARGET_LOCALES) {
+    const reviewsOf = translationReviews.get(locale)!;
+    const rejectedHere = live.flatMap((e) => e.meanings.flatMap((m) => {
+      const t = localizedMeaning(locale, e, m, translations.get(locale)!) as TranslatedMeaning | null;
+      return t && isTranslationRejected(t, reviewsOf) ? [{ e, m, t }] : [];
+    }));
+    const stuckHere = rejectedHere.filter(({ t }) => !canRetranslate(t));
+    if (rejectedHere.length) console.log(`translation review ${locale}: ${rejectedHere.length} rejected, ${stuckHere.length} after ${MAX_ATTEMPTS} attempts (need a human)`);
+    for (const { e, m, t } of verbose ? rejectedHere : stuckHere) {
+      for (const p of reviewsOf.rows.get(m.meaningId)!.problems) console.log(`  ${locale} ${e.lemma} "${m.gloss}" = "${t.meaningText}": ${p.kind}: ${p.note}`);
     }
   }
   const plan = planFromBuild(spec);

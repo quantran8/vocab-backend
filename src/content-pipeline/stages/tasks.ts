@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { EntryReview, GeneratedEntry, RankedLemma, TranslatedMeaning } from '../build.types';
+import { EntryReview, GeneratedEntry, RankedLemma, TranslatedMeaning, TranslationReview } from '../build.types';
 import { CollectionSpec } from '../collections/collection.types';
 import { chunk, JsonlStore, readJson } from '../jsonl';
 import { Lexicon } from '../lexicon/lexicon.types';
@@ -13,16 +13,20 @@ import {
 import { CLASH_LOCALE, clashProblems, translationClashes } from './clashes';
 import { LemmaGroup, lemmaGroups, pendingRanks, rankInput, rankInstructions, rankProblems, ranksPath, rankSchema } from './rank';
 import {
-  catalogInput, catalogInstructions, catalogSchema, meaningInstructions, meaningSchema, PendingMeaning, pendingTranslations, staleCatalogLocales,
-  translationInput, translationsPath, translationStores, writeCatalogs,
+  catalogInput, catalogInstructions, catalogSchema, meaningInstructions, meaningSchema, PendingMeaning, pendingTranslations, RedoCheck, staleCatalogLocales,
+  otherCards, TARGET_LOCALES, TranslationFix, translationInput, translationsPath, translationStores, writeCatalogs,
 } from './translate';
+import {
+  canRetranslate, isTranslationRejected, isTranslationReviewCurrent, reviewableWords, toTranslationReviews, translationReviewInput, translationReviewInstructions,
+  translationReviewProblems, translationReviewSchema, translationReviewsPath, translationReviewStores,
+} from './translation-review';
 
 const UPGRADE_NOTE = 'rules changed: previous was written under older rules. Redo the entry under the current instructions; copy the gloss, definition and examples of any meaning that stays the same word for word.';
 
 /** Who wrote the AI output; the work is done by Claude Code reading task files, not by an API call. */
 export const AUTHOR = 'claude-code';
 
-type TaskKind = 'generate' | 'review' | 'rank' | 'translate' | 'catalog';
+type TaskKind = 'generate' | 'review' | 'rank' | 'translate' | 'translate-review' | 'catalog';
 
 /** One unit of AI work: read `instructions` and `input`, write JSON matching `outputSchema` to `output`. */
 export interface TaskFile {
@@ -41,6 +45,7 @@ type GenerateInput = ReturnType<typeof generateInput>;
 type TranslateInput = ReturnType<typeof translationInput>;
 type RankInput = ReturnType<typeof rankInput>;
 type ReviewInput = ReturnType<typeof reviewInput>;
+type TranslationReviewInput = ReturnType<typeof translationReviewInput>;
 
 export const tasksDir = (spec: CollectionSpec) => join(collectionDir(spec.slug), 'tasks');
 const outputName = (id: string) => `${id}.out.json`;
@@ -67,10 +72,49 @@ function writeTasks(spec: CollectionSpec, prefix: string, tasks: Omit<TaskFile, 
   });
 }
 
-export interface ExportOptions { batchSize: number; limit?: number; only?: string[]; force: boolean; retryIssues: boolean; fixesOnly?: boolean }
+export interface ExportOptions {
+  batchSize: number; limit?: number; only?: string[]; force: boolean; retryIssues: boolean; fixesOnly?: boolean; locales?: string[];
+}
+
+/** Batches of about `size` items that never split a word, so one model sees all of its cards. */
+function chunkByLemma<T>(items: T[], size: number, lemmaOf: (item: T) => string) {
+  const groups = new Map<string, T[]>();
+  for (const item of items) groups.set(lemmaOf(item), [...(groups.get(lemmaOf(item)) ?? []), item]);
+  const batches: T[][] = [];
+  for (const group of groups.values()) {
+    const last = batches.at(-1);
+    if (last && last.length + group.length <= size) last.push(...group);
+    else batches.push([...group]);
+  }
+  return batches;
+}
+
+/** Rejected translations a model may still redo; after MAX_ATTEMPTS they wait for a human. */
+function translationRedo(spec: CollectionSpec): RedoCheck {
+  const reviews = translationReviewStores(spec);
+  return (locale, t) => isTranslationRejected(t, reviews.get(locale)) && canRetranslate(t);
+}
+
+/** The rejected previous translation and the reviewer's notes, per meaning and locale. */
+function translationFixes(spec: CollectionSpec, stores: Map<string, JsonlStore<TranslatedMeaning>>, pending: PendingMeaning[]) {
+  const reviews = translationReviewStores(spec);
+  const out = new Map<string, Record<string, TranslationFix>>();
+  for (const { m, sourceHash, missing } of pending) {
+    for (const locale of missing) {
+      const t = stores.get(locale)?.rows.get(m.meaningId);
+      if (!t || t.sourceHash !== sourceHash || !isTranslationRejected(t, reviews.get(locale))) continue;
+      const fix = {
+        previous: { meaningText: t.meaningText, definitionText: t.definitionText, exampleTranslations: t.exampleTranslations },
+        problems: reviews.get(locale)!.rows.get(m.meaningId)!.problems.map((p) => `${p.kind}: ${p.note}`),
+      };
+      out.set(m.meaningId, { ...out.get(m.meaningId), [locale]: fix });
+    }
+  }
+  return out;
+}
 
 /** Writes task files for work not done and not already waiting in an open task. */
-export function exportTasks(spec: CollectionSpec, kind: 'generate' | 'review' | 'rank' | 'translate', options: ExportOptions) {
+export function exportTasks(spec: CollectionSpec, kind: 'generate' | 'review' | 'rank' | 'translate' | 'translate-review', options: ExportOptions) {
   const open = openTasks(spec);
   if (kind === 'generate') {
     const waiting = new Set(open.filter((t) => t.kind === 'generate').flatMap((t) => (t.input as GenerateInput).entries.map((e) => e.key)));
@@ -129,6 +173,32 @@ export function exportTasks(spec: CollectionSpec, kind: 'generate' | 'review' | 
     return;
   }
 
+  if (kind === 'translate-review') {
+    const waiting = new Set(open.filter((t) => t.kind === 'translate-review')
+      .flatMap((t) => (t.input as TranslationReviewInput).words.flatMap((w) => w.meanings.map((m) => `${t.locales[0]}|${m.id}`))));
+    const entries = currentEntries(spec, readJson<Lexicon>(LEXICON_FILE));
+    const stores = translationStores(spec);
+    const reviews = translationReviewStores(spec);
+    const unknown = (options.locales ?? []).filter((l) => !TARGET_LOCALES.includes(l));
+    if (unknown.length) throw new Error(`not a translated locale: ${unknown.join(', ')}`);
+    let words = 0;
+    const tasks = (options.locales ?? TARGET_LOCALES).flatMap((locale) => {
+      const pending = reviewableWords(entries, locale, stores.get(locale)!)
+        .filter((w) => !options.only || w.some(({ entry }) => options.only!.includes(entry.key)))
+        .filter((w) => options.force || w.some(({ translation }) => !isTranslationReviewCurrent(translation, reviews.get(locale))))
+        .filter((w) => !w.some(({ m }) => waiting.has(`${locale}|${m.meaningId}`)))
+        .slice(0, options.limit);
+      words += pending.length;
+      return chunk(pending, options.batchSize).map((batch) => ({
+        kind: 'translate-review' as const, collection: spec.slug, locales: [locale], promptVersion: spec.promptVersion,
+        instructions: translationReviewInstructions(locale), outputSchema: z.toJSONSchema(translationReviewSchema), input: translationReviewInput(locale, batch),
+      }));
+    });
+    const ids = writeTasks(spec, 'trv', tasks);
+    console.log(`translate-review: ${words} word-locale pairs in ${ids.length} new tasks, ${waiting.size} meaning-locale pairs already waiting`);
+    return;
+  }
+
   const staleCatalog = staleCatalogLocales(spec);
   if (staleCatalog.length > 0 && !open.some((t) => t.kind === 'catalog')) {
     writeTasks(spec, 'cat', [{
@@ -137,19 +207,22 @@ export function exportTasks(spec: CollectionSpec, kind: 'generate' | 'review' | 
     }]);
   }
   const waiting = new Set(open.filter((t) => t.kind === 'translate').flatMap((t) => (t.input as TranslateInput).meanings.map((m) => m.id)));
-  const pending = pendingTranslations(spec, translationStores(spec)).filter(({ m }) => !waiting.has(m.meaningId)).slice(0, options.limit);
+  const stores = translationStores(spec);
+  const pending = pendingTranslations(spec, stores, translationRedo(spec)).filter(({ m }) => !waiting.has(m.meaningId)).slice(0, options.limit);
+  const fixes = translationFixes(spec, stores, pending);
+  const entries = currentEntries(spec, readJson<Lexicon>(LEXICON_FILE));
   // Meanings missing the same locales share a task, so finished locales are not translated again.
   const groups = new Map<string, PendingMeaning[]>();
   for (const p of pending) groups.set(p.missing.join(','), [...(groups.get(p.missing.join(',')) ?? []), p]);
-  const tasks = [...groups.entries()].flatMap(([key, items]) => chunk(items, options.batchSize).map((batch) => {
+  const tasks = [...groups.entries()].flatMap(([key, items]) => chunkByLemma(items, options.batchSize, (p) => p.entry.lemma).map((batch) => {
     const locales = key.split(',');
     return {
       kind: 'translate' as const, collection: spec.slug, locales, promptVersion: spec.promptVersion,
-      instructions: meaningInstructions(locales), outputSchema: z.toJSONSchema(meaningSchema), input: translationInput(locales, batch),
+      instructions: meaningInstructions(locales), outputSchema: z.toJSONSchema(meaningSchema), input: translationInput(locales, batch, fixes, otherCards(entries, stores, locales, batch)),
     };
   }));
   const ids = writeTasks(spec, 'tr', tasks);
-  console.log(`translate: ${pending.length} meanings in ${ids.length} new tasks, ${waiting.size} already waiting${staleCatalog.length ? `, catalog for ${staleCatalog.length} locales` : ''}`);
+  console.log(`translate: ${pending.length} meanings (${fixes.size} to fix after review) in ${ids.length} new tasks, ${waiting.size} already waiting${staleCatalog.length ? `, catalog for ${staleCatalog.length} locales` : ''}`);
 }
 
 /** Problems that keep a translate output from being stored; every asked locale must be complete. */
@@ -187,6 +260,7 @@ export function ingestTasks(spec: CollectionSpec) {
       else if (task.kind === 'translate') stored += ingestTranslate(spec, stores, task, raw);
       else if (task.kind === 'rank') stored += ingestRank(spec, task, raw);
       else if (task.kind === 'review') stored += ingestReview(spec, task, raw);
+      else if (task.kind === 'translate-review') stored += ingestTranslationReview(spec, task, raw);
       else { writeCatalogs(spec, catalogSchema.parse(raw)); stored += task.locales.length; }
       rmSync(join(dir, `${task.id}.json`));
       rmSync(join(dir, task.output));
@@ -220,6 +294,17 @@ function ingestReview(spec: CollectionSpec, task: TaskFile, raw: unknown) {
   if (problems.length) throw new Error(problems.slice(0, 5).join('; '));
   const rows = toReviews(groups, out, AUTHOR);
   new JsonlStore<EntryReview>(reviewsPath(spec)).append(rows);
+  return rows.length;
+}
+
+function ingestTranslationReview(spec: CollectionSpec, task: TaskFile, raw: unknown) {
+  const out = translationReviewSchema.parse(raw);
+  const input = task.input as TranslationReviewInput;
+  const problems = translationReviewProblems(input, out);
+  if (problems.length) throw new Error(problems.slice(0, 5).join('; '));
+  const [locale] = task.locales;
+  const rows = toTranslationReviews(input, out, new JsonlStore<TranslatedMeaning>(translationsPath(spec, locale)), AUTHOR);
+  new JsonlStore<TranslationReview>(translationReviewsPath(spec, locale)).append(rows);
   return rows.length;
 }
 
@@ -266,7 +351,7 @@ function ingestTranslate(spec: CollectionSpec, stores: Map<string, JsonlStore<Tr
   const problems = translateProblems(task, out);
   if (problems.length) throw new Error(problems.slice(0, 5).join('; '));
   // English that changed after the task was written has a new hash; such meanings are left for the next export.
-  const current = new Map(pendingTranslations(spec, stores).map((p) => [p.m.meaningId, p]));
+  const current = new Map(pendingTranslations(spec, stores, translationRedo(spec)).map((p) => [p.m.meaningId, p]));
   let rows = 0;
   for (const locale of task.locales) {
     const store = stores.get(locale)!;
@@ -274,9 +359,11 @@ function ingestTranslate(spec: CollectionSpec, stores: Map<string, JsonlStore<Tr
       const source = current.get(m.id);
       const t = m.translations.find((x) => x.locale === locale)!;
       if (!source || !source.missing.includes(locale)) return [];
+      const previous = store.rows.get(m.id);
       return [{
         key: m.id, meaningId: m.id, sourceHash: source.sourceHash, meaningText: t.meaningText.trim(), definitionText: t.definitionText.trim(),
         exampleTranslations: t.exampleTranslations.map((x) => x.trim()), model: AUTHOR,
+        attempts: previous?.sourceHash === source.sourceHash ? (previous.attempts ?? 1) + 1 : 1,
       }];
     }));
     rows += out.meanings.length;
@@ -303,6 +390,8 @@ export function checkTask(spec: CollectionSpec, id: string) {
     problems.push(...rankProblems(askedGroups(spec, task), rankSchema.parse(raw)));
   } else if (task.kind === 'review') {
     problems.push(...reviewProblems(askedReviewGroups(spec, task), reviewSchema.parse(raw)));
+  } else if (task.kind === 'translate-review') {
+    problems.push(...translationReviewProblems(task.input as TranslationReviewInput, translationReviewSchema.parse(raw)));
   } else {
     const lexicon = readJson<Lexicon>(LEXICON_FILE);
     const byKey = new Map(lexicon.entries.map((e) => [e.key, e]));

@@ -56,6 +56,18 @@ export interface TranslatedMeaning {
   definitionText: string;
   exampleTranslations: string[];
   model: string;
+  /** Translations of this English text into this locale, counting reviewer-requested redos. */
+  attempts?: number;
+}
+
+export interface TranslationProblem { kind: string; note: string }
+
+/** One line of translations/<locale>.reviews.jsonl. `sourceHash` ties it to the reviewed translation. */
+export interface TranslationReview {
+  key: string;
+  sourceHash: string;
+  problems: TranslationProblem[];
+  model: string;
 }
 
 /** One line of ranks.jsonl: model frequencies for every meaning of a lemma. `sourceHash` ties it to that meaning set. */

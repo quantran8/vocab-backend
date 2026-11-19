@@ -19,12 +19,16 @@ import { ranksPath } from './rank';
 import { reviewsPath } from './review';
 import { buildLoadPlan, LoadPlan, REQUIRED_LOCALES } from './load-plan';
 import { translationsPath } from './translate';
+import { translationReviewStores } from './translation-review';
 
 export function planFromBuild(spec: CollectionSpec, locales: readonly string[] = REQUIRED_LOCALES): LoadPlan {
   const lexicon = readJson<Lexicon>(LEXICON_FILE);
   const entries = currentEntries(spec, lexicon);
   const translations = new Map(locales.map((l) => [l, new JsonlStore<TranslatedMeaning>(translationsPath(spec, l))]));
-  return buildLoadPlan(spec, lexicon, entries, [...locales], translations, new JsonlStore<RankedLemma>(ranksPath(spec)), new JsonlStore<EntryReview>(reviewsPath(spec)));
+  return buildLoadPlan(
+    spec, lexicon, entries, [...locales], translations, new JsonlStore<RankedLemma>(ranksPath(spec)), new JsonlStore<EntryReview>(reviewsPath(spec)),
+    translationReviewStores(spec),
+  );
 }
 
 /** Writes the plan in one transaction. With `publish`, localizations are approved and every changed snapshot gets a revision. */

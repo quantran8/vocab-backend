@@ -10,10 +10,10 @@ export const ESSENTIAL: CollectionSpec = {
   title: 'Essential English',
   description: 'The 2,800 most useful words in everyday English, from A1 to B2.',
   color: '#2F80ED',
-  promptVersion: 4,
+  promptVersion: 5,
   select: (entry) => entry.ngslRank !== null && CEFR_LEVELS.indexOf(entry.cefr) <= B2,
   maxLevel: 'B2',
-  maxMeanings: (entry) => (entry.ngslRank !== null && entry.ngslRank <= CORE_RANK ? 5 : 3),
+  maxMeanings: (entry) => (entry.ngslRank !== null && entry.ngslRank <= CORE_RANK ? 8 : 4),
   examplesPerMeaning: 2,
   topics: [
     { slug: 'people-family', title: 'People & Family', description: 'Family members, friends and the people around you.', iosIcon: 'person.2.fill', covers: 'family, kinship, age groups, kinds of people, names for people by role in life' },

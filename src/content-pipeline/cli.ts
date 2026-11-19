@@ -15,6 +15,7 @@ const USAGE = `pnpm content <stage> [options]
   tasks review     write AI task files: independent check of each word     [--limit n] [--batch 10]
   tasks rank       write AI task files: order of each word's meanings      [--limit n] [--batch 30]
   tasks translate  write AI task files: translations into every app locale  [--limit n] [--batch 8]
+  tasks translate-review  write AI task files: native check of each word's translations, one locale per task  [--locale l,l] [--limit n] [--force] [--batch 10]
   check <task-id>  validate one task output without storing it
   ingest           validate finished task outputs (<id>.out.json) and store them
   report     rule issues, translation coverage, topic sizes        [--verbose]
@@ -30,6 +31,7 @@ async function main() {
       batch: { type: 'string' },
       limit: { type: 'string' },
       only: { type: 'string' },
+      locale: { type: 'string' },
       force: { type: 'boolean', default: false },
       'retry-issues': { type: 'boolean', default: false },
       'fixes-only': { type: 'boolean', default: false },
@@ -46,10 +48,10 @@ async function main() {
     case 'fetch': return fetchSources(values.force);
     case 'lexicon': return writeLexicon();
     case 'tasks':
-      if (kind !== 'generate' && kind !== 'review' && kind !== 'rank' && kind !== 'translate') break;
+      if (kind !== 'generate' && kind !== 'review' && kind !== 'rank' && kind !== 'translate' && kind !== 'translate-review') break;
       return exportTasks(spec(), kind, {
-        batchSize: Number(values.batch ?? { generate: 10, review: 10, rank: 30, translate: 8 }[kind]), limit, force: values.force, retryIssues: values['retry-issues'], fixesOnly: values['fixes-only'],
-        only: values.only?.split(',').map((k) => k.trim()),
+        batchSize: Number(values.batch ?? { generate: 10, review: 10, rank: 30, translate: 8, 'translate-review': 10 }[kind]), limit, force: values.force, retryIssues: values['retry-issues'], fixesOnly: values['fixes-only'],
+        only: values.only?.split(',').map((k) => k.trim()), locales: values.locale?.split(',').map((l) => l.trim()),
       });
     case 'check': if (kind) return checkTask(spec(), kind); break;
     case 'ingest': return ingestTasks(spec());

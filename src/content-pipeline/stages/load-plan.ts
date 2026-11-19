@@ -1,12 +1,13 @@
 import { APP_LOCALES, CEFR_LEVELS, CefrLevel, PartOfSpeech } from '../../common/constants/domain';
-import { EntryReview, GeneratedEntry, GeneratedExample, RankedLemma, TranslatedMeaning } from '../build.types';
+import { EntryReview, GeneratedEntry, GeneratedExample, RankedLemma, TranslatedMeaning, TranslationReview } from '../build.types';
 import { CollectionSpec } from '../collections/collection.types';
 import { JsonlStore } from '../jsonl';
 import { Lexicon } from '../lexicon/lexicon.types';
 import { CLASH_LOCALE, clashingMeaningIds, translationClashes } from './clashes';
 import { lemmaGroups, popularities } from './rank';
 import { isReviewCurrent } from './review';
-import { localizedCatalog, localizedMeaning } from './translate';
+import { localizedCatalog, localizedMeaning, SOURCE_LOCALE } from './translate';
+import { isTranslationApproved, isTranslationReviewCurrent } from './translation-review';
 
 /** A meaning ships in every app locale or not at all. */
 export const REQUIRED_LOCALES: readonly string[] = APP_LOCALES;
@@ -34,16 +35,20 @@ export interface LoadPlan {
   report: {
     entries: number; meanings: number; ruleFailures: number; unreviewed: number; rejectedByReview: number; translationClashes: number; unranked: number;
     missingRequiredLocale: number; untranslated: Record<string, number>;
+    /** Translations with no current review, or rejected by it; neither ships. */
+    translationUnreviewed: Record<string, number>; translationRejected: Record<string, number>;
   };
 }
 
 /** Everything the load stage writes, decided from build files alone so it can be tested without a model or a database. */
 export function buildLoadPlan(
   spec: CollectionSpec, lexicon: Lexicon, entries: GeneratedEntry[], locales: string[], translations: Map<string, JsonlStore<TranslatedMeaning>>,
-  ranks: JsonlStore<RankedLemma>, reviews: JsonlStore<EntryReview>,
+  ranks: JsonlStore<RankedLemma>, reviews: JsonlStore<EntryReview>, translationReviews: Map<string, JsonlStore<TranslationReview>>,
 ): LoadPlan {
   const rankOf = new Map(lexicon.entries.map((e) => [e.key, e.ngslRank ?? Number.MAX_SAFE_INTEGER]));
   const untranslated: Record<string, number> = Object.fromEntries(locales.map((l) => [l, 0]));
+  const translationUnreviewed: Record<string, number> = Object.fromEntries(locales.map((l) => [l, 0]));
+  const translationRejected: Record<string, number> = Object.fromEntries(locales.map((l) => [l, 0]));
   let ruleFailures = 0;
   let unranked = 0;
   let unreviewed = 0;
@@ -66,6 +71,11 @@ export function buildLoadPlan(
     const localizations = locales.flatMap((locale) => {
       const text = localizedMeaning(locale, entry, m, translations.get(locale) ?? null);
       if (!text) { untranslated[locale] += 1; return []; }
+      if (locale !== SOURCE_LOCALE && !isTranslationApproved(text as TranslatedMeaning, translationReviews.get(locale))) {
+        if (isTranslationReviewCurrent(text as TranslatedMeaning, translationReviews.get(locale))) translationRejected[locale] += 1;
+        else translationUnreviewed[locale] += 1;
+        return [];
+      }
       return [{ locale, meaningText: text.meaningText, definitionText: text.definitionText, exampleTranslations: text.exampleTranslations }];
     });
     if (REQUIRED_LOCALES.some((locale) => !localizations.some((l) => l.locale === locale))) { missingRequiredLocale += 1; return []; }
@@ -88,6 +98,6 @@ export function buildLoadPlan(
       return catalog ? [{ locale, ...catalog }] : [];
     }),
     meanings,
-    report: { entries: entries.length, meanings: meanings.length, ruleFailures, unreviewed, rejectedByReview, translationClashes: clashing, unranked, missingRequiredLocale, untranslated },
+    report: { entries: entries.length, meanings: meanings.length, ruleFailures, unreviewed, rejectedByReview, translationClashes: clashing, unranked, missingRequiredLocale, untranslated, translationUnreviewed, translationRejected },
   };
 }

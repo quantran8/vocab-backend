@@ -10,7 +10,7 @@ Phần cần AI **do Claude Code làm**, qua task file. Pipeline không gọi AP
 ## Tổng quan
 
 ```
-fetch → lexicon → tasks generate → ingest → tasks review → ingest ⟲ → tasks rank → ingest → tasks translate → ingest → report → load
+fetch → lexicon → tasks generate → ingest → tasks review → ingest ⟲ → tasks rank → ingest → tasks translate → ingest → tasks translate-review → ingest ⟲ → report → load
              (mỗi `tasks …` cần Claude Code làm task rồi mới `ingest`)
 ```
 
@@ -22,6 +22,7 @@ fetch → lexicon → tasks generate → ingest → tasks review → ingest ⟲ 
 | `tasks review` | Xuất task: một AI khác soát lại từng từ (gộp mọi từ loại) | Tạo việc |
 | `tasks rank` | Xuất task: xếp thứ tự các nghĩa của mỗi từ (gộp mọi từ loại) | Tạo việc |
 | `tasks translate` | Xuất task: dịch nghĩa, ví dụ, tên collection/topic sang **mọi** ngôn ngữ app hỗ trợ | Tạo việc |
+| `tasks translate-review` | Xuất task: một AI khác soát bản dịch theo từng từ, mỗi task một locale | Tạo việc |
 | `check <id>` | Kiểm tra một file đầu ra, không ghi gì | Không |
 | `ingest` | Kiểm tra mọi đầu ra đã xong và lưu vào `content/build/<slug>/` | Không |
 | `report` | Lỗi luật, độ phủ bản dịch, số meaning mỗi topic | Không |
@@ -85,7 +86,7 @@ Reviewer là một lượt AI độc lập. Nó xem mọi nghĩa của một t�
 nghĩa trùng (`duplicate`), ví dụ sai nghĩa (`example_mismatch`), ví dụ sai từ loại (`wrong_part_of_speech`), thiếu nghĩa
 cốt lõi (`missing_core`), định nghĩa sai (`wrong_definition`), level sai (`wrong_level`). Mục bị từ chối được sinh lại
 tối đa 3 lần; sau đó `report` liệt kê để người xem. **Mục chưa được review hoặc bị từ chối thì không được nạp.**
-Sửa nội dung một mục thì review cũ hết hiệu lực.
+Sửa nội dung một mục, hoặc tăng `promptVersion`, thì review cũ hết hiệu lực.
 
 **Review phải độc lập:** agent review không được là agent (hoặc phiên chính) đã viết hay sửa mục đó, và không ai sửa tay
 `reviews.jsonl`. Nếu thấy reviewer sai luật, sửa hướng dẫn review rồi review lại bằng một agent khác.
@@ -118,6 +119,7 @@ Lệnh tạo các file sau:
 - `tr-0001.json`…: mỗi task 8 meaning, đầu ra chứa bản dịch của từng meaning cho mọi locale trong `locales` của task.
 - `cat-0001.json`: tên collection và topic, cho mọi locale.
 
+Mọi nghĩa của một từ được gom vào cùng task khi có thể; nghĩa của từ đó không nằm trong task được đưa vào `otherCards` kèm bản dịch hiện có, để nghĩa mới không bị dịch trùng.
 Nếu một meaning đã có sẵn vài locale, task chỉ hỏi những locale còn thiếu. `check` báo lỗi khi đầu ra thiếu bất kỳ locale nào.
 Claude Code làm các task này giống bước trên, rồi:
 
@@ -128,6 +130,23 @@ pnpm content report
 
 **Trùng bản dịch:** sau khi ingest bản dịch, `report` liệt kê các nghĩa của cùng một từ có chung từ tương đương tiếng Việt.
 Các nghĩa đó không được nạp; `tasks generate` tự xuất lại mục đó kèm ghi chú để gộp, rồi lại review và dịch.
+
+## Bước AI: review bản dịch (lặp đến khi sạch)
+
+```bash
+pnpm content tasks translate-review               # mọi locale; --locale vi-VN,ja-JP để chọn
+# Claude Code làm task, rồi:
+pnpm content ingest
+pnpm content tasks translate                      # chỉ xuất lại bản dịch bị từ chối, kèm ghi chú của reviewer
+# ... làm task, ingest, rồi review lại
+```
+
+Mỗi task là **một locale**, gồm mọi nghĩa của vài từ, để reviewer thấy các thẻ của cùng một từ cạnh nhau. Reviewer báo:
+sai nghĩa (`wrong_sense`), câu giải thích thay vì từ tương đương (`not_an_equivalent`), không tự nhiên (`unnatural`),
+hai thẻ cùng từ trùng bản dịch dù ngôn ngữ có từ khác (`indistinct`), lỗi dịch định nghĩa (`definition`) hoặc câu ví dụ (`example`).
+Bản bị từ chối được dịch lại tối đa 3 lần; sau đó `report` liệt kê để người xem.
+**Bản dịch chưa review hoặc bị từ chối thì không được nạp**, và meaning thiếu một locale thì cả meaning không được nạp.
+Sửa bản dịch hoặc tiếng Anh thì review cũ hết hiệu lực. Agent review phải khác agent đã dịch.
 
 **Đủ bộ hoặc không nạp:** meaning thiếu bất kỳ locale nào trong `APP_LOCALES` thì không được nạp. Thêm ngôn ngữ mới cho app
 thì thêm vào `APP_LOCALES` (kèm ghi chú dịch trong `stages/translate.ts`), rồi chạy `tasks translate` để bù cho mọi meaning đã có.
@@ -159,7 +178,7 @@ content/
   build/<slug>/generated.jsonl   kết quả AI đã kiểm tra, có id                             commit
   build/<slug>/reviews.jsonl     kết quả review theo mục                                   commit
   build/<slug>/ranks.jsonl       điểm tần suất theo từ                                     commit
-  build/<slug>/translations/     bản dịch theo locale                                      commit
+  build/<slug>/translations/     bản dịch theo locale, kèm <locale>.reviews.jsonl          commit
   build/<slug>/tasks/            task đang chờ Claude Code                                 không commit
   build/<slug>/load-report.json  kết quả lần load gần nhất                                 không commit
 ```
