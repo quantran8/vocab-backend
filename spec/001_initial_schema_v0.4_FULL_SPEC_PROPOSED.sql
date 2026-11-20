@@ -40,7 +40,7 @@ CREATE TABLE user_settings (
     new_word_override_mode VARCHAR(32) CHECK (new_word_override_mode IN ('until_date','until_backlog_clear')),
     new_word_override_until TIMESTAMPTZ,
     leaderboard_visible BOOLEAN NOT NULL DEFAULT false,
-    reviews_per_session SMALLINT CHECK (reviews_per_session BETWEEN 5 AND 50), -- NULL follows daily_new_word_goal
+    reviews_per_session SMALLINT CHECK (reviews_per_session BETWEEN 1 AND 50), -- NULL follows daily_new_word_goal
     daily_speaking BOOLEAN NOT NULL DEFAULT false, -- opt-in recordings in Daily; never move memory
     CHECK ((new_word_override IS NULL) = (new_word_override_mode IS NULL)),
     CHECK ((new_word_override_until IS NOT NULL) = (new_word_override_mode IS NOT DISTINCT FROM 'until_date'))
@@ -300,7 +300,7 @@ CREATE TABLE learning_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),
     mode VARCHAR(24) NOT NULL
-       CHECK (mode IN ('daily','checkpoint_challenge','random_practice','weak_words_practice')),
+       CHECK (mode IN ('daily','checkpoint_challenge','random_practice','weak_words_practice','speaking_practice')),
     status VARCHAR(16) NOT NULL DEFAULT 'issued'
        CHECK (status IN ('issued','committed','expired')),
     scope_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb
@@ -385,34 +385,24 @@ CREATE TABLE memory_observations (
 );
 CREATE INDEX idx_memory_user_meaning ON memory_observations(user_id, meaning_id, observed_at DESC);
 
-CREATE TABLE skill_evidence (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE user_speaking_progress (
     user_id UUID NOT NULL REFERENCES app_user(id),
-    session_id UUID NOT NULL,
-    task_id UUID NOT NULL,
-    target_ordinal SMALLINT NOT NULL,
-    skill VARCHAR(12) NOT NULL CHECK (skill IN ('listening','speaking','spelling')),
-    reasons JSONB NOT NULL CHECK (jsonb_typeof(reasons) = 'array' AND reasons <@ '["new_practice","hinted","revealed","retried","primed","weak_template","quality_unqualified","audio_not_played","invalid_recording","unknown"]'::jsonb),
-    validity VARCHAR(12) NOT NULL CHECK (validity IN ('valid','invalid')),
-    passed BOOLEAN,
-    meaning_id UUID REFERENCES meanings(id),
-    pronunciation_id UUID REFERENCES pronunciations(id),
-    assessed_at TIMESTAMPTZ NOT NULL,
-    committed_at TIMESTAMPTZ NOT NULL,
-    assessment_receipt_id UUID REFERENCES speech_assessment_receipts(id),
-    evaluator_version VARCHAR(40) NOT NULL,
-    FOREIGN KEY (session_id, user_id) REFERENCES learning_sessions(id, user_id),
-    UNIQUE (session_id, task_id, target_ordinal, skill),
-    CHECK ((meaning_id IS NOT NULL) <> (pronunciation_id IS NOT NULL)),
-    CHECK ((skill = 'spelling' AND meaning_id IS NOT NULL)
-        OR (skill IN ('listening','speaking') AND pronunciation_id IS NOT NULL)),
-    CHECK ((validity = 'valid' AND passed IS NOT NULL)
-        OR (validity = 'invalid' AND passed IS NULL))
+    pronunciation_id UUID NOT NULL REFERENCES pronunciations(id),
+    status VARCHAR(12) NOT NULL CHECK (status IN ('practicing','fluent')),
+    device_sessions INTEGER NOT NULL DEFAULT 0 CHECK (device_sessions >= 0),
+    device_streak SMALLINT NOT NULL DEFAULT 0 CHECK (device_streak >= 0),
+    scored_sessions INTEGER NOT NULL DEFAULT 0 CHECK (scored_sessions >= 0),
+    score_avg NUMERIC(5,2),
+    last_score NUMERIC(5,2),
+    best_score NUMERIC(5,2),
+    last_passed BOOLEAN NOT NULL,
+    last_assessed_at TIMESTAMPTZ NOT NULL,
+    fluent_at TIMESTAMPTZ,
+    PRIMARY KEY (user_id, pronunciation_id),
+    CHECK ((scored_sessions = 0) = (score_avg IS NULL)),
+    CHECK ((status = 'fluent') = (fluent_at IS NOT NULL))
 );
-CREATE INDEX idx_skill_meaning ON skill_evidence(user_id, skill, meaning_id, committed_at DESC)
-    WHERE meaning_id IS NOT NULL;
-CREATE INDEX idx_skill_pronunciation ON skill_evidence(user_id, skill, pronunciation_id, committed_at DESC)
-    WHERE pronunciation_id IS NOT NULL;
+CREATE INDEX idx_speaking_user_due ON user_speaking_progress(user_id, status, last_passed, last_assessed_at);
 
 -- F. Checkpoint challenge snapshots, one per N learning sessions.
 CREATE TABLE checkpoint_challenges (
@@ -433,7 +423,7 @@ CREATE TABLE checkpoint_challenge_meanings (
     PRIMARY KEY (challenge_id, meaning_id)
 );
 
--- G. Challenge Map (Match Madness): recognition games over learned Meanings, never SRS or skill evidence.
+-- G. Challenge Map (Match Madness): recognition games over learned Meanings, never SRS or speaking progress.
 CREATE TABLE challenge_chapters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_user(id),

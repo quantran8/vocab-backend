@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, notExists, or } from 'drizzle-orm';
 import { DB, Db } from '../../../db/db';
 import {
-  activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations, learningPointAwards, learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, pronunciations, rankingEligibilityAudit, skillEvidence, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userEffortDays, userEffortTotals, userMeaningOverrides, userMeaningProgress, userReports, userTierUnlocks, weeklyLpScores, weeklyRankSnapshots,
+  activeMeaningPublications, appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, checkpointChallengeMeanings, checkpointChallenges, deletedIdentities, exampleLocalizations, learningPointAwards, learningSessions, lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, pronunciations, rankingEligibilityAudit, speechAssessmentReceipts, topicLocalizations, topicMeanings, topics, userActiveTopics, userEffortDays, userEffortTotals, userMeaningOverrides, userMeaningProgress, userReports, userSpeakingProgress, userTierUnlocks, weeklyLpScores, weeklyRankSnapshots,
 } from '../../../db/schema';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class AccountDeletionRepository {
       await tx.delete(weeklyRankSnapshots).where(eq(weeklyRankSnapshots.userId, userId));
       await tx.delete(userReports).where(or(eq(userReports.reporterId, userId), eq(userReports.targetUserId, userId)));
       await tx.delete(rankingEligibilityAudit).where(eq(rankingEligibilityAudit.userId, userId));
-      await tx.delete(skillEvidence).where(eq(skillEvidence.userId, userId));
+      await tx.delete(userSpeakingProgress).where(eq(userSpeakingProgress.userId, userId));
       await tx.delete(memoryObservations).where(eq(memoryObservations.userId, userId));
       await tx.delete(challengeRuns).where(eq(challengeRuns.userId, userId));
       await tx.delete(challengeLevelProgress).where(eq(challengeLevelProgress.userId, userId));

@@ -4,7 +4,7 @@ import { addHours } from '../src/common/constants/time';
 import {
   appUsers, checkpointChallengeMeanings, learningPointAwards, userReports, weeklyRankSnapshots, checkpointChallenges, deletedIdentities, exampleLocalizations, learningSessions,
   lexicalDrafts, meaningExamples, meaningLocalizations, meaningPublications, meanings, memoryObservations, speechAssessmentReceipts,
-  skillEvidence, topics, userMeaningProgress, userSettings, words,
+  userSpeakingProgress, topics, userMeaningProgress, userSettings, words,
 } from '../src/db/schema';
 import { MaintenanceService } from '../src/modules/maintenance/services/maintenance.service';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
@@ -37,6 +37,13 @@ describe('account deletion', () => {
     return plan.sessionId as string;
   }
 
+  async function speak(token: string) {
+    const plan = (await api('post', '/v1/sessions/plan', token).send({ mode: 'speaking_practice', capabilities: CAPS }).expect(200)).body;
+    const said = (t: { template: string; evaluation: { acceptedResponses: string[] } }) =>
+      [{ seq: 1, action: 'transcribed', transcript: t.evaluation.acceptedResponses[0] }];
+    await api('post', `/v1/sessions/${plan.sessionId}/commit`, token).send(answers(plan, { override: said })).expect(200);
+  }
+
   // Every kind of row a learner can own, including private content that blocks the delete if handled out of order.
   async function buildAccount() {
     const seeded = await h.seed('topic-a', curated(6));
@@ -60,7 +67,9 @@ describe('account deletion', () => {
     });
     const [challenge] = await h.db.insert(checkpointChallenges).values({ userId, sequence: 1 }).returning({ id: checkpointChallenges.id });
     await h.db.insert(checkpointChallengeMeanings).values({ challengeId: challenge.id, meaningId: privateId });
+    await speak(auth);
     await learn(other);
+    await speak(other);
     // Ranking rows in both directions: reported by the other learner, and an eligibility change made about this one.
     await api('put', '/v1/me/settings').send({ leaderboardVisible: true }).expect(200);
     await api('put', '/v1/me/settings', other).send({ leaderboardVisible: true }).expect(200);
@@ -137,7 +146,7 @@ describe('account deletion', () => {
       sessions: await h.count(learningSessions, eq(learningSessions.userId, otherId)),
       progress: await h.count(userMeaningProgress, eq(userMeaningProgress.userId, otherId)),
       observations: await h.count(memoryObservations, eq(memoryObservations.userId, otherId)),
-      evidence: await h.count(skillEvidence, eq(skillEvidence.userId, otherId)),
+      speaking: await h.count(userSpeakingProgress, eq(userSpeakingProgress.userId, otherId)),
     };
     const wordCount = await h.count(words);
 
@@ -147,9 +156,10 @@ describe('account deletion', () => {
       sessions: await h.count(learningSessions, eq(learningSessions.userId, otherId)),
       progress: await h.count(userMeaningProgress, eq(userMeaningProgress.userId, otherId)),
       observations: await h.count(memoryObservations, eq(memoryObservations.userId, otherId)),
-      evidence: await h.count(skillEvidence, eq(skillEvidence.userId, otherId)),
+      speaking: await h.count(userSpeakingProgress, eq(userSpeakingProgress.userId, otherId)),
     }).toEqual(before);
     expect(before.sessions).toBeGreaterThan(0);
+    expect(before.speaking).toBeGreaterThan(0);
     expect(await h.count(words)).toBe(wordCount);
     expect(await h.first(meanings, eq(meanings.id, sharedId))).toMatchObject({ createdByUserId: null, ownerUserId: null });
     await api('get', '/v1/me', other).expect(200);

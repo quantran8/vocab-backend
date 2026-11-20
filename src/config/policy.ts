@@ -26,13 +26,13 @@ export const POLICY = {
       [EVIDENCE_CLASS.RECALL_ASSEMBLED]: 1.5,
       [EVIDENCE_CLASS.RECALL_PRODUCE]: 1,
     },
-    // A due word with an open form-skill issue favours tasks that train that skill.
-    skillGapBoost: 2,
     // Daily with speaking on: at most this many due words also get a recording [TRIAL].
     dailySpeakingCap: 5,
   },
   newLearning: { introBatchSize: 3, selectOptionCount: 4, recallTypingWeight: 0.5, matchPairCount: 4 },
   practice: {
+    // Speaking mode: recordings per session [TRIAL].
+    speakingTaskCap: 10,
     // Longer words get typing instead: tiles past this count render too small on the phone.
     flyReorderMaxTiles: 8,
     // Retries after a wrong answer before the app moves on. match counts per left item; recording counts speech assessments.
@@ -80,8 +80,11 @@ export const POLICY = {
     },
     maxElapsedMs: 30 * 60_000,
   },
-  memory: { lightRetryAttempts: 2, recoveryHours: 12 },
+  memory: { lightRetryAttempts: 2 },
   speech: { passAccuracy: 80, receiptTtlHours: 72, maxAudioBytes: 2 * 1024 * 1024 },
+  // Speaking progress [TRIAL]: on-device fluent after this many passing sessions in a row;
+  // Azure fluent at an EWMA score >= fluentScore over minScoredSessions, back to practicing below slipScore.
+  speaking: { deviceFluentStreak: 2, scoreAlpha: 0.4, fluentScore: 85, slipScore: 75, minScoredSessions: 2 },
   weak: { lookbackDays: 30, minAttempts: 3 },
   // Scope completion and review load [TRIAL] until the simulation in docs/DECISIONS.md settles them.
   reviewLoad: {
@@ -99,7 +102,7 @@ export const POLICY = {
   // Legacy: no new challenges are generated and nothing gates Daily; the Challenge Map replaces them.
   checkpoint: { defaultSessionsPerChallenge: 7, maxSessionsPerChallenge: 7 },
   journey: { defaultHistorySegments: 2, maxHistorySegments: 10, defaultFutureSegments: 1, maxFutureSegments: 3 },
-  // Match Madness [TRIAL]: recognition practice only, never SRS or skill evidence. Bump `version` when any value changes.
+  // Match Madness [TRIAL]: recognition practice only, never SRS or speaking progress. Bump `version` when any value changes.
   challenge: {
     version: 'match-madness-trial-v1',
     chapterNewMeaningCount: 12,

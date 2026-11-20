@@ -29,7 +29,7 @@ export class PlacementService {
     return { questions: buildPlacementQuestions(candidates, pool, locale, Math.random) };
   }
 
-  // Sets the level only: no learnedAt, review history or skill evidence (spec §2.7).
+  // Sets the level only: no learnedAt, review history or speaking progress (spec §2.7).
   async submit(userId: string, { answers }: PlacementSubmit) {
     const keys = await this.repository.questionKeys(answers.map((a) => a.questionId));
     const byMeaning = new Map(keys.map((k) => [k.meaningId, k]));

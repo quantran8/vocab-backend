@@ -1,4 +1,4 @@
-import { ASSESSMENT_INTENT, PROMPT_TYPE, SESSION_MODE, SKILL, Skill, TEMPLATE } from '../../../common/constants/domain';
+import { ASSESSMENT_INTENT, PROMPT_TYPE, SESSION_MODE, TASK_PHASE, TEMPLATE } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DistractorView, MeaningSnapshot } from '../../practice-resolver/task.types';
 import { buildPlan, PlannedTask, PlanInput } from './plan-builder';
@@ -11,48 +11,32 @@ const snapshot = (lemma: string): MeaningSnapshot => ({
 });
 const pool: DistractorView[] = ['one', 'two', 'three', 'four'].map((w) => ({ wordId: `w-${w}`, lemma: w, meaningText: `nghĩa ${w}` }));
 
-const weakPlan = (targets: MeaningSnapshot[], focus: [string, Skill[]][], overrides: Partial<PlanInput['ctx']> = {}) =>
+const plan = (mode: PlanInput['mode'], targets: MeaningSnapshot[], overrides: Partial<PlanInput['ctx']> = {}) =>
   buildPlan({
-    mode: SESSION_MODE.WEAK_WORDS_PRACTICE, newTargets: [], reviewTargets: targets, focusSkills: new Map(focus),
-    pool, curated: [], proficiency: null, rng: () => 0.5,
+    mode, newTargets: [], reviewTargets: targets, pool, curated: [], proficiency: null, rng: () => 0.5,
     ctx: { locale: 'vi-VN', accent: 'en-US', audioPlayback: true, allowPlaceholderAudio: true, ...overrides },
   }).filter((s): s is PlannedTask => s.kind === 'task');
 
-describe('Weak focuses on the skill with an issue', () => {
-  const word = snapshot('clarify');
-  const only = (skill: Skill) => weakPlan([word], [[word.meaningId, [skill]]]);
-
-  it('builds one direct task per skill', () => {
-    expect(only(SKILL.SPELLING).map((s) => s.task.serverEvaluation.intent)).toEqual([ASSESSMENT_INTENT.MEANING_RECALL]);
-    expect(only(SKILL.LISTENING)[0].task).toMatchObject({ template: TEMPLATE.SELECT, serverEvaluation: { promptIsTargetAudio: true } });
-    expect(only(SKILL.SPEAKING).map((s) => s.task.template)).toEqual([TEMPLATE.RECORDING]);
-    expect(only(SKILL.SPEAKING)[0].task.clientPayload.meaningCue).toBeDefined();
+describe('Speaking practice', () => {
+  it('gives each target one recording with a meaning cue, in the planner\'s order', () => {
+    const words = ['clarify', 'achieve', 'borrow'].map(snapshot);
+    const steps = plan(SESSION_MODE.SPEAKING_PRACTICE, words);
+    expect(steps.map((s) => s.task.template)).toEqual([TEMPLATE.RECORDING, TEMPLATE.RECORDING, TEMPLATE.RECORDING]);
+    expect(steps.map((s) => s.task.targets[0].pronunciationId)).toEqual(words.map((w) => w.pronunciations[0].id));
+    expect(steps.every((s) => s.phase === TASK_PHASE.SPEAKING_PRACTICE && s.task.clientPayload.meaningCue)).toBe(true);
   });
 
-  it('asks recall first so another task of the word cannot prime it', () => {
-    const steps = weakPlan([word], [[word.meaningId, [SKILL.LISTENING, SKILL.SPELLING, SKILL.SPEAKING]]]);
-    expect(steps).toHaveLength(3);
-    expect(steps[0].task.serverEvaluation).toMatchObject({ intent: ASSESSMENT_INTENT.MEANING_RECALL, isPrimed: false });
+  it('skips a target with no pronunciation in the accent', () => {
+    expect(plan(SESSION_MODE.SPEAKING_PRACTICE, [{ ...snapshot('borrow'), pronunciations: [] }])).toEqual([]);
   });
+});
 
-  it('falls back to a semantic task when the skill cannot be practiced', () => {
-    const steps = weakPlan([word], [[word.meaningId, [SKILL.LISTENING]]], { audioPlayback: false });
+describe('Weak practice', () => {
+  it('is mixed meaning practice, not a skill drill', () => {
+    const steps = plan(SESSION_MODE.WEAK_WORDS_PRACTICE, [snapshot('clarify')], { audioPlayback: false });
     expect(steps).toHaveLength(1);
     expect(steps[0].task.clientPayload.prompt!.type).toBe(PROMPT_TYPE.TEXT);
-  });
-
-  it('gives each target its first skill before capping', () => {
-    const targets = Array.from({ length: POLICY.session.practiceTaskCap }, (_, i) => snapshot(`word${i}`));
-    const all = [SKILL.LISTENING, SKILL.SPELLING];
-    const steps = weakPlan(targets, targets.map((t) => [t.meaningId, all]));
-    expect(steps).toHaveLength(POLICY.session.practiceTaskCap);
-    expect(new Set(steps.map((s) => s.task.targets[0].meaningId)).size).toBe(targets.length);
-  });
-
-  it('a target without an issue still gets a semantic task', () => {
-    const other = snapshot('achieve');
-    const steps = weakPlan([word, other], [[word.meaningId, [SKILL.SPEAKING]]]);
-    expect(steps.map((s) => s.task.targets[0].meaningId)).toContain(other.meaningId);
+    expect([ASSESSMENT_INTENT.MEANING_RECALL, ASSESSMENT_INTENT.MEANING_RECOGNITION]).toContain(steps[0].task.serverEvaluation.intent);
   });
 });
 
@@ -122,16 +106,5 @@ describe('Daily review', () => {
     });
     expect(steps.filter((s) => s.kind === 'learn')).toHaveLength(1);
     expect(steps.some((s) => s.kind === 'task' && s.task.template === TEMPLATE.RECORDING)).toBe(false);
-  });
-
-  it('an open listening issue favours audio prompts', () => {
-    let state = 7;
-    const rng = () => ((state = (state * 16807) % 2147483647) / 2147483647);
-    const audioShare = (gaps?: Map<string, Skill[]>) => {
-      const steps = Array.from({ length: 40 }, () => daily({ skillGaps: gaps }, rng)).flat();
-      return steps.filter((s) => s.task.serverEvaluation.promptIsTargetAudio).length / steps.length;
-    };
-    const gaps = new Map(words.map((w) => [w.meaningId, [SKILL.LISTENING]]));
-    expect(audioShare(gaps)).toBeGreaterThan(audioShare());
   });
 });

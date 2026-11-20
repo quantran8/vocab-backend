@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { MS_PER_HOUR } from '../src/common/constants/time';
 import { POLICY } from '../src/config/policy';
 import {
-  appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, memoryObservations, skillEvidence, userMeaningProgress,
+  appUsers, challengeChapterMeanings, challengeChapters, challengeLevelProgress, challengeRuns, memoryObservations, userSpeakingProgress, userMeaningProgress,
 } from '../src/db/schema';
 import { Board, MatchEvent, RunPlan } from '../src/modules/challenge/domain/match-madness';
 import { MaintenanceService } from '../src/modules/maintenance/services/maintenance.service';
@@ -273,16 +273,16 @@ describe('Challenge Map (Match Madness)', () => {
       expect((await api('get', `/v1/challenge/runs/${runId}/status`).expect(200)).body.run.pairs).toHaveLength(8);
     });
 
-    it('writes nothing to SRS, memory or skill evidence', async () => {
+    it('writes nothing to SRS, memory or speaking progress', async () => {
       const before = await h.db.select().from(userMeaningProgress);
-      const [observations, evidence] = [await h.count(memoryObservations), await h.count(skillEvidence)];
+      const [observations, evidence] = [await h.count(memoryObservations), await h.count(userSpeakingProgress)];
       await clear(1, 1);
       const run: IssuedRun = (await issue(1, 2).expect(201)).body;
       await start(run.runId).expect(200);
       advanceMs(90_000);
       await commit(run.runId, { events: play(run, { stop: 2, wrongAt: [0] }), endedReason: 'time_up', endedElapsedMs: 90_000 }).expect(200);
       expect(await h.db.select().from(userMeaningProgress)).toEqual(before);
-      expect([await h.count(memoryObservations), await h.count(skillEvidence)]).toEqual([observations, evidence]);
+      expect([await h.count(memoryObservations), await h.count(userSpeakingProgress)]).toEqual([observations, evidence]);
     });
 
     it('Daily keeps planning new words while a chapter is unfinished', async () => {

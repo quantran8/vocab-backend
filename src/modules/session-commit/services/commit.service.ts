@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
-import { MEMORY_SIGNAL, SESSION_MODE, SESSION_STATUS } from '../../../common/constants/domain';
+import { MEMORY_SIGNAL, SESSION_MODE, SESSION_STATUS, SessionMode } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
-import { newId } from '../../../common/ids';
 import { Tx } from '../../../db/db';
 import { reviewResult } from '../../journey/domain/journey';
 import { MemoryDraft } from '../../memory-srs/memory-reducer';
@@ -14,13 +13,16 @@ import { lpAwards } from '../../learning-points/domain/lp-awards';
 import { nextTier, tierKey, unlockedBetween } from '../../learning-points/domain/tier';
 import { EffortRepository, EffortResult } from '../../learning-points/repositories/effort.repository';
 import { canonicalHash } from '../domain/canonical';
-import { CommitRepository, PriorEvidence, ProgressRow, SKILL_SUMMARY_MODES } from '../repositories/commit.repository';
-import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, skillChanges } from '../domain/result-summary';
-import { EvidenceRow } from '../../skill-verification/skill-evidence';
-import { countedTasks, evaluateBatch, EvaluatedTask, evidenceDrafts, EvidenceRowDraft, LearnStepRow, memoryDrafts, sessionResult, TargetRow } from '../domain/commit-evaluator';
+import { CommitRepository, ProgressRow, SpeakingRow } from '../repositories/commit.repository';
+import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, SpeakingOutcome, speakingSummary } from '../domain/result-summary';
+import { applySpeaking } from '../../speaking/speaking-progress';
+import { countedTasks, evaluateBatch, EvaluatedTask, LearnStepRow, memoryDrafts, sessionResult, speakingResults, TargetRow } from '../domain/commit-evaluator';
 
 // A word marked known with no check has no recall to judge; only a miss in a shared task undoes it.
 const SLIP_SIGNALS: string[] = [MEMORY_SIGNAL.FAILED_RECALL, MEMORY_SIGNAL.FAILED_RECOGNITION, MEMORY_SIGNAL.ASSISTED_RECALL];
+
+/** Modes whose results screen shows practice groups and the need-practice count. */
+const PRACTICE_MODES: SessionMode[] = [SESSION_MODE.RANDOM_PRACTICE, SESSION_MODE.WEAK_WORDS_PRACTICE];
 
 @Injectable()
 export class CommitService {
@@ -85,10 +87,10 @@ export class CommitService {
 
     const newStates = this.applySrs(memory, newMeaningIds, known, declared, progress, now);
     const learnedHere = new Set(newMeaningIds);
-    const drafts = evidenceDrafts(counted, targets);
+    const speaking = this.speakingProgress(speakingResults(counted, targets, session.receipts), session.speaking, now);
     const results = this.resultSummary({
-      mode: session.mode, sessionId, now, tasks, targets, steps, counted, drafts, memory, known, progress, newStates, learnedHere,
-      labels: new Labels(session.labels), evidence: session.evidence,
+      mode: session.mode, now, tasks, targets, steps, counted, memory, known, progress, newStates, learnedHere,
+      labels: new Labels(session.labels), speaking: speaking.outcomes,
     });
     const summary = {
       newWordGoalSlots: steps.length,
@@ -104,52 +106,66 @@ export class CommitService {
     const response = { sessionId, status: SESSION_STATUS.COMMITTED, committedAt: now.toISOString(), summary, ...this.effortResponse(effort, now) };
     const viaTopics = new Map(steps.map((s) => [s.meaningId, s.viaTopicId ?? null]));
     const withScopeEvents = session.mode === SESSION_MODE.DAILY && steps.length > 0;
-    const withNeedPractice = SKILL_SUMMARY_MODES.includes(session.mode);
+    const withNeedPractice = PRACTICE_MODES.includes(session.mode);
 
     const stored = await this.write(tx, {
-      userId, sessionId, now, requestHash, response, evaluated, drafts, memory, newStates, newMeaningIds, viaTopics, targets, receiptMap,
+      userId, sessionId, now, requestHash, response, evaluated, speaking: speaking.rows, memory, newStates, newMeaningIds, viaTopics, targets, receiptMap,
       withScopeEvents, withNeedPractice, stats: results.stats,
     });
-    const settled = withNeedPractice ? await this.repository.settleNeedPractice(tx, sessionId, userId) : stored;
+    const settled = withNeedPractice ? await this.repository.settleNeedPractice(tx, sessionId, userId, now) : stored;
     await this.repository.settleBacklog(tx, userId, now);
     return settled;
   }
 
+  private speakingProgress(results: ReturnType<typeof speakingResults>, before: Map<string, SpeakingRow>, now: Date) {
+    const outcomes: SpeakingOutcome[] = [];
+    const rows: SpeakingRow[] = [];
+    for (const result of results) {
+      const { next, change } = applySpeaking(before.get(result.pronunciationId) ?? null, result, now);
+      outcomes.push({ result, status: next.status, change });
+      rows.push({ ...next, pronunciationId: result.pronunciationId });
+    }
+    return { outcomes, rows };
+  }
+
   /** The results screen's groups (spec: Session Result Statistics). Every block is null outside its modes. */
   private resultSummary(input: {
-    mode: string; sessionId: string; now: Date;
+    mode: SessionMode; now: Date;
     tasks: { id: string; ordinal: number }[]; targets: TargetRow[]; steps: LearnStepRow[];
-    counted: EvaluatedTask[]; drafts: EvidenceRowDraft[]; memory: MemoryDraft[]; known: Set<string>;
+    counted: EvaluatedTask[]; memory: MemoryDraft[]; known: Set<string>;
     progress: Map<string, ProgressRow>; newStates: Map<string, SrsState>; learnedHere: Set<string>;
-    labels: Labels; evidence: PriorEvidence[];
+    labels: Labels; speaking: SpeakingOutcome[];
   }) {
-    const { mode, sessionId, now, tasks, targets, steps, counted, drafts, memory, known, progress, newStates, learnedHere, labels } = input;
+    const { mode, now, tasks, targets, steps, counted, memory, known, progress, newStates, learnedHere, labels } = input;
     const order = planOrder(tasks, targets, steps);
-    const none = { review: null, newWords: null, practice: null, skillChanges: null, needPractice: null, countedAsReview: null };
+    const sessionMeanings = new Set(targets.flatMap((t) => t.meaningId ?? []));
+    const speaking = speakingSummary({ outcomes: input.speaking, labels, sessionMeanings });
+    const speakingStats = speaking && { speakingTotal: speaking.total, speakingPassed: speaking.passed };
+    // skillChanges stays null for one release so older clients still find the key.
+    const none = { review: null, newWords: null, practice: null, speaking, skillChanges: null, needPractice: null, countedAsReview: null };
 
     if (mode === SESSION_MODE.DAILY) {
       const review = reviewSummary({ memory, progress, learnedHere, newStates, counted, targets, labels, order });
       const newWords = newWordSummary({ steps, counted, targets, known, newStates, labels });
       return {
         summary: { ...none, review, newWords },
-        stats: { reviewTotal: review.total, reviewSolid: review.groups.solid.length, newTotal: newWords.total, newSmooth: newWords.groups.smooth.length },
+        stats: {
+          reviewTotal: review.total, reviewSolid: review.groups.solid.length, newTotal: newWords.total, newSmooth: newWords.groups.smooth.length,
+          ...speakingStats,
+        },
       };
     }
-    if (!SKILL_SUMMARY_MODES.includes(mode as never)) return { summary: none, stats: null };
+    if (!PRACTICE_MODES.includes(mode)) return { summary: none, stats: speakingStats || null };
 
-    const before = Map.groupBy(input.evidence, (e) => `${e.skill}:${e.meaningId ?? e.pronunciationId}`) as Map<string, EvidenceRow[]>;
-    const sessionMeanings = new Set(targets.flatMap((t) => t.meaningId ?? []));
-    const practice = practiceSummary({ counted, drafts, before, labels, sessionMeanings });
-    const changes = skillChanges({ drafts, before, sessionId, now, labels, sessionMeanings });
+    const practice = practiceSummary({ counted, targets, labels, sessionMeanings });
     return {
       summary: {
         ...none,
         practice,
-        skillChanges: changes,
         needPractice: { before: null, after: null },
         countedAsReview: countedAsReview({ memory, progress, newStates, now, labels, order }),
       },
-      stats: { practiceTotal: practice.total, practiceClean: practice.groups.clean.length, leveledUp: changes.leveledUp.length, needPracticeAfter: null },
+      stats: { practiceTotal: practice.total, practiceClean: practice.groups.clean.length, needPracticeAfter: null, ...speakingStats },
     };
   }
 
@@ -197,21 +213,20 @@ export class CommitService {
 
   private async write(tx: Tx, input: {
     userId: string; sessionId: string; now: Date; requestHash: string; response: object;
-    evaluated: EvaluatedTask[]; drafts: EvidenceRowDraft[]; memory: MemoryDraft[]; newStates: Map<string, SrsState>; newMeaningIds: string[];
+    evaluated: EvaluatedTask[]; speaking: SpeakingRow[]; memory: MemoryDraft[]; newStates: Map<string, SrsState>; newMeaningIds: string[];
     viaTopics: Map<string, string | null>; withScopeEvents: boolean; withNeedPractice: boolean; stats: object | null;
     targets: TargetRow[]; receiptMap: Map<string, { assessedAt: Date; accuracyScore: number | null }>;
   }) {
-    const { userId, sessionId, now, requestHash, response, evaluated, drafts, memory, newStates, newMeaningIds, viaTopics, withScopeEvents, withNeedPractice, targets, receiptMap, stats } = input;
+    const { userId, sessionId, now, requestHash, response, evaluated, speaking, memory, newStates, newMeaningIds, viaTopics, withScopeEvents, withNeedPractice, targets, receiptMap, stats } = input;
     const learnedHere = new Set(newMeaningIds);
     const data = JSON.stringify({
       rawEvents: evaluated.map((e) => ({ taskId: e.task.id, events: e.rawEvents })),
       // `summary` keeps the headline counts after raw_events are purged, so sessions can be compared later.
       result: { ...sessionResult(evaluated, targets, receiptMap), ...(stats && { summary: stats }) },
-      evidence: drafts.map((d) => ({
-        id: newId(), task_id: d.taskId, target_ordinal: d.targetOrdinal, skill: d.skill, reasons: d.reasons,
-        validity: d.validity, passed: d.passed, meaning_id: d.meaningId, pronunciation_id: d.pronunciationId,
-        assessed_at: (d.receiptId && receiptMap.get(d.receiptId)?.assessedAt) || now,
-        assessment_receipt_id: d.receiptId ?? null, evaluator_version: d.evaluatorVersion,
+      speaking: speaking.map((r) => ({
+        pronunciation_id: r.pronunciationId, status: r.status, device_sessions: r.deviceSessions, device_streak: r.deviceStreak,
+        scored_sessions: r.scoredSessions, score_avg: r.scoreAvg, last_score: r.lastScore, best_score: r.bestScore,
+        last_passed: r.lastPassed, last_assessed_at: r.lastAssessedAt, fluent_at: r.fluentAt,
       })),
       memory: memory.map((m) => ({
         meaning_id: m.meaningId, signal: m.signal, is_primed: m.isPrimed, source_task_ids: m.sourceTaskIds, grade: m.grade, evidence_weight: m.weight,

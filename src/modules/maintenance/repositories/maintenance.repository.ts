@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lte, or } from 'drizzle-orm';
 import { SESSION_STATUS } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
 import { deletedIdentities, learningSessions, speechAssessmentReceipts } from '../../../db/schema';
@@ -19,13 +19,13 @@ export class MaintenanceRepository {
   async purge(now: Date, cutoff: Date) {
     const expiredBeforeCutoff = and(eq(learningSessions.status, SESSION_STATUS.EXPIRED), lte(learningSessions.expiresAt, cutoff));
     const purged = this.db.select({ id: learningSessions.id }).from(learningSessions).where(expiredBeforeCutoff);
-    // Consumed receipts stay: skill_evidence references them.
     await this.db.transaction(async (tx) => {
+      // Nothing references a receipt once its commit is written, consumed or not.
       await tx.delete(speechAssessmentReceipts).where(or(
-        and(isNull(speechAssessmentReceipts.consumedAt), lte(speechAssessmentReceipts.expiresAt, now)),
+        lte(speechAssessmentReceipts.expiresAt, now),
         inArray(speechAssessmentReceipts.sessionId, purged),
       ));
-      // result, memory_observations and skill_evidence stay: they are the learning history.
+      // result, memory_observations and user_speaking_progress stay: they are the learning history.
       await tx
         .update(learningSessions)
         .set({ plan: null, rawEvents: null })

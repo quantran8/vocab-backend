@@ -1,10 +1,10 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import { EVIDENCE_REASON, FSRS_GRADE, MEMORY_SIGNAL, SKILL, TEMPLATE, VALIDITY } from '../src/common/constants/domain';
+import { FSRS_GRADE, MEMORY_SIGNAL, TEMPLATE, VALIDITY } from '../src/common/constants/domain';
 import { ApiError } from '../src/common/http/api-error';
 import { POLICY } from '../src/config/policy';
 import {
   appUsers, checkpointChallengeMeanings, checkpointChallenges, learningSessions, meaningLocalizations, meaningPublications, memoryObservations, practiceItems,
-  skillEvidence, speechAssessmentReceipts, topicMeanings, topics, userMeaningProgress, userSettings, words as wordsTable,
+  speechAssessmentReceipts, topicMeanings, topics, userMeaningProgress, userSettings, userSpeakingProgress, words as wordsTable,
 } from '../src/db/schema';
 import { AdminService } from '../src/modules/admin/services/admin.service';
 import { PublicationService } from '../src/modules/admin/services/publication.service';
@@ -283,7 +283,8 @@ describe('Vocab Flow API', () => {
       expect(summary.newWords.groups.smooth).toHaveLength(1);
       const recording = tasksOf(p).find((t) => t.template === TEMPLATE.RECORDING);
       expect((await h.first(memoryObservations)).sourceTaskIds).not.toContain(recording.id);
-      expect(await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING))).toMatchObject({ passed: false });
+      // The word was just modelled on the Learn card, so the recording is not a speaking result either.
+      expect(await h.count(userSpeakingProgress)).toBe(0);
     });
 
     it('audioPlayback=false never issues audio', async () => {
@@ -341,7 +342,7 @@ describe('Vocab Flow API', () => {
       await plan();
       expect(await progressRows()).toEqual([]);
       expect(await h.count(memoryObservations)).toBe(0);
-      expect(await h.count(skillEvidence)).toBe(0);
+      expect(await h.count(userSpeakingProgress)).toBe(0);
     });
 
     it('C10 rejects a partial batch with no partial progress', async () => {
@@ -434,8 +435,7 @@ describe('Vocab Flow API', () => {
       await onboard(words(4));
       await learnOne();
       expect(await h.count(userMeaningProgress)).toBe(1);
-      const speaking = await h.count(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING));
-      expect(speaking).toBe(0);
+      expect(await h.count(userSpeakingProgress)).toBe(0);
     });
 
     it('C15 first recall wrong still learns, with the failed schedule', async () => {
@@ -494,7 +494,7 @@ describe('Vocab Flow API', () => {
         .attach('audio', Buffer.from('RIFF'), { filename: 'a.wav', contentType: 'audio/wav' });
     const recordings = (p: object) => tasksOf(p).filter((t) => t.template === TEMPLATE.RECORDING);
 
-    it('C31 assessed receipts become evidence only at Finish and are consumed', async () => {
+    it('C31 assessed receipts are read only at Finish and are consumed', async () => {
       await onboard(words(4));
       await speakInDaily();
       await goal(1);
@@ -502,11 +502,9 @@ describe('Vocab Flow API', () => {
       const [task] = recordings(p);
       const { body } = await assess(p.sessionId, task.id).expect(200);
       expect(body).toMatchObject({ validity: 'valid', passed: true });
-      expect(await h.count(skillEvidence)).toBe(0);
       const receipts = new Map([[task.id, body.assessmentReceiptId]]);
-      await commit(p, answers(p, { receipts })).expect(200);
-      const evidence = await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING));
-      expect(evidence).toMatchObject({ passed: true, reasons: [EVIDENCE_REASON.NEW_PRACTICE], assessmentReceiptId: body.assessmentReceiptId });
+      const { summary } = (await commit(p, answers(p, { receipts })).expect(200)).body;
+      expect(summary.newWords.groups.smooth).toHaveLength(1);
       expect((await h.first(speechAssessmentReceipts)).consumedAt).not.toBeNull();
     });
 
@@ -519,8 +517,8 @@ describe('Vocab Flow API', () => {
       h.speech.next = { validity: VALIDITY.INVALID, accuracyScore: null, meta: {} };
       const { body } = await assess(p.sessionId, task.id).expect(200);
       expect(body).toMatchObject({ validity: 'invalid', passed: null });
-      await commit(p, answers(p, { receipts: new Map([[task.id, body.assessmentReceiptId]]) })).expect(200);
-      expect(await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING))).toMatchObject({ validity: 'invalid', passed: null });
+      const { summary } = (await commit(p, answers(p, { receipts: new Map([[task.id, body.assessmentReceiptId]]) })).expect(200)).body;
+      expect(summary.newWords.groups.smooth).toHaveLength(1);
     });
 
     it('C61 provider outage is retryable 503, not a result', async () => {
@@ -551,7 +549,7 @@ describe('Vocab Flow API', () => {
       expect(await h.count(speechAssessmentReceipts)).toBe(allowed);
     });
 
-    it('transcribed takes are scored at Finish as Speaking evidence with no receipt', async () => {
+    it('transcribed takes are scored at Finish with no receipt', async () => {
       await onboard(words(4));
       await speakInDaily();
       await goal(1);
@@ -560,8 +558,8 @@ describe('Vocab Flow API', () => {
       const [reference] = task.evaluation.acceptedResponses;
       const takes = [{ seq: 1, action: 'transcribed', transcript: 'zzz' }, { seq: 2, action: 'transcribed', transcript: reference }];
       await commit(p, answers(p, { override: (t) => (t.id === task.id ? takes : undefined) })).expect(200);
-      const evidence = await h.first(skillEvidence, eq(skillEvidence.skill, SKILL.SPEAKING));
-      expect(evidence).toMatchObject({ passed: true, reasons: [EVIDENCE_REASON.NEW_PRACTICE], assessmentReceiptId: null });
+      const stored = (await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).result as { tasks: { taskId: string; targets: { outcome: string }[] }[] };
+      expect(stored.tasks.find((t) => t.taskId === task.id)!.targets[0].outcome).toBe('assessed_passed');
       expect(await h.count(speechAssessmentReceipts)).toBe(0);
     });
 
@@ -797,7 +795,7 @@ describe('Vocab Flow API', () => {
       const p = await plan();
       await commit(p, answers(p, { override: failAnswers })).expect(200);
       expect((await plan('weak_words_practice')).steps).toEqual([]);
-      for (let i = 0; i < 2; i += 1) {
+      for (let i = 0; i < POLICY.weak.minAttempts; i += 1) {
         const practice = await plan('random_practice');
         await commit(practice, answers(practice, { override: failAnswers })).expect(200);
       }
@@ -807,45 +805,36 @@ describe('Vocab Flow API', () => {
       expect((await plan('weak_words_practice')).steps).toEqual([]);
     });
 
-    it('C22 C51 a clean pass demonstrates a skill and a later failure flags it', async () => {
+    it('C22 C51 word detail shows memory and speaking, and repeated recent misses flag it', async () => {
       await onboard(words(4));
       const wordIds = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id))).map((w) => w.id);
       await learnOne();
       h.planner.setRng(() => 0.99);
-      const reviewAndGet = async () => {
+      const fresh = (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
+      expect(fresh).not.toHaveProperty('fullyVerified');
+      expect(fresh.meanings[0]).toMatchObject({
+        memory: { stabilityDays: expect.any(Number), retrievability: expect.any(Number) },
+        speaking: { status: 'not_tried', lastScore: null, bestScore: null, lastAssessedAt: null },
+        skills: null,
+        needsPractice: false,
+      });
+
+      for (let i = 0; i < POLICY.weak.minAttempts; i += 1) {
         h.clock.advance(30);
-        const p = await plan('random_practice');
-        await commit(p, answers(p)).expect(200);
-        return (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
-      };
-      const statuses = (word: { meanings: { skills: Record<string, { status: string } | undefined> }[] }) =>
-        Object.values(word.meanings[0].skills).map((s) => s?.status);
-
-      await reviewAndGet();
-      const word = await reviewAndGet();
-      expect(statuses(word)).toContain('demonstrated');
-      expect(word).not.toHaveProperty('fullyVerified');
-      expect(word.meanings[0].memory).toMatchObject({ stabilityDays: expect.any(Number), retrievability: expect.any(Number) });
-
-      h.clock.advance(30);
-      const failing = await plan('random_practice');
-      await commit(failing, answers(failing, { override: (t) => (t.options || t.tiles || t.template === TEMPLATE.TYPING ? wrongEvents(t) : undefined) })).expect(200);
-      const revoked = (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
-      expect(revoked.meanings[0].skills.spelling.issue).toBe('failed');
-      expect(revoked.needsPractice).toBe(true);
-      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+        const failing = await plan('random_practice');
+        await commit(failing, answers(failing, { override: (t) => (t.options || t.tiles || t.template === TEMPLATE.TYPING ? wrongEvents(t) : undefined) })).expect(200);
+      }
+      const flagged = (await api('get', `/v1/words/${wordIds[0]}`).expect(200)).body;
+      expect(flagged.meanings[0].needsPractice).toBe(true);
+      expect(flagged.needsPractice).toBe(true);
+      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1, fluentWords: 0 });
     });
 
-    describe('memory grading after demonstrated', () => {
+    describe('memory grading after practice', () => {
       type Task = { template: string; options?: unknown; tiles?: unknown };
       const graded = (t: Task) => Boolean(t.options || t.tiles || t.template === TEMPLATE.TYPING);
-      const statuses = (word: { meanings: { skills: Record<string, { status: string } | undefined> }[] }) =>
-        Object.values(word.meanings[0].skills).map((s) => s?.status);
 
-      const issues = (word: { meanings: { skills: Record<string, { issue: string | null } | undefined> }[] }) =>
-        Object.values(word.meanings[0].skills).flatMap((s) => (s?.issue ? [s.issue] : []));
-
-      async function demonstratedWord() {
+      async function practisedWord() {
         await onboard(words(4));
         const wordId = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id)))[0].id;
         await learnOne();
@@ -858,38 +847,29 @@ describe('Vocab Flow API', () => {
         };
         await review();
         const word = await review();
-        expect(statuses(word)).toContain('demonstrated');
         expect(word.needsPractice).toBe(false);
         return review;
       }
 
       it('show answer flags the word', async () => {
-        const review = await demonstratedWord();
+        const review = await practisedWord();
         const word = await review((t) => (graded(t) ? [{ seq: 1, action: 'reveal' }] : undefined));
         expect(word.needsPractice).toBe(true);
-        expect(issues(word)).toContain('failed');
-        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1, fluentWords: 0 });
       });
 
-      it('a hint before a correct answer is an assisted issue, and only a later unaided answer clears the flag', async () => {
-        const review = await demonstratedWord();
+      it('a hint before a correct answer flags the word, and the next clean answer clears it at once', async () => {
+        const review = await practisedWord();
         const hinted = (t: Task) => (graded(t)
           ? [{ seq: 1, action: 'hint' }, ...correctEvents(t).map((e) => ({ ...e, seq: e.seq + 1 }))]
           : undefined);
         const word = await review(hinted);
-        expect(statuses(word)).toContain('demonstrated');
-        expect(issues(word)).toContain('assisted');
-        expect(issues(word)).not.toContain('failed');
         expect(word.needsPractice).toBe(true);
-        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 1 });
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(1);
 
         h.clock.advance(1);
         const soon = await plan('random_practice');
         await commit(soon, answers(soon)).expect(200);
-        expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(1);
-
-        const recovered = await review();
-        expect(issues(recovered)).toEqual([]);
         expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(0);
       });
 
@@ -901,11 +881,10 @@ describe('Vocab Flow API', () => {
         await commit(p, answers(p, { override: (t) => (graded(t) ? wrongEvents(t) : undefined) })).expect(200);
         const word = (await api('get', `/v1/words/${wordId}`).expect(200)).body;
         expect(word.needsPractice).toBe(false);
-        expect(issues(word)).toEqual([]);
-        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 0 });
+        expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 1, needPracticeWords: 0, fluentWords: 0 });
       });
 
-      it('a second-try recall stores the retried reason', async () => {
+      it('a second-try recall is an assisted recall', async () => {
         await onboard(words(4));
         await goal(1);
         h.planner.setRng(() => 0);
@@ -917,40 +896,22 @@ describe('Vocab Flow API', () => {
           return [...wrong, ...correctEvents(t).map((e, i) => ({ ...e, seq: wrong.length + i + 1 }))];
         };
         await commit(p, answers(p, { override: retry })).expect(200);
-        const rows = await h.db.select({ reasons: skillEvidence.reasons }).from(skillEvidence);
-        expect(rows.some((r) => r.reasons.includes(EVIDENCE_REASON.RETRIED))).toBe(true);
         expect((await h.first(memoryObservations)).signal).toBe(MEMORY_SIGNAL.ASSISTED_RECALL);
-      });
-
-      it('Weak practices only the skill with the issue, and a clean pass there clears it', async () => {
-        const review = await demonstratedWord();
-        const word = await review((t) => (graded(t) ? wrongEvents(t) : undefined));
-        const flagged = Object.entries(word.meanings[0].skills as Record<string, { issue: string | null }>)
-          .filter(([, s]) => s?.issue).map(([skill]) => skill);
-        expect(flagged.length).toBeGreaterThan(0);
-
-        h.clock.advance(30);
-        const p = await plan('weak_words_practice');
-        await commit(p, answers(p)).expect(200);
-        const rows = await h.db.select({ skill: skillEvidence.skill, reasons: skillEvidence.reasons })
-          .from(skillEvidence).where(eq(skillEvidence.sessionId, p.sessionId));
-        expect(rows.length).toBeGreaterThan(0);
-        for (const row of rows) {
-          expect(flagged).toContain(row.skill);
-          expect(row.reasons).toEqual([]);
-        }
-        const wordId = word.wordId;
-        const after = (await api('get', `/v1/words/${wordId}`).expect(200)).body;
-        for (const skill of new Set(rows.map((r) => r.skill))) expect(after.meanings[0].skills[skill].issue).toBeNull();
       });
 
       it('Weak rotates instead of repeating the same failing words', async () => {
         await onboard(words(14));
         await learnOne(12);
-        // Keeps shuffle stable, so two rounds of 10 cover all 12 Meanings.
+        // Keeps shuffle stable, so the rounds cover all 12 Meanings.
         h.planner.setRng(() => 0.99);
         const fail = (t: Task) => (graded(t) ? wrongEvents(t) : undefined);
-        for (let i = 0; i < 2; i += 1) {
+        const fewestObservations = async () => {
+          const rows = await h.db.select({ id: memoryObservations.meaningId }).from(memoryObservations);
+          const counts = Map.groupBy(rows, (r) => r.id);
+          return counts.size < 12 ? 0 : Math.min(...[...counts.values()].map((r) => r.length));
+        };
+        // The learning session's observations do not count, hence one more.
+        while ((await fewestObservations()) < POLICY.weak.minAttempts + 1) {
           h.clock.advance(1);
           const practice = await plan('random_practice');
           await commit(practice, answers(practice, { override: fail })).expect(200);
@@ -984,7 +945,7 @@ describe('Vocab Flow API', () => {
       expect(first[0].meanings[0].skills).toBeUndefined();
       expect(first[0].meaningCount).toBe(1);
       expect(first[0].needsPractice).toBeUndefined();
-      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 3, needPracticeWords: 0 });
+      expect((await api('get', '/v1/me/words/stats').expect(200)).body).toEqual({ learnedWords: 3, needPracticeWords: 0, fluentWords: 0 });
 
       const search = async (q: string) =>
         (await api('get', `/v1/me/words?q=${encodeURIComponent(q)}`).expect(200)).body.words as { wordId: string }[];
@@ -1150,10 +1111,18 @@ describe('Vocab Flow API', () => {
       h.clock.advance(24 * 5);
       const practice = await plan('random_practice');
       const practiced = await h.countQueries(() => commit(practice, answers(practice)).expect(200));
+      const spoken = await h.countQueries(() => plan('speaking_practice'));
+      const said = (t: { template: string; evaluation: { acceptedResponses: string[] } }) =>
+        (t.template === TEMPLATE.RECORDING ? [{ seq: 1, action: 'transcribed', transcript: t.evaluation.acceptedResponses[0] }] : undefined);
+      const speakingCommit = await h.countQueries(() => commit(spoken.result, answers(spoken.result, { override: said })).expect(200));
+      const wordId = (await h.db.select({ id: wordsTable.id }).from(wordsTable).orderBy(asc(wordsTable.id)))[0].id;
+      const detail = await h.countQueries(() => api('get', `/v1/words/${wordId}`).expect(200));
+      const stats = await h.countQueries(() => api('get', '/v1/me/words/stats').expect(200));
       return {
         plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries,
         ranking: ranking.queries, tier: tier.queries, top: top.queries, around: around.queries, me: me.queries,
         reviewCommit: reviewed.queries, practiceCommit: practiced.queries,
+        speakingPlan: spoken.queries, speakingCommit: speakingCommit.queries, wordDetail: detail.queries, wordStats: stats.queries,
       };
     };
 

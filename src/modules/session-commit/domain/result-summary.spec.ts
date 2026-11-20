@@ -1,12 +1,11 @@
 import {
-  ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, EVIDENCE_REASON, EvidenceReason, FSRS_GRADE, FsrsGrade, MEMORY_SIGNAL, MemorySignal, OUTCOME, Outcome,
-  SKILL, Skill, TASK_PHASE, TaskPhase, VALIDITY,
+  ASSESSMENT_INTENT, AssessmentIntent, DELIVERY_MODE, FSRS_GRADE, FsrsGrade, MEMORY_SIGNAL, MemorySignal, OUTCOME, Outcome,
+  Skill, SPEAKING_CHANGE, SPEAKING_METHOD, SPEAKING_STATUS, TASK_PHASE, TaskPhase,
 } from '../../../common/constants/domain';
 import { addHours } from '../../../common/constants/time';
 import { SrsState } from '../../memory-srs/fsrs';
-import { EvidenceRow } from '../../skill-verification/skill-evidence';
-import { EvaluatedTask, EvidenceRowDraft, LearnStepRow, TargetRow } from './commit-evaluator';
-import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, skillChanges } from './result-summary';
+import { EvaluatedTask, LearnStepRow, TargetRow } from './commit-evaluator';
+import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, speakingSummary } from './result-summary';
 
 const NOW = new Date('2026-11-13T12:00:00Z');
 const labels = new Labels(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({
@@ -104,14 +103,17 @@ describe('reviewSummary', () => {
   });
 });
 
-type Spec = { id: string; ordinal: number; phase?: TaskPhase; intent?: AssessmentIntent; audio?: boolean; outcome: Outcome; hints?: number; attempts?: number; target?: Partial<TargetRow> };
+type Spec = {
+  id: string; ordinal: number; phase?: TaskPhase; intent?: AssessmentIntent; audio?: boolean; primed?: boolean;
+  outcome: Outcome; hints?: number; attempts?: number; target?: Partial<TargetRow>;
+};
 
 function tasks(specs: Spec[]) {
   const evaluated = specs.map((s): EvaluatedTask => ({
     task: {
       id: s.id, ordinal: s.ordinal, phase: s.phase ?? TASK_PHASE.NEW_PRACTICE, template: 'typing', variant: null, curatedItemId: null,
       clientPayload: {}, evaluatorVersion: 'v1',
-      serverEvaluation: { intent: s.intent ?? ASSESSMENT_INTENT.MEANING_RECALL, promptIsTargetAudio: s.audio ?? false, isPrimed: false, qualityQualified: true },
+      serverEvaluation: { intent: s.intent ?? ASSESSMENT_INTENT.MEANING_RECALL, promptIsTargetAudio: s.audio ?? false, isPrimed: s.primed ?? false, qualityQualified: true },
     },
     rawEvents: [],
     deliveryMode: DELIVERY_MODE.NONE,
@@ -186,70 +188,63 @@ describe('newWordSummary', () => {
   });
 });
 
-const evidence = (taskId: string, skill: Skill, passed: boolean | null, reasons: EvidenceReason[] = [], meaningId = 'a'): EvidenceRowDraft => ({
-  taskId, targetOrdinal: 0, evaluatorVersion: 'v1', skill, reasons, validity: passed === null ? VALIDITY.INVALID : VALIDITY.VALID, passed,
-  meaningId: skill === SKILL.SPELLING ? meaningId : null,
-  pronunciationId: skill === SKILL.SPELLING ? null : `p-${meaningId}`,
-});
-
 describe('practiceSummary', () => {
-  it('sorts answers into clean, helped and missed, and counts what could not judge a skill', () => {
-    const drafts = [
-      evidence('1', SKILL.SPELLING, true),
-      evidence('2', SKILL.SPELLING, true, [EVIDENCE_REASON.HINTED], 'b'),
-      evidence('3', SKILL.SPELLING, true, [EVIDENCE_REASON.PRIMED], 'c'),
-      evidence('4', SKILL.SPELLING, false, [EVIDENCE_REASON.RETRIED], 'd'),
-      evidence('5', SKILL.SPELLING, false, [], 'e'),
-      evidence('6', SKILL.SPELLING, false, [EVIDENCE_REASON.REVEALED], 'f'),
-      evidence('7', SKILL.SPELLING, true, [EVIDENCE_REASON.WEAK_TEMPLATE]),
-      evidence('8', SKILL.SPEAKING, null, [EVIDENCE_REASON.INVALID_RECORDING]),
-    ];
-    const { evaluated } = tasks([
-      ...['1', '2', '3', '4', '5', '6', '7', '8'].map((id, i) => ({ id, ordinal: i, outcome: OUTCOME.CORRECT })),
-      { id: '9', ordinal: 9, intent: ASSESSMENT_INTENT.PRONUNCIATION, outcome: OUTCOME.UNAVAILABLE },
+  it('sorts each answered target into clean, helped and missed, and counts what says nothing about the learner', () => {
+    const recording = { intent: ASSESSMENT_INTENT.PRONUNCIATION };
+    const { evaluated, targets } = tasks([
+      { id: '1', ordinal: 1, outcome: OUTCOME.CORRECT, target: { meaningId: 'a' } },
+      { id: '2', ordinal: 2, outcome: OUTCOME.CORRECT, hints: 1, target: { meaningId: 'b' } },
+      { id: '3', ordinal: 3, outcome: OUTCOME.CORRECT, primed: true, target: { meaningId: 'c' } },
+      { id: '4', ordinal: 4, outcome: OUTCOME.CORRECTED_AFTER_RETRY, attempts: 2, target: { meaningId: 'd' } },
+      { id: '5', ordinal: 5, outcome: OUTCOME.INCORRECT, target: { meaningId: 'e' } },
+      { id: '6', ordinal: 6, outcome: OUTCOME.REVEALED, target: { meaningId: 'f' } },
+      { id: '7', ordinal: 7, ...recording, outcome: OUTCOME.ASSESSED_PASSED, target: { meaningId: null, pronunciationId: 'p-a' } },
+      { id: '8', ordinal: 8, ...recording, outcome: OUTCOME.ASSESSED_FAILED, target: { meaningId: null, pronunciationId: 'p-b' } },
+      { id: '9', ordinal: 9, ...recording, outcome: OUTCOME.INVALID, target: { meaningId: null, pronunciationId: 'p-c' } },
+      { id: '10', ordinal: 10, ...recording, outcome: OUTCOME.UNAVAILABLE, target: { meaningId: null, pronunciationId: 'p-d' } },
     ]);
-    const summary = practiceSummary({ counted: evaluated, drafts, before: new Map(), labels, sessionMeanings: new Set() });
-    expect(summary.groups.clean.map((i) => i.meaningId)).toEqual(['a']);
+    const summary = practiceSummary({ counted: evaluated, targets, labels, sessionMeanings: new Set() });
+    expect(summary.groups.clean.map((i) => [i.meaningId, i.skill])).toEqual([['a', 'spelling'], ['a', 'speaking']]);
     expect(summary.groups.helped.map((i) => i.meaningId)).toEqual(['b', 'c', 'd']);
-    expect(summary.groups.missed.map((i) => i.meaningId)).toEqual(['e', 'f']);
-    expect(summary.total).toBe(6);
-    expect(summary.excluded).toEqual({ count: 3, reasons: ['invalid_recording', 'unavailable', 'weak_template'] });
-    expect(summary.groups.clean[0]).toMatchObject({ wordId: 'w-a', lemma: 'lemma-a', skill: 'spelling', hadIssue: false });
+    expect(summary.groups.missed.map((i) => i.meaningId)).toEqual(['e', 'f', 'b']);
+    expect(summary.total).toBe(8);
+    expect(summary.excluded).toEqual({ count: 2, reasons: ['invalid_recording', 'unavailable'] });
+    expect(summary.groups.clean[0]).toEqual({ meaningId: 'a', wordId: 'w-a', lemma: 'lemma-a', gloss: 'gloss-a', skill: 'spelling' });
+  });
+
+  it('a text recognition names no skill', () => {
+    const { evaluated, targets } = tasks([{ id: '1', ordinal: 1, intent: ASSESSMENT_INTENT.MEANING_RECOGNITION, outcome: OUTCOME.CORRECT }]);
+    expect(practiceSummary({ counted: evaluated, targets, labels, sessionMeanings: new Set() }).groups.clean[0].skill).toBeNull();
   });
 });
 
-const row = (sessionId: string, hoursAgo: number, passed: boolean, reasons: EvidenceReason[] = []): EvidenceRow =>
-  ({ sessionId, passed, committedAt: addHours(NOW, -hoursAgo), reasons });
+describe('speakingSummary', () => {
+  const device = (id: string, passed: boolean) => ({ pronunciationId: `p-${id}`, method: SPEAKING_METHOD.DEVICE, passed });
 
-describe('skillChanges', () => {
-  const run = (before: EvidenceRow[], drafts: EvidenceRowDraft[]) =>
-    skillChanges({ drafts, before: new Map([['spelling:a', before]]), sessionId: 'now', now: NOW, labels, sessionMeanings: new Set() });
-  const pass = [evidence('1', SKILL.SPELLING, true)];
-  const fail = [evidence('1', SKILL.SPELLING, false)];
-
-  it('a first clean pass levels up to demonstrated', () => {
-    expect(run([], pass).leveledUp).toEqual([expect.objectContaining({ skill: 'spelling', from: 'not_verified', to: 'demonstrated' })]);
-    expect(run([row('s1', 30, true)], pass).leveledUp).toEqual([]);
+  it('is null when no recording was scored', () => {
+    expect(speakingSummary({ outcomes: [], labels, sessionMeanings: new Set() })).toBeNull();
   });
 
-  it('a clean pass before 12 h waits to confirm; after 12 h it clears the issue', () => {
-    const early = run([row('s1', 30, true), row('s2', 3, false)], pass);
-    expect(early.pendingConfirm).toEqual([expect.objectContaining({ confirmableAt: addHours(NOW, 9).toISOString() })]);
-    expect(early.cleared).toEqual([]);
-    const late = run([row('s1', 30, true), row('s2', 13, false)], pass);
-    expect(late.cleared).toHaveLength(1);
-    expect(late.pendingConfirm).toEqual([]);
-  });
-
-  it('a failure on a demonstrated skill regresses it', () => {
-    const changes = run([row('s1', 60, true), row('s2', 30, true)], fail);
-    expect(changes.regressed).toEqual([expect.objectContaining({ from: 'demonstrated', to: 'demonstrated' })]);
-    expect(changes.leveledUp).toEqual([]);
-  });
-
-  it('rows that cannot move a skill change nothing', () => {
-    const changes = run([], [evidence('1', SKILL.SPELLING, true, [EVIDENCE_REASON.WEAK_TEMPLATE])]);
-    expect(Object.values(changes).flat()).toEqual([]);
+  it('counts results and lists the words that changed status', () => {
+    const summary = speakingSummary({
+      outcomes: [
+        { result: device('a', true), status: SPEAKING_STATUS.FLUENT, change: SPEAKING_CHANGE.BECAME_FLUENT },
+        { result: device('b', false), status: SPEAKING_STATUS.PRACTICING, change: SPEAKING_CHANGE.SLIPPED },
+        { result: { pronunciationId: 'p-c', method: SPEAKING_METHOD.AZURE, passed: true, score: 91 }, status: SPEAKING_STATUS.FLUENT, change: SPEAKING_CHANGE.BECAME_FLUENT },
+        { result: device('d', true), status: SPEAKING_STATUS.PRACTICING, change: null },
+      ],
+      labels,
+      sessionMeanings: new Set(),
+    });
+    expect(summary).toEqual({
+      total: 4,
+      passed: 3,
+      becameFluent: [
+        { meaningId: 'a', wordId: 'w-a', lemma: 'lemma-a', gloss: 'gloss-a', status: 'fluent', score: null },
+        { meaningId: 'c', wordId: 'w-c', lemma: 'lemma-c', gloss: 'gloss-c', status: 'fluent', score: 91 },
+      ],
+      slipped: [{ meaningId: 'b', wordId: 'w-b', lemma: 'lemma-b', gloss: 'gloss-b', status: 'practicing', score: null }],
+    });
   });
 });
 

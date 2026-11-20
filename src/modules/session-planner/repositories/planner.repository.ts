@@ -1,21 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, exists, inArray, or, SQL, sql } from 'drizzle-orm';
-import { CEFR_LEVELS, CONTENT_STATUS, NewWordOverrideMode, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, MEMORY_SIGNAL, CHECKPOINT_STATE, SKILL, Skill } from '../../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, NewWordOverrideMode, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, CHECKPOINT_STATE, SPEAKING_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
-import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate } from '../../../db/db';
 import { practiceItemLocalizations, practiceItemTargets, checkpointChallenges, learningSessions, userMeaningOverrides } from '../../../db/schema';
 import { CuratedItem } from '../../practice-resolver/curated';
 import { DistractorView, MeaningSnapshot } from '../../practice-resolver/task.types';
 import { DECAY, FACTOR } from '../../memory-srs/fsrs';
-import { openSkillIssuesSql } from '../../skill-verification/skill-issue.sql';
+import { weakMeaningsSql } from '../../review-load/repositories/weak-scope.sql';
 import { NewWordOverride } from '../../review-load/domain/review-load';
 import { backlogSql, pendingCustomSql, remainingNewSql, reviewableSql } from '../../review-load/repositories/review-scope.sql';
 
 type SnapshotRow = { snapshot: MeaningSnapshot };
 
 export interface SourceTopic { id: string; name: string; personal: boolean }
-export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; skillGaps?: Skill[] };
+export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null };
 export type NewTarget = { snapshot: MeaningSnapshot; viaTopicId: string | null };
 
 /** Random practice source (§9); unset means every reviewable learned Meaning. */
@@ -43,18 +42,6 @@ export const CEFR_ARRAY = sql`ARRAY[${sql.join(CEFR_LEVELS.map((l) => sql`${l}`)
 const uuidList = (ids: string[]) => sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
 
 const inScope = (rows: SnapshotRow[]) => rows.map((r) => r.snapshot);
-
-const hasPronunciation = (extra = sql``) => sql`AND EXISTS (
-  SELECT 1 FROM jsonb_array_elements(p.snapshot->'pronunciations') pr
-  WHERE pr->>'accentLocale' = ${DEFAULT_ACCENT} ${extra})`;
-
-// Most catalog words have no audio; without this the oldest words could leave a Listening plan empty.
-// Only filters when every chosen skill needs a pronunciation: other skills can still use a word without one.
-function skillFilter(skills?: Skill[]) {
-  if (!skills?.length || skills.some((s) => s !== SKILL.LISTENING && s !== SKILL.SPEAKING)) return sql``;
-  if (skills.every((s) => s === SKILL.LISTENING)) return hasPronunciation(sql`AND pr->>'audioUrl' IS NOT NULL`);
-  return hasPronunciation();
-}
 
 function practiceSource(userId: string, filter?: PracticeFilter) {
   if (!filter) return reviewableSql(userId, sql`ump.meaning_id`);
@@ -121,13 +108,9 @@ export class PlannerRepository {
     // Lowest FSRS retrievability first: the word most likely forgotten by now leads the session.
     const elapsedDays = sql`GREATEST(0, extract(epoch FROM ${now}::timestamptz - COALESCE(ump.last_reviewed_at, ump.learned_at)) / 86400)`;
     const { rows } = await this.db.execute<{
-      snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null; skillGaps: Skill[];
+      snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null;
     }>(sql`
-      WITH open_issue AS (${openSkillIssuesSql(userId)})
-      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal,
-        ARRAY(SELECT DISTINCT oi.skill FROM open_issue oi
-          WHERE oi.meaning_id = ump.meaning_id
-             OR oi.pronunciation_id IN (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e)) AS "skillGaps"
+      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal
       FROM user_meaning_progress ump
       JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
@@ -152,7 +135,6 @@ export class PlannerRepository {
     return rows.map((r) => ({
       snapshot: r.snapshot,
       sourceTopic: r.topicId ? { id: r.topicId, name: r.topicName!, personal: r.personal! } : null,
-      skillGaps: r.skillGaps,
     }));
   }
 
@@ -190,13 +172,13 @@ export class PlannerRepository {
   }
 
   // A filter is an explicit choice, so paused collections apply only to the unfiltered pool (§8).
-  async randomTargets(userId: string, locale: string, limit: number, skills?: Skill[], filter?: PracticeFilter) {
+  async randomTargets(userId: string, locale: string, limit: number, filter?: PracticeFilter) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       SELECT p.snapshot
       FROM user_meaning_progress ump
       JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
-      WHERE ump.user_id = ${userId}::uuid ${skillFilter(skills)} AND ${practiceSource(userId, filter)}
+      WHERE ump.user_id = ${userId}::uuid AND ${practiceSource(userId, filter)}
       ORDER BY ump.last_reviewed_at NULLS FIRST, ump.meaning_id
       LIMIT ${limit}`)).rows);
   }
@@ -213,45 +195,40 @@ export class PlannerRepository {
     return row.ok;
   }
 
-  // Rolling window, not lifetime wrong counts (§8.3). Rotates by last practice so repeat failures cannot hold every slot.
-  async weakTargets(userId: string, locale: string, since: Date, minAttempts: number, limit: number) {
-    const { rows } = await this.db.execute<SnapshotRow & { skills: Skill[] | null }>(sql`
-      WITH learned AS (
-        SELECT ump.meaning_id, ump.last_reviewed_at, p.snapshot,
-          (SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e
-           WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) AS pronunciation_id
+  // Rolling window, not lifetime wrong counts (§8.3). Weakest first; ties go to the word practised longest ago.
+  async weakTargets(userId: string, locale: string, since: Date, limit: number) {
+    return inScope((await this.db.execute<SnapshotRow>(sql`
+      SELECT p.snapshot
+      FROM (${weakMeaningsSql(userId, since)}) w
+      JOIN user_meaning_progress ump ON ump.user_id = ${userId}::uuid AND ump.meaning_id = w.meaning_id
+      JOIN active_meaning_publications a ON a.meaning_id = w.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
+      JOIN meaning_publications p ON p.id = a.publication_id
+      ORDER BY w.weak_ratio DESC, ump.last_reviewed_at NULLS FIRST, w.meaning_id
+      LIMIT ${limit}`)).rows);
+  }
+
+  // Missed last time, then never tried, then practicing, then fluent; oldest attempt first within each.
+  async speakingTargets(userId: string, locale: string, limit: number) {
+    return inScope((await this.db.execute<SnapshotRow>(sql`
+      SELECT x.snapshot FROM (
+        SELECT DISTINCT ON (pr.id) p.snapshot, ump.meaning_id, sp.last_assessed_at,
+          CASE
+            WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} AND NOT sp.last_passed THEN 0
+            WHEN sp.status IS NULL THEN 1
+            WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} THEN 2
+            ELSE 3
+          END AS rank
         FROM user_meaning_progress ump
         JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
         JOIN meaning_publications p ON p.id = a.publication_id
-        WHERE ump.user_id = ${userId}::uuid AND ${reviewableSql(userId, sql`ump.meaning_id`)}
-      ), open_issue AS (${openSkillIssuesSql(userId, since)}
-      ), attempts AS (
-        SELECT o.meaning_id, count(*) AS total,
-               count(*) FILTER (WHERE o.signal NOT IN (${MEMORY_SIGNAL.UNAIDED_RECALL}, ${MEMORY_SIGNAL.RECOGNITION_SUCCESS})) AS weak
-        FROM memory_observations o
-        JOIN user_meaning_progress ump ON ump.user_id = o.user_id AND ump.meaning_id = o.meaning_id
-        WHERE o.user_id = ${userId}::uuid AND o.observed_at >= ${since}::timestamptz
-          AND o.session_id IS DISTINCT FROM ump.learned_session_id
-        GROUP BY o.meaning_id
-      ), candidates AS (
-        SELECT l.snapshot, l.meaning_id, l.pronunciation_id, l.last_reviewed_at, i.skills
-        FROM learned l
-        LEFT JOIN attempts x ON x.meaning_id = l.meaning_id
         CROSS JOIN LATERAL (
-          SELECT array_agg(DISTINCT e.skill::text) AS skills FROM open_issue e
-          WHERE e.meaning_id = l.meaning_id OR e.pronunciation_id = l.pronunciation_id) i
-        WHERE i.skills IS NOT NULL OR (x.weak > 0 AND x.total >= ${minAttempts})
-        ORDER BY i.skills IS NOT NULL DESC, COALESCE(x.weak::numeric / x.total, 0) DESC, l.meaning_id
-        LIMIT ${limit * POLICY.review.candidateMultiplier}
-      )
-      SELECT c.snapshot, c.skills
-      FROM candidates c
-      ORDER BY GREATEST(c.last_reviewed_at, (
-        SELECT max(e.committed_at) FROM skill_evidence e
-        WHERE e.user_id = ${userId}::uuid AND (e.meaning_id = c.meaning_id OR e.pronunciation_id = c.pronunciation_id)
-      )) NULLS FIRST, c.meaning_id
-      LIMIT ${limit}`);
-    return rows;
+          SELECT (e->>'id')::uuid AS id FROM jsonb_array_elements(p.snapshot->'pronunciations') e
+          WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) pr
+        LEFT JOIN user_speaking_progress sp ON sp.user_id = ump.user_id AND sp.pronunciation_id = pr.id
+        WHERE ump.user_id = ${userId}::uuid AND ${reviewableSql(userId, sql`ump.meaning_id`)}
+        ORDER BY pr.id, ump.meaning_id) x
+      ORDER BY x.rank, x.last_assessed_at NULLS FIRST, x.meaning_id
+      LIMIT ${limit}`)).rows);
   }
 
   async oldestChallenge(userId: string, challengeId?: string) {

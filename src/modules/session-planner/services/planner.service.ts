@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { Clock } from '../../../common/clock';
-import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION, SKILL, Skill, SKILLS, TASK_PHASE, WithheldReason } from '../../../common/constants/domain';
-import { addHours, HOURS_PER_DAY } from '../../../common/constants/time';
+import { DEFAULT_ACCENT, EVALUATOR_VERSION, PLAN_VERSION, SESSION_MODE, SESSION_MODES, SCHEDULER_VERSION, TASK_PHASE, WithheldReason } from '../../../common/constants/domain';
+import { addHours } from '../../../common/constants/time';
 import { ApiError } from '../../../common/http/api-error';
 import { newId } from '../../../common/ids';
 import { AppConfig } from '../../../config/app-config';
@@ -15,15 +15,16 @@ import { Rng, shuffle } from '../domain/interleave';
 import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from '../domain/plan-builder';
 import { Learner, PlannerRepository, PracticeFilter, SourceTopic } from '../repositories/planner.repository';
 import { SessionPlan } from '../domain/session-plan';
+import { weakSince } from '../../review-load/repositories/weak-scope.sql';
 
 export const planRequestSchema = z
   .strictObject({
     mode: z.enum(SESSION_MODES),
     capabilities: z.strictObject({ audioPlayback: z.boolean(), microphone: z.boolean() }),
     challengeId: z.uuid().optional(),
-    // `skill` is the single-skill form older clients send.
-    skill: z.enum(SKILLS).optional(),
-    skills: z.array(z.enum(SKILLS)).min(1).refine((s) => new Set(s).size === s.length, 'skills must be unique').optional(),
+    // Accepted and ignored for one release: older clients still send a skill choice (docs/DECISIONS.md "Skill system removed").
+    skill: z.unknown().optional(),
+    skills: z.unknown().optional(),
     // Daily with due reviews only (§7.3).
     reviewOnly: z.boolean().optional(),
     // Daily: offer "I know this" before each new word.
@@ -34,22 +35,12 @@ export const planRequestSchema = z
       z.strictObject({ customOnly: z.literal(true) }),
     ]).optional(),
   })
-  .refine(({ skill, skills }) => !(skill && skills), { path: ['skills'], message: 'send skill or skills, not both' })
-  .refine(({ mode, skill, skills }) => !(skill || skills) || mode === SESSION_MODE.RANDOM_PRACTICE, {
-    path: ['skills'],
-    message: 'skills require random_practice',
-  })
   .refine(({ mode, reviewOnly }) => !reviewOnly || mode === SESSION_MODE.DAILY, { path: ['reviewOnly'], message: 'reviewOnly requires daily' })
   .refine(({ mode, knownCheck }) => !knownCheck || mode === SESSION_MODE.DAILY, { path: ['knownCheck'], message: 'knownCheck requires daily' })
   .refine(({ mode, filter }) => !filter || mode === SESSION_MODE.RANDOM_PRACTICE, { path: ['filter'], message: 'filter requires random_practice' });
 export type PlanRequest = z.infer<typeof planRequestSchema>;
 
 const { practiceTaskCap, ttlHours, distractorPoolSize } = POLICY.session;
-
-const requestedSkills = ({ skill, skills }: PlanRequest): Skill[] | undefined => skills ?? (skill ? [skill] : undefined);
-
-const canTrain = (skill: Skill, { capabilities }: PlanRequest) =>
-  !(skill === SKILL.SPEAKING && !capabilities.microphone) && !(skill === SKILL.LISTENING && !capabilities.audioPlayback);
 
 @Injectable()
 export class PlannerService {
@@ -66,9 +57,7 @@ export class PlannerService {
   }
 
   async plan(userId: string, request: PlanRequest) {
-    // A skill the device cannot train is dropped; the plan is empty only when none is left.
-    const skills = requestedSkills(request)?.filter((s) => canTrain(s, request));
-    if (skills?.length === 0) return empty(request.mode);
+    if (request.mode === SESSION_MODE.SPEAKING_PRACTICE && !request.capabilities.microphone) return empty(request.mode);
     if (request.filter && !(await this.repository.filterExists(request.filter))) {
       throw new ApiError('NOT_FOUND', 'Collection or Topic not found');
     }
@@ -77,7 +66,7 @@ export class PlannerService {
     const { settings } = learner;
     const locale = settings.explanationLocale;
 
-    const selected = await this.selectTargets(userId, request, learner, now, skills);
+    const selected = await this.selectTargets(userId, request, learner, now);
     const { challengeId, budget } = selected;
     const newWords = (issued: number) => budget && {
       requested: settings.dailyNewWordGoal,
@@ -106,12 +95,9 @@ export class PlannerService {
       mode: request.mode,
       reviewTargets,
       newTargets,
-      focusSkills: selected.focusSkills,
-      skillGaps: new Map(selected.reviewTargets.flatMap((t) => (t.skillGaps?.length ? [[t.snapshot.meaningId, t.skillGaps] as const] : []))),
       pool,
       curated,
       proficiency: learner.proficiencyLevel,
-      skills,
       knownCheck: request.knownCheck,
       speaking: settings.dailySpeaking && request.capabilities.microphone,
       rng: this.rng,
@@ -142,7 +128,6 @@ export class PlannerService {
       topicIds: learner.activeTopics.map((t) => t.topicId),
       capabilities: request.capabilities,
       ...(challengeId && { challengeId }),
-      ...(skills && { skills }),
       ...(request.reviewOnly && { reviewOnly: true }),
       ...(request.knownCheck && { knownCheck: true }),
       ...(request.filter && { filter: request.filter }),
@@ -173,7 +158,6 @@ export class PlannerService {
     { mode, challengeId, reviewOnly, filter }: PlanRequest,
     learner: Learner,
     now: Date,
-    skills?: Skill[],
   ): Promise<Selection> {
     const { settings } = learner;
     const locale = settings.explanationLocale;
@@ -199,17 +183,14 @@ export class PlannerService {
       return { reviewTargets, newTargets, budget };
     }
     if (mode === SESSION_MODE.RANDOM_PRACTICE) {
-      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier, skills, filter as PracticeFilter | undefined);
+      const pool = await this.repository.randomTargets(userId, locale, practiceTaskCap * POLICY.review.candidateMultiplier, filter as PracticeFilter | undefined);
       return { reviewTargets: asReview(shuffle(pool, this.rng).slice(0, practiceTaskCap)), newTargets: [] };
     }
     if (mode === SESSION_MODE.WEAK_WORDS_PRACTICE) {
-      const since = addHours(now, -POLICY.weak.lookbackDays * HOURS_PER_DAY);
-      const rows = await this.repository.weakTargets(userId, locale, since, POLICY.weak.minAttempts, practiceTaskCap);
-      return {
-        reviewTargets: asReview(rows.map((r) => r.snapshot)),
-        newTargets: [],
-        focusSkills: new Map(rows.flatMap((r) => (r.skills ? [[r.snapshot.meaningId, r.skills] as const] : []))),
-      };
+      return { reviewTargets: asReview(await this.repository.weakTargets(userId, locale, weakSince(now), practiceTaskCap)), newTargets: [] };
+    }
+    if (mode === SESSION_MODE.SPEAKING_PRACTICE) {
+      return { reviewTargets: asReview(await this.repository.speakingTargets(userId, locale, POLICY.practice.speakingTaskCap)), newTargets: [] };
     }
     const challenge = await this.repository.oldestChallenge(userId, challengeId);
     if (!challenge) throw new ApiError('NOT_FOUND', 'No available checkpoint challenge');
@@ -232,10 +213,9 @@ export class PlannerService {
 }
 
 type Selection = {
-  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; skillGaps?: Skill[] }[];
+  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null }[];
   newTargets: { snapshot: MeaningSnapshot; viaTopicId: string | null }[];
   challengeId?: string;
-  focusSkills?: Map<string, Skill[]>;
   budget?: ReturnType<typeof effectiveNewWords>;
 };
 

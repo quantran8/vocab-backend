@@ -1,11 +1,13 @@
-import { DELIVERY_MODE, DeliveryMode, EVENT_ACTION, OUTCOME, PROMPT_TYPE, TASK_PHASE, Template, TaskPhase } from '../../../common/constants/domain';
+import {
+  ASSESSMENT_INTENT, DELIVERY_MODE, DeliveryMode, EVENT_ACTION, OUTCOME, PROMPT_TYPE, SPEAKING_METHOD, TASK_PHASE, Template, VALIDITY,
+} from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { AnswerKey, ClientBody, evaluateTask, ReceiptView, TargetOutcome } from '../../practice-evaluator/evaluate';
 import { CommitBody } from '../../practice-evaluator/events';
 import { MemoryFact, reduceMemory } from '../../memory-srs/memory-reducer';
 import { Prompt, ServerEvaluation } from '../../practice-resolver/task.types';
 import { PlanLearnStep, PlanTask } from '../../session-planner/domain/session-plan';
-import { deriveEvidence, EvidenceDraft } from '../../skill-verification/skill-evidence';
+import { SpeakingResult } from '../../speaking/speaking-progress';
 
 export type TaskRow = Omit<PlanTask, 'targets'>;
 
@@ -118,7 +120,7 @@ function declaredKnown(body: CommitBody, steps: LearnStepRow[]) {
   }));
 }
 
-/** A failed known check only routes the word to teaching; it is neither a memory signal nor skill evidence. */
+/** A failed known check only routes the word to teaching; it is not a memory signal. */
 export function countedTasks(evaluated: EvaluatedTask[], targets: TargetRow[], known: Set<string>) {
   const index = targetIndex(targets);
   return evaluated.filter((e) => e.task.phase !== TASK_PHASE.KNOWN_CHECK
@@ -186,33 +188,41 @@ export function memoryDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]) {
   return reduceMemory(facts);
 }
 
-export interface EvidenceRowDraft extends EvidenceDraft {
+export interface SessionReceipt {
   taskId: string;
-  targetOrdinal: number;
-  receiptId?: string;
-  evaluatorVersion: string;
+  validity: string;
+  passed: boolean | null;
+  accuracyScore: number | null;
+  assessedAt: Date;
 }
 
-export function evidenceDrafts(evaluated: EvaluatedTask[], targets: TargetRow[]): EvidenceRowDraft[] {
+const SPEAKING_SKIPPED = new Set<string>([OUTCOME.INVALID, OUTCOME.UNAVAILABLE]);
+
+/**
+ * One result per pronunciation: its first usable recording by task ordinal. A recording right after Learn is skipped (the word was just modelled).
+ * On-device passes only on the first take; Azure scores the task's first valid receipt, not the one the learner kept.
+ */
+export function speakingResults(counted: EvaluatedTask[], targets: TargetRow[], receipts: SessionReceipt[]): SpeakingResult[] {
   const index = targetIndex(targets);
-  return evaluated.flatMap(({ task, targets: outcomes, deliveryMode, receiptId }) => {
+  const firstReceipt = new Map<string, SessionReceipt>();
+  for (const receipt of [...receipts].sort((a, b) => a.assessedAt.getTime() - b.assessedAt.getTime())) {
+    if (receipt.validity === VALIDITY.VALID && !firstReceipt.has(receipt.taskId)) firstReceipt.set(receipt.taskId, receipt);
+  }
+  const results = new Map<string, SpeakingResult>();
+  for (const { task, targets: outcomes, rawEvents } of [...counted].sort((a, b) => a.task.ordinal - b.task.ordinal)) {
     const server = task.serverEvaluation as ServerEvaluation;
-    return outcomes.flatMap((o) => {
-      const target = index.get(targetKey(task.id, o.ordinal));
-      return deriveEvidence({
-        template: task.template as Template,
-        intent: server.intent,
-        phase: task.phase as TaskPhase,
-        promptIsTargetAudio: server.promptIsTargetAudio,
-        qualityQualified: server.qualityQualified,
-        isPrimed: server.isPrimed,
-        deliveryMode,
-        outcome: o.outcome,
-        hintCount: o.hintCount,
-        attemptCount: o.attemptCount,
-        meaningId: target?.meaningId ?? null,
-        pronunciationId: target?.pronunciationId ?? null,
-      }).map((draft) => ({ ...draft, taskId: task.id, targetOrdinal: o.ordinal, receiptId, evaluatorVersion: task.evaluatorVersion }));
-    });
-  });
+    if (server.intent !== ASSESSMENT_INTENT.PRONUNCIATION || task.phase === TASK_PHASE.NEW_PRACTICE) continue;
+    const onDevice = rawEvents.some((e) => e.action === EVENT_ACTION.TRANSCRIBED);
+    for (const o of outcomes) {
+      const pronunciationId = index.get(targetKey(task.id, o.ordinal))?.pronunciationId;
+      if (!pronunciationId || results.has(pronunciationId) || SPEAKING_SKIPPED.has(o.outcome)) continue;
+      if (onDevice) {
+        results.set(pronunciationId, { pronunciationId, method: SPEAKING_METHOD.DEVICE, passed: o.attemptCount === 1 && o.outcome === OUTCOME.ASSESSED_PASSED });
+        continue;
+      }
+      const receipt = firstReceipt.get(task.id);
+      if (receipt) results.set(pronunciationId, { pronunciationId, method: SPEAKING_METHOD.AZURE, passed: receipt.passed === true, score: receipt.accuracyScore ?? 0 });
+    }
+  }
+  return [...results.values()];
 }

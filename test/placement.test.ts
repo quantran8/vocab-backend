@@ -1,5 +1,5 @@
 import { eq, inArray } from 'drizzle-orm';
-import { appUsers, meaningLocalizations, meanings, skillEvidence, userMeaningProgress } from '../src/db/schema';
+import { appUsers, meaningLocalizations, meanings, userSpeakingProgress, userMeaningProgress } from '../src/db/schema';
 import { CEFR_LEVELS, MEANING_ORIGIN } from '../src/common/constants/domain';
 import { createHarness, Harness, seedWord } from './support/app';
 
@@ -58,7 +58,7 @@ describe('placement test', () => {
     expect(body).toEqual({ proficiencyLevel: 'B1', correctCount: PER_LEVEL * 3, totalCount: questions.length });
     expect((await api('get', '/v1/me').expect(200)).body.proficiencyLevel).toBe('B1');
     expect(await h.count(userMeaningProgress)).toBe(0);
-    expect(await h.count(skillEvidence)).toBe(0);
+    expect(await h.count(userSpeakingProgress)).toBe(0);
   });
 
   it('treats "I don\'t know" as wrong', async () => {

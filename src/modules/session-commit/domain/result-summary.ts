@@ -1,15 +1,14 @@
 import {
-  ASSESSMENT_INTENT, AssessmentIntent, EVIDENCE_REASON, EvidenceReason, FSRS_GRADE, MEMORY_SIGNAL, NEW_WORD_GROUP, NewWordGroup, OUTCOME, Outcome,
-  PRACTICE_GROUP, PracticeGroup, RESULT_CAUSE, ResultCause, REVIEW_GROUP, ReviewGroup, SKILL_CHANGE, SKILL_ISSUE, SKILL_STATUS, Skill, SkillChange,
-  SkillStatus, TASK_PHASE, VALIDITY,
+  ASSESSMENT_INTENT, AssessmentIntent, FSRS_GRADE, MEMORY_SIGNAL, NEW_WORD_GROUP, NewWordGroup, OUTCOME, Outcome, PRACTICE_EXCLUDED_REASON,
+  PRACTICE_GROUP, PracticeExcludedReason, PracticeGroup, RESULT_CAUSE, ResultCause, REVIEW_GROUP, ReviewGroup, Skill, SPEAKING_CHANGE,
+  SPEAKING_METHOD, SpeakingChange, StoredSpeakingStatus, TASK_PHASE,
 } from '../../../common/constants/domain';
-import { addHours } from '../../../common/constants/time';
-import { POLICY } from '../../../config/policy';
 import { MemoryDraft, signalOf } from '../../memory-srs/memory-reducer';
 import { SrsState } from '../../memory-srs/fsrs';
+import { skillOf } from '../../practice-resolver/task-skill';
 import { ServerEvaluation } from '../../practice-resolver/task.types';
-import { deriveSkillStatus, EvidenceRow, isCleanPass, openIssue, SKILL_STATE_REASONS, skillOf } from '../../skill-verification/skill-evidence';
-import { EvaluatedTask, EvidenceRowDraft, LearnStepRow, TargetRow } from './commit-evaluator';
+import { SpeakingResult } from '../../speaking/speaking-progress';
+import { EvaluatedTask, LearnStepRow, TargetRow } from './commit-evaluator';
 
 /** What the results screen shows for a Meaning, read at commit in the learner's explanation locale. */
 export interface MeaningLabel {
@@ -251,115 +250,74 @@ export function newWordSummary(input: {
 
 // --- Random / Weak: practice answers ---------------------------------------------------------------
 
-// Reasons that come from the task or the device, not from the answer: the row never moves a skill.
-const NOT_FROM_ANSWER: EvidenceReason[] = [
-  EVIDENCE_REASON.WEAK_TEMPLATE, EVIDENCE_REASON.QUALITY_UNQUALIFIED, EVIDENCE_REASON.AUDIO_NOT_PLAYED,
-  EVIDENCE_REASON.INVALID_RECORDING, EVIDENCE_REASON.NEW_PRACTICE, EVIDENCE_REASON.UNKNOWN,
-];
+const EXCLUDED: Partial<Record<Outcome, PracticeExcludedReason>> = {
+  [OUTCOME.INVALID]: PRACTICE_EXCLUDED_REASON.INVALID_RECORDING,
+  [OUTCOME.UNAVAILABLE]: PRACTICE_EXCLUDED_REASON.UNAVAILABLE,
+};
 
-/** Recorded on a recording task the learner could not do (no mic); there is no evidence row to carry it. */
-export const RECORDING_UNAVAILABLE = OUTCOME.UNAVAILABLE;
-
-function practiceGroupOf(draft: EvidenceRowDraft): PracticeGroup {
-  if (draft.reasons.includes(EVIDENCE_REASON.REVEALED)) return PRACTICE_GROUP.MISSED;
-  if (draft.passed) return draft.reasons.length === 0 ? PRACTICE_GROUP.CLEAN : PRACTICE_GROUP.HELPED;
-  // A light retry is a right answer on the second try.
-  return draft.reasons.includes(EVIDENCE_REASON.RETRIED) ? PRACTICE_GROUP.HELPED : PRACTICE_GROUP.MISSED;
+function practiceGroupOf(outcome: Outcome, hintCount: number, isPrimed: boolean): PracticeGroup {
+  switch (outcome) {
+    case OUTCOME.CORRECT:
+      return hintCount > 0 || isPrimed ? PRACTICE_GROUP.HELPED : PRACTICE_GROUP.CLEAN;
+    case OUTCOME.CORRECTED_AFTER_RETRY:
+      return PRACTICE_GROUP.HELPED;
+    case OUTCOME.ASSESSED_PASSED:
+      return PRACTICE_GROUP.CLEAN;
+    default:
+      return PRACTICE_GROUP.MISSED;
+  }
 }
 
-const scopeKey = (skill: string, row: { meaningId: string | null; pronunciationId: string | null }) => `${skill}:${row.meaningId ?? row.pronunciationId}`;
-
-export function practiceSummary(input: {
-  counted: EvaluatedTask[];
-  drafts: EvidenceRowDraft[];
-  before: Map<string, EvidenceRow[]>;
-  labels: Labels;
-  sessionMeanings: Set<string>;
-}) {
-  const { counted, drafts, before, labels, sessionMeanings } = input;
-  const groups = emptyGroups<PracticeGroup, ReturnType<typeof item> & { skill: Skill; hadIssue: boolean }>(Object.values(PRACTICE_GROUP));
-  const reasons = new Set<string>();
+/** One item per counted task target; answers that say nothing about the learner are only counted as excluded. */
+export function practiceSummary(input: { counted: EvaluatedTask[]; targets: TargetRow[]; labels: Labels; sessionMeanings: Set<string> }) {
+  const { counted, targets, labels, sessionMeanings } = input;
+  const byTarget = new Map(targets.map((t) => [`${t.taskId}:${t.ordinal}`, t]));
+  const groups = emptyGroups<PracticeGroup, ReturnType<typeof item> & { skill: Skill | null }>(Object.values(PRACTICE_GROUP));
+  const reasons = new Set<PracticeExcludedReason>();
   let excluded = 0;
 
-  const withEvidence = new Set(drafts.map((d) => d.taskId));
-  for (const evaluated of counted) {
-    if (withEvidence.has(evaluated.task.id)) continue;
-    excluded += 1;
-    if (evaluated.targets.some((t) => t.outcome === OUTCOME.UNAVAILABLE)) reasons.add(RECORDING_UNAVAILABLE);
-  }
-
-  for (const draft of drafts) {
-    const noise = draft.reasons.filter((r) => NOT_FROM_ANSWER.includes(r));
-    if (draft.validity !== VALIDITY.VALID || noise.length > 0) {
-      excluded += 1;
-      noise.forEach((r) => reasons.add(r));
-      continue;
+  for (const { task, targets: outcomes } of counted) {
+    const server = task.serverEvaluation as ServerEvaluation;
+    for (const o of outcomes) {
+      const reason = EXCLUDED[o.outcome];
+      if (reason) {
+        excluded += 1;
+        reasons.add(reason);
+        continue;
+      }
+      const target = byTarget.get(`${task.id}:${o.ordinal}`);
+      const label = target && labels.ofTarget(target, sessionMeanings);
+      if (!label) continue;
+      groups[practiceGroupOf(o.outcome, o.hintCount, server.isPrimed)].push({
+        ...item(label.meaningId, labels),
+        skill: skillOf(server.intent, server.promptIsTargetAudio),
+      });
     }
-    const label = labels.ofTarget(draft, sessionMeanings);
-    if (!label) continue;
-    groups[practiceGroupOf(draft)].push({
-      ...item(label.meaningId, labels),
-      skill: draft.skill,
-      hadIssue: openIssue(before.get(scopeKey(draft.skill, draft)) ?? []) !== null,
-    });
   }
   const total = Object.values(groups).reduce((n, g) => n + g.length, 0);
   return { total, excluded: { count: excluded, reasons: [...reasons].sort() }, groups };
 }
 
-// --- Random / Weak: skill changes ------------------------------------------------------------------
+// --- Every mode: speaking --------------------------------------------------------------------------
 
-const RANK: Record<SkillStatus, number> = { [SKILL_STATUS.NOT_VERIFIED]: 0, [SKILL_STATUS.DEMONSTRATED]: 1 };
+export interface SpeakingOutcome { result: SpeakingResult; status: StoredSpeakingStatus; change: SpeakingChange | null }
 
-export interface ChangeItem {
-  meaningId: string;
-  wordId: string | null;
-  lemma: string;
-  gloss: string;
-  skill: Skill;
-  from: SkillStatus;
-  to: SkillStatus;
-  confirmableAt?: string;
-}
-
-/** Rows that can move a skill, exactly as `ProgressRepository.evidence` reads them back. */
-const statefulRows = (drafts: EvidenceRowDraft[], sessionId: string, now: Date) =>
-  drafts
-    .filter((d) => d.validity === VALIDITY.VALID && d.reasons.every((r) => SKILL_STATE_REASONS.includes(r)))
-    .map((d) => ({ key: scopeKey(d.skill, d), draft: d, row: { sessionId, passed: d.passed, committedAt: now, reasons: d.reasons } as EvidenceRow }));
-
-export function skillChanges(input: {
-  drafts: EvidenceRowDraft[];
-  before: Map<string, EvidenceRow[]>;
-  sessionId: string;
-  now: Date;
-  labels: Labels;
-  sessionMeanings: Set<string>;
-}) {
-  const { drafts, before, sessionId, now, labels, sessionMeanings } = input;
-  const groups = emptyGroups<SkillChange, ChangeItem>(Object.values(SKILL_CHANGE));
-  const added = Map.groupBy(statefulRows(drafts, sessionId, now), (r) => r.key);
-
-  for (const [key, rows] of added) {
-    const { draft } = rows[0];
-    const label = labels.ofTarget(draft, sessionMeanings);
-    if (!label) continue;
-    const old = before.get(key) ?? [];
-    const all = [...old, ...rows.map((r) => r.row)];
-    const [from, to] = [deriveSkillStatus(old).status, deriveSkillStatus(all).status];
-    const [issueBefore, issueAfter] = [openIssue(old), openIssue(all)];
-    const base: ChangeItem = { ...item(label.meaningId, labels), skill: draft.skill, from, to };
-
-    if (RANK[to] > RANK[from]) groups[SKILL_CHANGE.LEVELED_UP].push(base);
-    if (issueBefore && !issueAfter) groups[SKILL_CHANGE.CLEARED].push(base);
-    const sameIssue = issueBefore && issueAfter && issueAfter.at.getTime() === issueBefore.at.getTime();
-    if (sameIssue && rows.some((r) => isCleanPass(r.row))) {
-      groups[SKILL_CHANGE.PENDING_CONFIRM].push({ ...base, confirmableAt: addHours(issueBefore.at, POLICY.memory.recoveryHours).toISOString() });
-    }
-    const raisedNow = issueAfter && issueAfter.at.getTime() === now.getTime();
-    if (raisedNow && issueAfter.issue === SKILL_ISSUE.FAILED) groups[SKILL_CHANGE.REGRESSED].push(base);
-  }
-  return groups;
+/** Null when the session scored no recording. */
+export function speakingSummary(input: { outcomes: SpeakingOutcome[]; labels: Labels; sessionMeanings: Set<string> }) {
+  const { outcomes, labels, sessionMeanings } = input;
+  if (outcomes.length === 0) return null;
+  type SpeakingItem = ReturnType<typeof item> & { status: StoredSpeakingStatus; score: number | null };
+  const changed = (change: SpeakingChange) => outcomes.flatMap(({ result, status, change: c }): SpeakingItem[] => {
+    const label = c === change ? labels.ofTarget({ meaningId: null, pronunciationId: result.pronunciationId }, sessionMeanings) : undefined;
+    if (!label) return [];
+    return [{ ...item(label.meaningId, labels), status, score: result.method === SPEAKING_METHOD.AZURE ? result.score : null }];
+  });
+  return {
+    total: outcomes.length,
+    passed: outcomes.filter((o) => o.result.passed).length,
+    becameFluent: changed(SPEAKING_CHANGE.BECAME_FLUENT),
+    slipped: changed(SPEAKING_CHANGE.SLIPPED),
+  };
 }
 
 /** Practice that served as the due review: a word due before the session, answered cleanly (GOOD or EASY). */
