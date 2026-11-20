@@ -1,4 +1,4 @@
-import { ASSESSMENT_INTENT, PROMPT_TYPE, PromptType, SESSION_MODE, SessionMode, SKILL, Skill, TASK_PHASE, TaskPhase, TEMPLATE, VARIANT } from '../../../common/constants/domain';
+import { ASSESSMENT_INTENT, PROMPT_TYPE, PromptType, SESSION_MODE, SessionMode, TASK_PHASE, TaskPhase, TEMPLATE, VARIANT } from '../../../common/constants/domain';
 import { newId } from '../../../common/ids';
 import { POLICY } from '../../../config/policy';
 import { normalizeAnswer } from '../../practice-evaluator/normalizer';
@@ -9,22 +9,15 @@ import {
 } from '../../practice-resolver/generated';
 import { DistractorView, MeaningSnapshot, ResolveContext, ResolvedTask } from '../../practice-resolver/task.types';
 import { evidenceClassOf } from '../../memory-srs/evidence-weight';
-import { skillOf } from '../../skill-verification/skill-evidence';
 import { pickWeighted, planNewMeanings, Rng, shuffle, TaskSlot } from './interleave';
 
 export interface PlanInput {
   mode: SessionMode;
   newTargets: MeaningSnapshot[];
   reviewTargets: MeaningSnapshot[];
-  // Weak only: skills with an open issue, by meaningId.
-  focusSkills?: Map<string, Skill[]>;
-  // Daily only: open form-skill issues of due words, by meaningId; they only bias which task is picked.
-  skillGaps?: Map<string, Skill[]>;
   pool: DistractorView[];
   curated: CuratedItem[];
   proficiency: string | null;
-  // Set: one task per target, each training one of these skills. Unset: mixed practice.
-  skills?: Skill[];
   // Daily: put an optional recall before each Learn card ("I know this").
   knownCheck?: boolean;
   // Daily: the learner opted in to recordings; they train speaking only and never move memory.
@@ -60,9 +53,10 @@ const PHASE_BY_MODE: Record<SessionMode, TaskPhase> = {
   [SESSION_MODE.CHECKPOINT_CHALLENGE]: TASK_PHASE.CHECKPOINT_CHALLENGE,
   [SESSION_MODE.RANDOM_PRACTICE]: TASK_PHASE.RANDOM_PRACTICE,
   [SESSION_MODE.WEAK_WORDS_PRACTICE]: TASK_PHASE.WEAK_WORDS_PRACTICE,
+  [SESSION_MODE.SPEAKING_PRACTICE]: TASK_PHASE.SPEAKING_PRACTICE,
 };
 
-const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance, classPickWeight, skillGapBoost, dailySpeakingCap } = POLICY.review;
+const { semanticWeight, skillWeight, skillBonusChance, audioChance, matchChance, classPickWeight, dailySpeakingCap } = POLICY.review;
 
 function buildCard(target: MeaningSnapshot, ctx: ResolveContext) {
   const pronunciation = pronunciationFor(target, ctx.accent);
@@ -111,14 +105,11 @@ function semanticCandidates(target: MeaningSnapshot, input: PlanInput) {
   );
 }
 
-/** Daily: one meaning task per due word, weighted by evidence class and nudged toward an open skill gap. */
+/** Daily: one meaning task per due word, weighted by evidence class. */
 function dailyCandidates(target: MeaningSnapshot, input: PlanInput) {
-  const gaps = input.skillGaps?.get(target.meaningId) ?? [];
   return semanticCandidates(target, input).flatMap(({ value }) => {
     const cls = evidenceClassOf(value.variant);
-    if (!cls) return [];
-    const skill = skillOf(value.serverEvaluation.intent, value.serverEvaluation.promptIsTargetAudio);
-    return [{ value, weight: classPickWeight[cls] * (skill && gaps.includes(skill) ? skillGapBoost : 1) }];
+    return cls ? [{ value, weight: classPickWeight[cls] }] : [];
   });
 }
 
@@ -139,64 +130,10 @@ function skillCandidates(target: MeaningSnapshot, input: PlanInput) {
 
 const pickModality = (rng: Rng): PromptType => (rng() < audioChance ? PROMPT_TYPE.AUDIO : PROMPT_TYPE.TEXT);
 
-// Each task must yield direct evidence for its skill, or the issue could never clear.
-function taskForSkill(skill: Skill, target: MeaningSnapshot, { pool, ctx, rng }: PlanInput) {
-  switch (skill) {
-    case SKILL.SPELLING:
-      return (rng() < POLICY.newLearning.recallTypingWeight ? null : buildFlyReorder(target, ctx, rng)) ?? buildTypingRecall(target, ctx);
-    case SKILL.LISTENING:
-      return buildSelectGloss(target, pool, PROMPT_TYPE.AUDIO, ctx, rng);
-    case SKILL.SPEAKING:
-      return buildRecording(target, ctx, { meaningCue: true });
-  }
-}
-
-function focusedTasks(input: PlanInput, focus: Map<string, Skill[]>) {
-  const perTarget = input.reviewTargets.map((target) => {
-    const tasks = (focus.get(target.meaningId) ?? []).flatMap((skill) => taskForSkill(skill, target, input) ?? []);
-    if (tasks.length > 0) return tasks;
-    const fallback = pickWeighted(semanticCandidates(target, input), input.rng);
-    return fallback ? [fallback] : [];
-  });
-  const rounds = Math.max(0, ...perTarget.map((tasks) => tasks.length));
-  // Every target gets its first skill before any target gets a second.
-  const capped = Array.from({ length: rounds }, (_, round) => perTarget.flatMap((tasks) => tasks[round] ?? []))
-    .flat()
-    .slice(0, POLICY.session.practiceTaskCap);
-  const isRecall = (task: ResolvedTask) => task.serverEvaluation.intent === ASSESSMENT_INTENT.MEANING_RECALL;
-  // Recall first: a select or recording of the same word would prime it, and a primed pass clears nothing.
-  return [...shuffle(capped.filter(isRecall), input.rng), ...shuffle(capped.filter((t) => !isRecall(t)), input.rng)];
-}
-
-function skillTask(target: MeaningSnapshot, skill: Skill, input: PlanInput) {
-  const { pool, ctx, rng } = input;
-  const candidates = [
-    ...semanticCandidates(target, input),
-    ...weighted([buildSelectReverse(target, pool, ctx, rng)], semanticWeight),
-    ...skillCandidates(target, input),
-  ];
-  return pickWeighted(
-    candidates.filter(({ value: { serverEvaluation: e } }) => skillOf(e.intent, e.promptIsTargetAudio) === skill),
-    rng,
-  );
-}
-
-// Skills take turns across targets so each gets a fair share; a target that cannot train its turn's skill tries the others.
-function skillTasks(input: PlanInput, skills: Skill[]) {
-  const order = shuffle(skills, input.rng);
-  return input.reviewTargets.flatMap((target, i) => {
-    for (let k = 0; k < order.length; k++) {
-      const task = skillTask(target, order[(i + k) % order.length], input);
-      if (task) return [task];
-    }
-    return [];
-  });
-}
-
 function reviewTasks(input: PlanInput): ResolvedTask[] {
-  const { mode, reviewTargets, rng, ctx, skills, focusSkills } = input;
-  if (skills?.length) return shuffle(skillTasks(input, skills), rng);
-  if (focusSkills?.size) return focusedTasks(input, focusSkills);
+  const { mode, reviewTargets, rng, ctx } = input;
+  // Weakest first, as the planner ordered them.
+  if (mode === SESSION_MODE.SPEAKING_PRACTICE) return reviewTargets.flatMap((target) => buildRecording(target, ctx, { meaningCue: true }) ?? []);
   const tasks: ResolvedTask[] = [];
   for (const target of reviewTargets) {
     if (mode === SESSION_MODE.DAILY) {

@@ -129,7 +129,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 - Nên có nút "Không biết": đoán bừa làm level bị cao hơn thực tế.
 - Một level đạt khi đúng từ 60% số câu. Kết quả là level cao nhất mà nó và mọi level dưới nó đều đạt; không đạt level nào thì là `A1`.
-- User vẫn đổi được kết quả bằng `PUT /v1/me/levels`, và làm lại test được. Bài test không tạo tiến độ học hay skill evidence.
+- User vẫn đổi được kết quả bằng `PUT /v1/me/levels`, và làm lại test được. Bài test không tạo tiến độ học hay tiến độ phát âm.
 - `400 VALIDATION_FAILED`: trùng `questionId`, hoặc không có câu nào hợp lệ.
 
 ## 4. Màn hình Home và tiến độ
@@ -162,16 +162,19 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   - Mỗi meaning có `meaningId`, `learnedAt`, `nextReviewAt` và `meaning: {partOfSpeech, text, ipa?, definition, audio?, examples}`, cùng dữ liệu với learn card (đã áp bản sửa của user). `audio` vắng khi không phát được.
   - `meaningCount`: tổng số meaning của từ mà user thấy được (cùng phạm vi với `GET /v1/words/{wordId}`), để hiện "1 / 4 nghĩa đã học". `meanings` chỉ gồm nghĩa đã học.
   - `ipaVaries`: `true` khi các meaning user thấy được (cả nghĩa chưa học, cùng phạm vi với `meaningCount`) có IPA mặc định khác nhau; meaning không có IPA tính là một cách đọc riêng. App chỉ hiện IPA ở dòng từ khi `false`. Server cũ không gửi trường này.
-  - Không có trạng thái kỹ năng: endpoint này không đọc skill evidence.
-- `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
+  - Không có `memory`, `speaking`, `needsPractice`: xem ở chi tiết từ.
+- `GET /v1/me/words/stats` → `{learnedWords, needPracticeWords, fluentWords}`: số liệu toàn thư viện, không phụ thuộc trang hay `q`.
+  - `needPracticeWords`: số từ có nghĩa đang yếu (định nghĩa ở `weak_words_practice`, §5).
+  - `fluentWords`: số từ có nghĩa đã học mà phát âm mặc định (`en-US`) đang `fluent`.
 - `GET /v1/words/{wordId}`: chi tiết một từ, gọi khi user mở từ đó. Có mọi meaning của từ, kể cả chưa học (`learnedAt = null`).
-  - Mỗi meaning có thêm `memory`, `skills: {spelling, listening?, speaking?}` và `needsPractice` (bật khi có kỹ năng cần luyện).
-  - `memory: {stabilityDays, retrievability, nextReviewAt}` (null khi chưa học): độ bền trí nhớ FSRS tính bằng ngày, và xác suất còn nhớ nghĩa lúc này (0..1). Đây là thông tin "nhớ nghĩa"; `skills` chỉ đo mặt chữ và âm.
-  - Mỗi kỹ năng là `{status: "not_verified"|"demonstrated", needsPractice, issue: "failed"|"assisted"|null}`. `demonstrated` = đã có ít nhất một lần làm đúng sạch. Dùng `skills` để biết kỹ năng nào của nghĩa này đang có vấn đề. Một kỹ năng có thể vừa `demonstrated` vừa có `issue`.
-    - `failed`: trả lời sai hoặc show answer, kể cả khi có hint.
-    - `assisted`: đúng nhờ hint, hoặc recall đúng ở lần 2.
-    - `issue` tắt sau một lần tự trả lời đúng của kỹ năng đó, cách lần có vấn đề ít nhất 12h.
-  - `listening/speaking` vắng mặt khi Meaning không có phát âm.
+  - Mỗi meaning có thêm `memory`, `speaking` và `needsPractice`.
+  - `memory: {stabilityDays, retrievability, nextReviewAt}` (null khi chưa học): độ bền trí nhớ FSRS tính bằng ngày, và xác suất còn nhớ nghĩa lúc này (0..1).
+  - `speaking: {status, lastScore, bestScore, lastAssessedAt}`, null khi meaning không có phát âm `en-US`.
+    - `status`: `not_tried` (chưa có lượt ghi âm nào được chấm, các field khác null) | `practicing` | `fluent`.
+    - Chấm trên máy: `fluent` sau 2 buổi liên tiếp đạt ngay lần nói đầu; một lần trượt đưa về `practicing`. Chấm Azure: `fluent` khi điểm trung bình (EWMA) ≥ 85 qua ít nhất 2 buổi, về `practicing` khi dưới 75. `lastScore`/`bestScore` chỉ có khi chấm Azure.
+    - Ghi âm ngay sau thẻ học từ mới không tính.
+  - `needsPractice`: nghĩa đang yếu theo trí nhớ, cùng định nghĩa với Weak (§5). Tắt ngay sau một lần trả lời đúng, không chờ 12h.
+  - `skills` luôn là `null` trong một bản phát hành rồi bỏ; không dùng nữa.
   - `needsPractice` ở cấp Word. Không còn `fullyVerified` và trạng thái `verified`.
 
 ## 5. Plan một session
@@ -180,11 +183,10 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 
 ```jsonc
 {
-  "mode": "daily" | "checkpoint_challenge" | "random_practice" | "weak_words_practice",
+  "mode": "daily" | "checkpoint_challenge" | "random_practice" | "weak_words_practice" | "speaking_practice",
   "capabilities": { "audioPlayback": true, "microphone": true },
   "challengeId": "uuid",  // chỉ cho checkpoint_challenge, tuỳ chọn, mặc định thử thách cũ nhất còn available
-  "skills": ["listening", "spelling"]   // chỉ cho random_practice, tuỳ chọn; 1–3 kỹ năng, không trùng
-  // "skill": "listening"              // dạng cũ một kỹ năng, vẫn nhận; không gửi kèm "skills"
+  // "skills" / "skill": đã bỏ. Server vẫn nhận trong một bản phát hành nhưng bỏ qua; client mới không gửi.
 }
 ```
 
@@ -192,20 +194,11 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 |---|---|
 | `daily` | Ôn các Meaning đến hạn (tối đa `reviewLoad.dueCap`, xem `reviewsPerSession`): mỗi từ đúng một bài kiểm tra nghĩa, không có bài ghi âm/nghe chép, từ dễ quên nhất (retrievability thấp nhất) trước. Rồi học từ mới (tối đa `dailyNewWordGoal` mỗi session, plan lại được ngay sau khi session trước hoàn tất; mỗi session bắt đầu bằng phần ôn). Duy nhất mode này có từ mới. Mọi mode đều cập nhật lịch ôn FSRS; ôn sớm chỉ được cộng rất ít |
 | `checkpoint_challenge` | **Deprecated.** Ôn lại các Meaning của một challenge cũ còn `available`, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
-| `random_practice` | Từ các Meaning đã học, tối đa 10 từ. Không gửi `skills` là practice tổng hợp; gửi `skills` là practice theo kỹ năng |
-| `weak_words_practice` | Các nghĩa có kỹ năng đang có `issue` trong 30 ngày qua, luyện đúng kỹ năng đó; sau đó đến các từ hay sai/dùng hint (cần tối thiểu 3 lần thử). Tối đa 10 task |
+| `random_practice` | Practice tổng hợp từ các Meaning đã học (hoặc theo `filter`), tối đa 10 từ |
+| `weak_words_practice` | Nghĩa đang yếu: trong 30 ngày qua có ít nhất 3 lần thử (không tính buổi học từ đó), có lần sai/dùng hint/thử lại, và **lần gần nhất** vẫn yếu. Tỉ lệ yếu cao trước, rồi từ lâu chưa ôn. Practice tổng hợp như random, tối đa 10 từ. Trả lời đúng một lần là từ ra khỏi danh sách |
+| `speaking_practice` | Mỗi từ đã học có phát âm `en-US` một bài `recording` kèm `meaningCue`, tối đa 10. Thứ tự: lần trước nói trượt → chưa thử → đang luyện → `fluent`, lâu chưa nói trước. Không đổi lịch ôn, không nhận `filter`. `microphone=false` trả plan rỗng |
 
 `capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì Daily không phát hành `recording`; ở các mode khác task `recording` **vẫn có thể được phát hành**, client gửi event `unavailable` (xem 7.7).
-
-**Practice theo kỹ năng:** mỗi từ đúng một task, mọi task đều luyện một trong các kỹ năng đã chọn. Chọn nhiều kỹ năng thì các kỹ năng chia lượt đều giữa các từ; từ không luyện được kỹ năng tới lượt (vd. không có audio cho `listening`) dùng kỹ năng khác đã chọn. Commit như session thường.
-
-| `skill` | Task có thể nhận |
-|---|---|
-| `spelling` | `typing/meaning_recall`, `fly_reorder/spelling_recall`; `surgery` nếu có nội dung Curated |
-| `listening` | `select/gloss` (audio), `typing/transcription`; `phonetic_choice`, `stress_choice` nếu có nội dung Curated. Chỉ dùng từ có audio |
-| `speaking` | `recording` |
-
-Kỹ năng thiết bị không luyện được bị bỏ: `speaking` với `microphone=false`, `listening` với `audioPlayback=false`. Trả plan rỗng (`sessionId: null`) khi không còn kỹ năng nào, hoặc chưa có từ đã học phù hợp (nhiều từ catalog chưa có audio). Gửi `skills`/`skill` với mode khác `random_practice`, `skills` rỗng hoặc trùng, hay gửi cả hai trường nhận `400`.
 
 Response:
 
@@ -222,7 +215,7 @@ Response:
 - **Plan rỗng** (không có gì để học/ôn): `{sessionId: null, mode, steps: []}`. Hiện empty state, không có session để commit.
 - `checkpoint_challenge` mà không có thử thách nào: `404 NOT_FOUND`.
 - `steps` đã sắp xếp đúng thứ tự, **render theo thứ tự này**, không sắp xếp lại.
-- `phase` của practice: `due_review | new_practice | checkpoint_challenge | random_practice | weak_words_practice`. Dùng để hiển thị nhãn, không ảnh hưởng gì đến gửi kết quả.
+- `phase` của practice: `due_review | new_practice | checkpoint_challenge | random_practice | weak_words_practice | speaking_practice`. Dùng để hiển thị nhãn, không ảnh hưởng gì đến gửi kết quả.
 - Mỗi lần gọi plan là tạo session mới. Session cũ chưa commit bị bỏ rơi (không ghi gì). Muốn tiếp tục dở dang thì lưu `sessionId` + tiến độ cục bộ và dùng lại trong 72 giờ.
 
 ### 5.1 Learn step
@@ -470,7 +463,7 @@ Response `200`:
   "summary": { "newWordGoalSlots": 5, "reviewedMeanings": 8, "practiceTasks": 30 } }
 ```
 
-`summary` còn có các khối cho màn kết quả (`review`, `newWords`, `practice`, `skillChanges`, `needPractice`, `countedAsReview`), xem §15. Bốn số `newWordGoalSlots`, `knownMeanings`, `reviewedMeanings`, `practiceTasks` giữ thêm một release rồi gỡ; client mới không đọc.
+`summary` còn có các khối cho màn kết quả (`review`, `newWords`, `practice`, `speaking`, `needPractice`, `countedAsReview`; `skillChanges` luôn null), xem §15. Bốn số `newWordGoalSlots`, `knownMeanings`, `reviewedMeanings`, `practiceTasks` giữ thêm một release rồi gỡ; client mới không đọc.
 
 Session `checkpoint_challenge` có thêm `summary.checkpoint: {reviewedCount, unaidedRecalledCount, needsReviewCount}`. Chỉ trả lời tự nhớ (không hint, không phải chọn đáp án) mới tính vào `unaidedRecalledCount`. Không có ngưỡng đạt: làm xong là challenge hoàn thành.
 
@@ -478,7 +471,7 @@ Session `checkpoint_challenge` có thêm `summary.checkpoint: {reviewedCount, un
 
 `GET /v1/sessions/{sessionId}/commit-status` → `{sessionId, status: "issued"|"committed"|"expired", committedAt, expiresAt, response}`. Gọi khi không chắc commit trước đó đã thành công.
 
-Sau commit: gọi lại `learn-home` để làm mới Home. Kết quả chi tiết từng task không được trả về trong response commit; dùng `GET /v1/words/{wordId}` để xem trạng thái kỹ năng.
+Sau commit: gọi lại `learn-home` để làm mới Home. Kết quả chi tiết từng task không được trả về trong response commit; dùng `GET /v1/words/{wordId}` để xem trí nhớ và phát âm của từ.
 
 Bỏ session giữa chừng: không gọi gì. Không có kết quả nào được ghi, các từ mới vẫn còn "chưa học".
 
@@ -764,7 +757,7 @@ Các số trên là giá trị thử nghiệm và có thể đổi. Không hardc
 
 ## 12. Challenge Map (Match Madness)
 
-Màn chơi tuỳ chọn, tách hẳn khỏi Daily. Chỉ dùng từ **đã học** trong Daily. Không bao giờ chặn từ mới, không đổi lịch ôn (SRS), không tính bằng chứng kỹ năng: thắng hay thua đều không ảnh hưởng `dueCount`, `nextReviewAt` hay `skills`. Mọi con số dưới đây là giá trị thử nghiệm (`POLICY.challenge`), đọc từ response, không hardcode.
+Màn chơi tuỳ chọn, tách hẳn khỏi Daily. Chỉ dùng từ **đã học** trong Daily. Không bao giờ chặn từ mới, không đổi lịch ôn (SRS), không tính tiến độ phát âm: thắng hay thua đều không ảnh hưởng `dueCount` hay `nextReviewAt`. Mọi con số dưới đây là giá trị thử nghiệm (`POLICY.challenge`), đọc từ response, không hardcode.
 
 - **Chapter** = 12 nghĩa mới ("core") + tối đa 3 nghĩa ôn lại từ các chapter trước (chapter 1 không có). Mỗi chapter có 3 level, chơi liền nhau được, không cần quay về Daily.
 - Một nghĩa chỉ làm core cho đúng một chapter. Trong một chapter, không có 2 thẻ trùng chữ tiếng Anh hoặc trùng nghĩa hiển thị (so sánh không phân biệt hoa thường/khoảng trắng). Vì vậy học 12 từ nhưng có thể chỉ đủ 11 nghĩa hợp lệ.
@@ -970,7 +963,7 @@ Theo "Syll — Ranking & Tier" v1.2. Mọi con số là thử nghiệm và lấy
 | --- | --- | --- |
 | `new_meaning_completed` | +5 | Học xong một Meaning mới trong `daily`. Mỗi Meaning chỉ một lần trọn đời. Từ tự tạo: tối đa 5 Meaning/ngày UTC |
 | `due_review_completed` | +4 | Ôn một Meaning đã đến hạn từ lúc plan. Cách lần trước ≥ 20 giờ, tối đa 3 lần/7 ngày |
-| `extra_practice_completed` | +1 | Luyện thêm trong `random_practice`, `weak_words_practice`, `checkpoint_challenge`. Mỗi Meaning 1 lần/ngày, tối đa 10 LP/ngày, không áp dụng cho từ vừa học hôm đó |
+| `extra_practice_completed` | +1 | Luyện thêm trong `random_practice`, `weak_words_practice`, `checkpoint_challenge`. Mỗi Meaning 1 lần/ngày, tối đa 10 LP/ngày, không áp dụng cho từ vừa học hôm đó. `speaking_practice` chưa có LP (ghi âm nhắm phát âm, không nhắm Meaning; xem DECISIONS "Skill system removed") |
 | Known check đúng | 0 | |
 
 - Đúng hay sai không đổi LP; chỉ cần đã thật sự trả lời (có submit). Chỉ reveal hoặc `unavailable` thì không được LP.
@@ -1077,7 +1070,7 @@ Countdown reset tính từ `weekEndsAt` theo giờ thiết bị.
 
 ## 15. Thống kê màn kết quả
 
-Spec: "Session Result Statistics v1" (repo iOS). Mọi nhóm do server suy ra từ đúng quyết định SRS / skill-verification của commit, client không tính lại. Mọi field mới đều có thể vắng ở session commit trước bản này: client decode optional.
+Spec: "Session Result Statistics v1" (repo iOS). Mọi nhóm do server suy ra từ đúng quyết định SRS / tiến độ phát âm của commit, client không tính lại. Mọi field mới đều có thể vắng ở session commit trước bản này: client decode optional.
 
 ### 15.1 Item
 
@@ -1102,6 +1095,7 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
 "summary": {
   "review":   { "total": 9, "groups": { "solid": [Item], "shaky": [Item], "relearn": [Item] } },
   "newWords": { "total": 4, "groups": { "smooth": [Item], "retried": [Item], "revealed": [Item], "known": [Item] } },
+  "speaking": Speaking | null,
   "practice": null, "skillChanges": null, "needPractice": null, "countedAsReview": null
 }
 ```
@@ -1118,23 +1112,34 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
   "review": null, "newWords": null,
   "practice": {
     "total": 8,
-    "excluded": { "count": 2, "reasons": ["invalid_recording", "weak_template"] },
+    "excluded": { "count": 2, "reasons": ["invalid_recording", "unavailable"] },
     "groups": { "clean": [PItem], "helped": [PItem], "missed": [PItem] }
   },
-  "skillChanges": {
-    "leveledUp": [CItem], "cleared": [CItem], "pendingConfirm": [CItem], "regressed": [CItem]
-  },
+  "speaking": Speaking | null,
+  "skillChanges": null,
   "needPractice": { "before": 11, "after": 8 },
   "countedAsReview": [Item]
 }
 ```
 
-- `PItem` = Item (không có `nextReviewAt`) + `skill` + `hadIssue` (cặp từ–kỹ năng có issue trước buổi; Weak dùng để gắn nhãn "hay sai gần đây" cho cặp không có issue). Mỗi dòng skill evidence là một lượt. `clean` = đúng, không lý do. `helped` = đúng nhờ hint / thử lại / primed. `missed` = sai hoặc xem đáp án.
-- `excluded`: lượt không đo kỹ năng: task không có evidence, hoặc evidence có `weak_template`, `quality_unqualified`, `audio_not_played`, `invalid_recording`; `unavailable` là ghi âm không làm được. `total` không gồm chúng.
-- `CItem` = Item (không có `nextReviewAt`) + `skill`, `from`, `to` (`not_verified|demonstrated|verified`). `leveledUp` khi `to` cao hơn `from`. `cleared` khi issue tắt. `pendingConfirm` khi có pass sạch trên kỹ năng đang có issue nhưng chưa đủ 12 h, kèm `confirmableAt`. `regressed` khi phát sinh issue `failed` mới. Một cặp có thể vừa `leveledUp` vừa `cleared`.
-- `needPractice`: cùng định nghĩa với `needPracticeWords` của `GET /v1/me/words/stats`, trước và sau commit.
+- `PItem` = Item (không có `nextReviewAt`) + `skill` (`spelling|listening|speaking`, null với task chỉ kiểm tra nghĩa; chỉ là nhãn dạng bài). Mỗi đích của task là một lượt. `clean` = đúng ngay lần đầu, không hint, không primed; ghi âm đạt. `helped` = đúng nhờ hint / thử lại / primed. `missed` = sai, xem đáp án, hoặc ghi âm chưa đạt. Không còn `hadIssue`.
+- `excluded`: lượt không nói gì về người học: `invalid_recording` (ghi âm không hợp lệ), `unavailable` (không ghi âm được). `total` không gồm chúng.
+- `needPractice`: cùng định nghĩa với `needPracticeWords` của `GET /v1/me/words/stats`, trước và sau commit. Một câu đúng ở Weak làm số này giảm ngay.
 - `countedAsReview`: từ đến hạn nhớ không trợ giúp, được tính là buổi ôn (lịch dời theo SRS).
+- `skillChanges` luôn null trong một bản phát hành rồi bỏ.
+
+### 15.3b Speaking (mọi mode)
+
+`speaking` có mặt khi buổi có ít nhất một bài ghi âm được chấm (ngoài ghi âm của từ mới và ghi âm `invalid`/`unavailable`), ngược lại là null. Ở Daily nó nằm cạnh `review` và `newWords`; ở `speaking_practice` các khối khác đều null.
+
+```jsonc
+"speaking": { "total": 3, "passed": 2, "becameFluent": [SItem], "slipped": [SItem] }
+```
+
+- Mỗi phát âm tính một kết quả mỗi buổi: bài ghi âm đầu tiên theo thứ tự plan. Chấm trên máy chỉ đạt khi lần nói **đầu tiên** đạt; chấm Azure lấy điểm của receipt hợp lệ **đầu tiên**, không phải receipt người học giữ lại.
+- `SItem` = Item (không có `nextReviewAt`) + `status` (`practicing|fluent`, sau buổi này) + `score` (null khi chấm trên máy).
+- `becameFluent`: từ vừa lên `fluent`. `slipped`: từ đang `fluent` bị tụt về `practicing`.
 
 ### 15.4 Lưu trữ
 
-`learning_sessions.result.summary` giữ vài số nguyên để so sánh các buổi sau khi `raw_events` bị xoá: daily `{reviewTotal, reviewSolid, newTotal, newSmooth}`, Random/Weak `{practiceTotal, practiceClean, leveledUp, needPracticeAfter}`. Chưa có API đọc.
+`learning_sessions.result.summary` giữ vài số nguyên để so sánh các buổi sau khi `raw_events` bị xoá: daily `{reviewTotal, reviewSolid, newTotal, newSmooth}`, Random/Weak `{practiceTotal, practiceClean, needPracticeAfter}`; thêm `{speakingTotal, speakingPassed}` khi có khối `speaking`. Chưa có API đọc.

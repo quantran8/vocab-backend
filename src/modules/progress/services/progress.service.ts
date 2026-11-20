@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
-import { DEFAULT_ACCENT, Skill, SKILL } from '../../../common/constants/domain';
+import { DEFAULT_ACCENT, SPEAKING_STATUS } from '../../../common/constants/domain';
 import { MS_PER_DAY } from '../../../common/constants/time';
 import { activeOverride, effectiveNewWords, reviewsPerSession, scopeStatus, shouldPromptChoice } from '../../review-load/domain/review-load';
 import { ApiError } from '../../../common/http/api-error';
@@ -9,9 +9,8 @@ import { toDate } from '../../../db/db';
 import { resolveAudioUrl } from '../../practice-resolver/asset-url';
 import { applyOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
-import { EvidenceQueryRow, LearnHomeRow, ProgressRepository, RawMeaningRow } from '../repositories/progress.repository';
+import { LearnHomeRow, ProgressRepository, RawMeaningRow, RawWordMeaningRow } from '../repositories/progress.repository';
 import { retrievability } from '../../memory-srs/fsrs';
-import { deriveSkillStatus, EvidenceRow, SkillState } from '../../skill-verification/skill-evidence';
 
 interface MeaningRow {
   wordId: string;
@@ -23,7 +22,7 @@ interface MeaningRow {
   stability?: number | null;
 }
 
-const parseMeaningRows = (rows: RawMeaningRow[]): MeaningRow[] =>
+const parseMeaningRows = <T extends RawMeaningRow>(rows: T[]) =>
   rows.map(({ override, ...r }) => ({
     ...r,
     snapshot: applyOverride(r.snapshot, override ?? undefined),
@@ -38,16 +37,6 @@ function memoryView(row: MeaningRow, now: Date) {
   const since = (now.getTime() - (row.lastReviewedAt ?? row.learnedAt).getTime()) / MS_PER_DAY;
   return { stabilityDays: row.stability, retrievability: Math.round(retrievability(since, row.stability) * 1000) / 1000, nextReviewAt: row.nextReviewAt };
 }
-
-type EvidenceIndex = Map<string, EvidenceRow[]>;
-
-const scopeKey = (skill: Skill, id: string) => `${skill}:${id}`;
-
-const indexEvidence = (rows: EvidenceQueryRow[]) =>
-  Map.groupBy(rows, (r) => scopeKey(r.skill, (r.meaningId ?? r.pronunciationId)!)) as EvidenceIndex;
-
-const stateOf = (index: EvidenceIndex, skill: Skill, id: string): SkillState =>
-  deriveSkillStatus(index.get(scopeKey(skill, id)) ?? []);
 
 const defaultPronunciation = (snapshot: MeaningSnapshot) => snapshot.pronunciations.find((p) => p.accentLocale === DEFAULT_ACCENT);
 
@@ -64,24 +53,32 @@ function senseView(snapshot: MeaningSnapshot, allowPlaceholderAudio: boolean) {
   };
 }
 
-function meaningView(row: MeaningRow, index: EvidenceIndex, allowPlaceholderAudio: boolean, now: Date) {
-  const pronunciation = defaultPronunciation(row.snapshot);
-  const spelling = stateOf(index, SKILL.SPELLING, row.meaningId);
-  const listening = pronunciation ? stateOf(index, SKILL.LISTENING, pronunciation.id) : undefined;
-  const speaking = pronunciation ? stateOf(index, SKILL.SPEAKING, pronunciation.id) : undefined;
+type WordMeaningRow = MeaningRow & Pick<RawWordMeaningRow, 'needsPractice' | 'speaking'>;
+
+/** Null when the Meaning has no pronunciation to record. */
+function speakingView(row: WordMeaningRow) {
+  if (!defaultPronunciation(row.snapshot)) return null;
+  const { speaking } = row;
+  if (!speaking) return { status: SPEAKING_STATUS.NOT_TRIED, lastScore: null, bestScore: null, lastAssessedAt: null };
+  return { ...speaking, lastAssessedAt: toDate(speaking.lastAssessedAt) };
+}
+
+function meaningView(row: WordMeaningRow, allowPlaceholderAudio: boolean, now: Date) {
   return {
     meaningId: row.meaningId,
     meaning: senseView(row.snapshot, allowPlaceholderAudio),
     learnedAt: row.learnedAt,
     nextReviewAt: row.nextReviewAt,
     memory: memoryView(row, now),
-    skills: { spelling, listening, speaking },
-    needsPractice: [spelling, listening, speaking].some((s) => s?.needsPractice),
+    speaking: speakingView(row),
+    // Removed for one release: older clients still find the key.
+    skills: null,
+    needsPractice: row.needsPractice,
   };
 }
 
-function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudio: boolean, now: Date) {
-  const meanings = rows.map((row) => meaningView(row, index, allowPlaceholderAudio, now));
+function wordView(rows: WordMeaningRow[], allowPlaceholderAudio: boolean, now: Date) {
+  const meanings = rows.map((row) => meaningView(row, allowPlaceholderAudio, now));
   return {
     wordId: rows[0].wordId,
     lemma: rows[0].snapshot.lemma,
@@ -94,7 +91,7 @@ function wordView(rows: MeaningRow[], index: EvidenceIndex, allowPlaceholderAudi
 const ipaVaries = (senses: Pick<RawMeaningRow, 'snapshot' | 'override'>[]) =>
   new Set(senses.map(({ snapshot, override }) => defaultPronunciation(applyOverride(snapshot, override ?? undefined))?.ipa ?? '')).size > 1;
 
-/** The library row: content and review dates only, so listing never reads skill evidence. */
+/** The library row: content and review dates only, so listing never reads progress detail. */
 const wordSummary = (rows: MeaningRow[], meaningCount: number, ipaVaries: boolean, allowPlaceholderAudio: boolean) => ({
   wordId: rows[0].wordId,
   lemma: rows[0].snapshot.lemma,
@@ -156,14 +153,13 @@ export class ProgressService {
   }
 
   wordStats(userId: string) {
-    return this.repository.wordStats(userId);
+    return this.repository.wordStats(userId, this.clock.now());
   }
 
   async word(userId: string, wordId: string) {
-    const rows = await this.repository.wordMeanings(userId, wordId);
+    const now = this.clock.now();
+    const rows = await this.repository.wordMeanings(userId, wordId, now);
     if (rows.length === 0) throw new ApiError('NOT_FOUND', 'Word not found');
-    const meanings = parseMeaningRows(rows);
-    const evidence = await this.repository.evidence(userId, meanings.map((m) => m.meaningId), meanings.flatMap((m) => m.snapshot.pronunciations.map((p) => p.id)));
-    return wordView(meanings, indexEvidence(evidence), this.config.allowPlaceholderAudio, this.clock.now());
+    return wordView(parseMeaningRows(rows), this.config.allowPlaceholderAudio, now);
   }
 }

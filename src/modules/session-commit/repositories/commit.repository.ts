@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
-import { CHECKPOINT_STATE, CONTENT_STATUS, EvidenceReason, NEW_WORD_OVERRIDE_MODE, SCHEDULER_VERSION, SESSION_MODE, SESSION_STATUS, SessionMode, Skill, VALIDITY } from '../../../common/constants/domain';
+import { CHECKPOINT_STATE, CONTENT_STATUS, NEW_WORD_OVERRIDE_MODE, SCHEDULER_VERSION, SESSION_STATUS, SessionMode, TEMPLATE } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DB, Db, toDate, Tx } from '../../../db/db';
 import { checkpointChallenges, learningSessions } from '../../../db/schema';
@@ -8,18 +8,14 @@ import { SrsState } from '../../memory-srs/fsrs';
 import { backlogSql, scopeMembershipSql } from '../../review-load/repositories/review-scope.sql';
 import { SessionPlan } from '../../session-planner/domain/session-plan';
 import { lpContextColumnsSql, parseLpContext, RawLpContext } from '../../learning-points/repositories/effort.repository';
-import { needPracticeWordsSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
-import { EvidenceRow } from '../../skill-verification/skill-evidence';
+import { needPracticeWordsSql, weakSince } from '../../review-load/repositories/weak-scope.sql';
+import { SpeakingState } from '../../speaking/speaking-progress';
 import { TargetRow } from '../domain/commit-evaluator';
 import { MeaningLabel } from '../domain/result-summary';
 
-/** Prior evidence of one (skill, scope), in the shape `deriveSkillStatus` reads. */
-export interface PriorEvidence extends EvidenceRow { skill: Skill; meaningId: string | null; pronunciationId: string | null }
-
-/** Modes whose results screen shows skill changes; only they pay for reading prior evidence. */
-export const SKILL_SUMMARY_MODES: SessionMode[] = [SESSION_MODE.RANDOM_PRACTICE, SESSION_MODE.WEAK_WORDS_PRACTICE];
-
 export interface ProgressRow extends SrsState { meaningId: string }
+export interface SpeakingRow extends SpeakingState { pronunciationId: string }
+type SpeakingDates = Pick<SpeakingState, 'lastAssessedAt' | 'fluentAt'>;
 type SrsDates = Pick<SrsState, 'learnedAt' | 'lastReviewedAt' | 'nextReviewAt'>;
 
 export interface ScopeEvents { completedTopicIds: string[]; scopeExhausted: boolean; collectionCompleted: boolean }
@@ -99,13 +95,16 @@ export class CommitRepository {
       SELECT (g->>'pronunciationId')::uuid
       FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
       WHERE g->>'pronunciationId' IS NOT NULL`;
+    const recordedPronunciations = sql`
+      SELECT (g->>'pronunciationId')::uuid
+      FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
+      WHERE t->>'template' = ${TEMPLATE.RECORDING} AND g->>'pronunciationId' IS NOT NULL`;
     // A listening/speaking target names only a pronunciation: label it with the Meaning that owns it, if the learner has it.
     const labelMeanings = sql`
       ${planMeanings}
       UNION SELECT ump.meaning_id FROM pronunciations pr
       JOIN user_meaning_progress ump ON ump.meaning_id = pr.meaning_id AND ump.user_id = ${userId}::uuid
       WHERE pr.id IN (${planPronunciations})`;
-    const skillModes = sql.join(SKILL_SUMMARY_MODES.map((m) => sql`${m}`), sql`, `);
     const { rows } = await tx.execute<RawLpContext & {
       userId: string; mode: SessionMode; status: string; issuedAt: string; expiresAt: string; scopeSnapshot: { challengeId?: string };
       commitRequestSha256: string | null; commitResponse: unknown;
@@ -113,7 +112,7 @@ export class CommitRepository {
       receipts: { id: string; taskId: string; validity: string; passed: boolean | null; accuracyScore: number | null; assessedAt: string }[];
       progress: (Omit<ProgressRow, keyof SrsDates> & Record<keyof SrsDates, string | null>)[];
       labels: MeaningLabel[];
-      evidence: (Omit<PriorEvidence, 'committedAt' | 'reasons'> & { committedAt: string; reasons: EvidenceReason[] })[];
+      speaking: (Omit<SpeakingRow, keyof SpeakingDates> & { lastAssessedAt: string; fluentAt: string | null })[];
     }>(sql`
       SELECT s.user_id AS "userId", s.mode, s.status, s.issued_at AS "issuedAt", s.expires_at AS "expiresAt", s.scope_snapshot AS "scopeSnapshot",
         s.commit_request_sha256 AS "commitRequestSha256", s.commit_response AS "commitResponse",
@@ -140,13 +139,14 @@ export class CommitRepository {
           JOIN meaning_publications pub ON pub.id = a.publication_id
           LEFT JOIN user_meaning_overrides o ON o.user_id = ${userId}::uuid AND o.meaning_id = m.id AND o.locale = a.locale
           WHERE m.id IN (${labelMeanings})), '[]'::json) AS labels,
-        CASE WHEN s.mode IN (${skillModes}) THEN COALESCE((SELECT json_agg(json_build_object(
-            'sessionId', e.session_id, 'skill', e.skill, 'passed', e.passed, 'reasons', e.reasons, 'committedAt', e.committed_at,
-            'meaningId', e.meaning_id, 'pronunciationId', e.pronunciation_id) ORDER BY e.committed_at, e.id)
-          FROM skill_evidence e
-          WHERE e.user_id = ${userId}::uuid AND e.validity = ${VALIDITY.VALID} AND ${skillStateReasonsSql}
-            AND (e.meaning_id IN (${planMeanings}) OR e.pronunciation_id IN (${planPronunciations}))), '[]'::json)
-          ELSE '[]'::json END AS evidence,
+        COALESCE((SELECT json_agg(json_build_object(
+            'pronunciationId', sp.pronunciation_id, 'status', sp.status, 'deviceSessions', sp.device_sessions, 'deviceStreak', sp.device_streak,
+            'scoredSessions', sp.scored_sessions, 'scoreAvg', sp.score_avg, 'lastScore', sp.last_score, 'bestScore', sp.best_score,
+            'lastPassed', sp.last_passed, 'lastAssessedAt', sp.last_assessed_at, 'fluentAt', sp.fluent_at))
+          FROM (
+            SELECT * FROM user_speaking_progress
+            WHERE user_id = ${userId}::uuid AND pronunciation_id IN (${recordedPronunciations})
+            FOR UPDATE) sp), '[]'::json) AS speaking,
         ${lpContextColumnsSql(userId, planMeanings, now)}
       FROM learning_sessions s
       WHERE s.id = ${sessionId}::uuid
@@ -163,7 +163,9 @@ export class CommitRepository {
       issuedAt: toDate(row.issuedAt),
       expiresAt: toDate(row.expiresAt),
       receipts: row.receipts.map((r) => ({ ...r, assessedAt: toDate(r.assessedAt) })),
-      evidence: row.evidence.map((e): PriorEvidence => ({ ...e, committedAt: toDate(e.committedAt) })),
+      speaking: new Map<string, SpeakingRow>(row.speaking.map((r) => [r.pronunciationId, {
+        ...r, lastAssessedAt: toDate(r.lastAssessedAt), fluentAt: date(r.fluentAt),
+      }])),
       lp: parseLpContext(row),
       progress: new Map<string, ProgressRow>(row.progress.map((p) => [p.meaningId, {
         ...p,
@@ -193,18 +195,29 @@ export class CommitRepository {
     const { userId, sessionId, now, requestHash, response, data, withScopeEvents, withNeedPractice } = input;
     const events = withScopeEvents ? scopeEventsSql(userId) : sql`${JSON.stringify(NO_SCOPE_EVENTS)}::jsonb`;
     const stored = withNeedPractice
-      ? sql`jsonb_set(${JSON.stringify(response)}::jsonb, '{summary,needPractice}', jsonb_build_object('before', ${needPracticeWordsSql(userId)}, 'after', null))`
+      ? sql`jsonb_set(${JSON.stringify(response)}::jsonb, '{summary,needPractice}', jsonb_build_object('before', ${needPracticeWordsSql(userId, weakSince(now))}, 'after', null))`
       : sql`${JSON.stringify(response)}::jsonb`;
     const { rows: [row] } = await tx.execute<{ response: object }>(sql`
       WITH p AS (SELECT ${data}::jsonb AS d),
-      evidence AS (
-        INSERT INTO skill_evidence (id, user_id, session_id, task_id, target_ordinal, skill, reasons, validity, passed,
-          meaning_id, pronunciation_id, assessed_at, committed_at, assessment_receipt_id, evaluator_version)
-        SELECT x.id, ${userId}::uuid, ${sessionId}::uuid, x.task_id, x.target_ordinal, x.skill, x.reasons, x.validity, x.passed,
-          x.meaning_id, x.pronunciation_id, x.assessed_at, ${now}::timestamptz, x.assessment_receipt_id, x.evaluator_version
-        FROM p, jsonb_to_recordset(p.d->'evidence') AS x(
-          id uuid, task_id uuid, target_ordinal smallint, skill varchar, reasons jsonb, validity varchar, passed boolean,
-          meaning_id uuid, pronunciation_id uuid, assessed_at timestamptz, assessment_receipt_id uuid, evaluator_version varchar)
+      speaking AS (
+        INSERT INTO user_speaking_progress (user_id, pronunciation_id, status, device_sessions, device_streak, scored_sessions,
+          score_avg, last_score, best_score, last_passed, last_assessed_at, fluent_at)
+        SELECT ${userId}::uuid, x.pronunciation_id, x.status, x.device_sessions, x.device_streak, x.scored_sessions,
+          x.score_avg, x.last_score, x.best_score, x.last_passed, x.last_assessed_at, x.fluent_at
+        FROM p, jsonb_to_recordset(p.d->'speaking') AS x(
+          pronunciation_id uuid, status varchar, device_sessions int, device_streak smallint, scored_sessions int,
+          score_avg numeric, last_score numeric, best_score numeric, last_passed boolean, last_assessed_at timestamptz, fluent_at timestamptz)
+        ON CONFLICT (user_id, pronunciation_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          device_sessions = EXCLUDED.device_sessions,
+          device_streak = EXCLUDED.device_streak,
+          scored_sessions = EXCLUDED.scored_sessions,
+          score_avg = EXCLUDED.score_avg,
+          last_score = EXCLUDED.last_score,
+          best_score = EXCLUDED.best_score,
+          last_passed = EXCLUDED.last_passed,
+          last_assessed_at = EXCLUDED.last_assessed_at,
+          fluent_at = EXCLUDED.fluent_at
       ), observations AS (
         INSERT INTO memory_observations (session_id, user_id, meaning_id, signal, is_primed, source_task_ids, grade, evidence_weight, observed_at)
         SELECT ${sessionId}::uuid, ${userId}::uuid, x.meaning_id, x.signal, x.is_primed, x.source_task_ids, x.grade, x.evidence_weight, ${now}::timestamptz
@@ -242,10 +255,10 @@ export class CommitRepository {
     return row.response;
   }
 
-  // Runs after the write, so the count includes this commit's evidence. Stored in the response, so retries replay it.
-  async settleNeedPractice(tx: Tx, sessionId: string, userId: string) {
+  // Runs after the write, so the count includes this commit's observations. Stored in the response, so retries replay it.
+  async settleNeedPractice(tx: Tx, sessionId: string, userId: string, now: Date) {
     const { rows: [row] } = await tx.execute<{ response: object }>(sql`
-      WITH c AS (SELECT ${needPracticeWordsSql(userId)} AS after)
+      WITH c AS (SELECT ${needPracticeWordsSql(userId, weakSince(now))} AS after)
       UPDATE learning_sessions
       SET commit_response = jsonb_set(commit_response, '{summary,needPractice,after}', to_jsonb(c.after)),
           result = jsonb_set(result, '{summary,needPracticeAfter}', to_jsonb(c.after))

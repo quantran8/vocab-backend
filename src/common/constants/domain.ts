@@ -88,6 +88,7 @@ export const SESSION_MODE = {
   CHECKPOINT_CHALLENGE: 'checkpoint_challenge',
   RANDOM_PRACTICE: 'random_practice',
   WEAK_WORDS_PRACTICE: 'weak_words_practice',
+  SPEAKING_PRACTICE: 'speaking_practice',
 } as const;
 export type SessionMode = (typeof SESSION_MODE)[keyof typeof SESSION_MODE];
 export const SESSION_MODES = Object.values(SESSION_MODE);
@@ -103,6 +104,7 @@ export const TASK_PHASE = {
   CHECKPOINT_CHALLENGE: 'checkpoint_challenge',
   RANDOM_PRACTICE: 'random_practice',
   WEAK_WORDS_PRACTICE: 'weak_words_practice',
+  SPEAKING_PRACTICE: 'speaking_practice',
 } as const;
 export type TaskPhase = (typeof TASK_PHASE)[keyof typeof TASK_PHASE];
 
@@ -122,42 +124,29 @@ export const FSRS_GRADE_VALUE: Record<FsrsGrade, 1 | 2 | 3 | 4> = {
   [FSRS_GRADE.AGAIN]: 1, [FSRS_GRADE.HARD]: 2, [FSRS_GRADE.GOOD]: 3, [FSRS_GRADE.EASY]: 4,
 };
 
-// Form skills only: whether the learner remembers the meaning is FSRS's job.
+// Task-type labels on the results sheet; memory itself is FSRS's job.
 export const SKILL = {
   LISTENING: 'listening',
   SPEAKING: 'speaking',
   SPELLING: 'spelling',
 } as const;
 export type Skill = (typeof SKILL)[keyof typeof SKILL];
-export const SKILLS = Object.values(SKILL);
 
-export const SKILL_STATUS = {
-  NOT_VERIFIED: 'not_verified',
-  DEMONSTRATED: 'demonstrated',
-} as const;
-export type SkillStatus = (typeof SKILL_STATUS)[keyof typeof SKILL_STATUS];
+// `not_tried` means the learner has no row; it is never stored.
+export const SPEAKING_STATUS = { NOT_TRIED: 'not_tried', PRACTICING: 'practicing', FLUENT: 'fluent' } as const;
+export type SpeakingStatus = (typeof SPEAKING_STATUS)[keyof typeof SPEAKING_STATUS];
+export type StoredSpeakingStatus = Exclude<SpeakingStatus, typeof SPEAKING_STATUS.NOT_TRIED>;
 
-/** Why an evidence row is not direct; an empty list means direct. */
-export const SKILL_ISSUE = {
-  FAILED: 'failed',
-  ASSISTED: 'assisted',
-} as const;
-export type SkillIssue = (typeof SKILL_ISSUE)[keyof typeof SKILL_ISSUE];
+/** How a recording was graded: a transcript on the device (pass/fail) or an Azure score. */
+export const SPEAKING_METHOD = { DEVICE: 'device', AZURE: 'azure' } as const;
+export type SpeakingMethod = (typeof SPEAKING_METHOD)[keyof typeof SPEAKING_METHOD];
 
-export const EVIDENCE_REASON = {
-  NEW_PRACTICE: 'new_practice',
-  HINTED: 'hinted',
-  REVEALED: 'revealed',
-  RETRIED: 'retried',
-  PRIMED: 'primed',
-  WEAK_TEMPLATE: 'weak_template',
-  QUALITY_UNQUALIFIED: 'quality_unqualified',
-  AUDIO_NOT_PLAYED: 'audio_not_played',
-  INVALID_RECORDING: 'invalid_recording',
-  // Only on rows backfilled by migration 0010 whose plan was already cleared.
-  UNKNOWN: 'unknown',
-} as const;
-export type EvidenceReason = (typeof EVIDENCE_REASON)[keyof typeof EVIDENCE_REASON];
+export const SPEAKING_CHANGE = { BECAME_FLUENT: 'became_fluent', SLIPPED: 'slipped' } as const;
+export type SpeakingChange = (typeof SPEAKING_CHANGE)[keyof typeof SPEAKING_CHANGE];
+
+/** Why a practice answer is left out of the results groups: it says nothing about the learner. */
+export const PRACTICE_EXCLUDED_REASON = { INVALID_RECORDING: 'invalid_recording', UNAVAILABLE: 'unavailable' } as const;
+export type PracticeExcludedReason = (typeof PRACTICE_EXCLUDED_REASON)[keyof typeof PRACTICE_EXCLUDED_REASON];
 
 export const VALIDITY = { VALID: 'valid', INVALID: 'invalid' } as const;
 export type Validity = (typeof VALIDITY)[keyof typeof VALIDITY];
@@ -215,10 +204,6 @@ export const NEW_WORD_GROUPS = Object.values(NEW_WORD_GROUP);
 export const PRACTICE_GROUP = { CLEAN: 'clean', HELPED: 'helped', MISSED: 'missed' } as const;
 export type PracticeGroup = (typeof PRACTICE_GROUP)[keyof typeof PRACTICE_GROUP];
 export const PRACTICE_GROUPS = Object.values(PRACTICE_GROUP);
-
-export const SKILL_CHANGE = { LEVELED_UP: 'leveledUp', CLEARED: 'cleared', PENDING_CONFIRM: 'pendingConfirm', REGRESSED: 'regressed' } as const;
-export type SkillChange = (typeof SKILL_CHANGE)[keyof typeof SKILL_CHANGE];
-export const SKILL_CHANGES = Object.values(SKILL_CHANGE);
 
 /** Why a word landed in a weaker group: the answer that decided it. Shown per word on the results sheet. */
 export const RESULT_CAUSE = {

@@ -7,7 +7,7 @@ import {
 import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
-  type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type FsrsGrade, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type Skill, type Template, type Validity, type Variant, type CheckpointState, type EvidenceReason,
+  type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type FsrsGrade, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type StoredSpeakingStatus, type Template, type Validity, type Variant, type CheckpointState,
   type AvatarKey, type ContentProvenance, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
@@ -344,23 +344,24 @@ export const memoryObservations = pgTable('memory_observations', {
   index('idx_memory_user_meaning').on(t.userId, t.meaningId, t.observedAt.desc()),
 ]);
 
-export const skillEvidence = pgTable('skill_evidence', {
-  id: id(),
+// One row per (learner, pronunciation); absent means not tried.
+export const userSpeakingProgress = pgTable('user_speaking_progress', {
   userId: uuid('user_id').notNull(),
-  sessionId: uuid('session_id').notNull(),
-  taskId: uuid('task_id').notNull(),
-  targetOrdinal: smallint('target_ordinal').notNull(),
-  skill: varchar('skill', { length: 12 }).$type<Skill>().notNull(),
-  reasons: jsonb('reasons').notNull().$type<EvidenceReason[]>(),
-  validity: varchar('validity', { length: 12 }).$type<Validity>().notNull(),
-  passed: boolean('passed'),
-  meaningId: uuid('meaning_id'),
-  pronunciationId: uuid('pronunciation_id'),
-  assessedAt: ts('assessed_at').notNull(),
-  committedAt: ts('committed_at').notNull(),
-  assessmentReceiptId: uuid('assessment_receipt_id'),
-  evaluatorVersion: varchar('evaluator_version', { length: 40 }).notNull(),
-}, (t) => [unique('skill_evidence_session_id_task_id_target_ordinal_skill_key').on(t.sessionId, t.taskId, t.targetOrdinal, t.skill)]);
+  pronunciationId: uuid('pronunciation_id').notNull(),
+  status: varchar('status', { length: 12 }).$type<StoredSpeakingStatus>().notNull(),
+  deviceSessions: integer('device_sessions').notNull().default(0),
+  deviceStreak: smallint('device_streak').notNull().default(0),
+  scoredSessions: integer('scored_sessions').notNull().default(0),
+  scoreAvg: numeric('score_avg', { precision: 5, scale: 2, mode: 'number' }),
+  lastScore: numeric('last_score', { precision: 5, scale: 2, mode: 'number' }),
+  bestScore: numeric('best_score', { precision: 5, scale: 2, mode: 'number' }),
+  lastPassed: boolean('last_passed').notNull(),
+  lastAssessedAt: ts('last_assessed_at').notNull(),
+  fluentAt: ts('fluent_at'),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.pronunciationId] }),
+  index('idx_speaking_user_due').on(t.userId, t.status, t.lastPassed, t.lastAssessedAt),
+]);
 
 // F. Checkpoint challenge snapshots, one per N learning sessions
 export const checkpointChallenges = pgTable('checkpoint_challenges', {

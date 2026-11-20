@@ -1050,6 +1050,8 @@ Daily Due + recognitionSuccess:
 
 ## 6. Four-skill verification & Word status
 
+> **Superseded** (2026-11): the skill system is removed; `skill_evidence` is dropped. Memory is FSRS only, and speaking keeps `user_speaking_progress`. See `docs/DECISIONS.md` "Skill system removed" and `docs/SPEAKING_PLAN.md`.
+
 > **Superseded (2026-11):** skill chỉ còn `listening`, `speaking`, `spelling`; bỏ `reading` và trạng thái `verified`. Xem `docs/DECISIONS.md` § "FSRS and weighted evidence".
 
 

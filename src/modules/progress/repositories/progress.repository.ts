@@ -1,12 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, or, sql, SQL } from 'drizzle-orm';
-import { CHECKPOINT_STATE, NewWordOverrideMode, Skill, VALIDITY } from '../../../common/constants/domain';
+import { sql, SQL } from 'drizzle-orm';
+import { CHECKPOINT_STATE, DEFAULT_ACCENT, NewWordOverrideMode, SPEAKING_STATUS, StoredSpeakingStatus } from '../../../common/constants/domain';
 import { DB, Db } from '../../../db/db';
-import { skillEvidence } from '../../../db/schema';
 import { MeaningOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
-import { EvidenceRow } from '../../skill-verification/skill-evidence';
-import { learnedWithPronunciationSql, needPracticeWordsSql, skillStateReasonsSql } from '../../skill-verification/skill-issue.sql';
+import { needPracticeWordsSql, weakMeaningsSql, weakSince } from '../../review-load/repositories/weak-scope.sql';
 import { backlogSql, pendingCustomSql, remainingNewSql, scopeMembershipSql, unlearnedSql } from '../../review-load/repositories/review-scope.sql';
 
 export type LearnHomeRow = {
@@ -28,11 +26,14 @@ export type RawMeaningRow = {
   stability?: number | null;
 };
 
-export interface EvidenceQueryRow extends EvidenceRow {
-  skill: Skill;
-  meaningId: string | null;
-  pronunciationId: string | null;
-}
+export type RawWordMeaningRow = RawMeaningRow & {
+  needsPractice: boolean;
+  speaking: { status: StoredSpeakingStatus; lastScore: number | null; bestScore: number | null; lastAssessedAt: string } | null;
+};
+
+/** The default-accent pronunciation of a publication `p`, as a uuid column. */
+const defaultPronunciationSql = sql`(SELECT (e->>'id')::uuid FROM jsonb_array_elements(p.snapshot->'pronunciations') e
+  WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1)`;
 
 const DIACRITICS: Record<string, string> = {
   a: 'àáảãạăằắẳẵặâầấẩẫậ', e: 'èéẻẽẹêềếểễệ', i: 'ìíỉĩị', o: 'òóỏõọôồốổỗộơờớởỡợ', u: 'ùúủũụưừứửữự', y: 'ỳýỷỹỵ', d: 'đ',
@@ -136,20 +137,36 @@ export class ProgressRepository {
     return rows;
   }
 
-  /** Mirrors deriveSkillStatus's needsPractice (latest skill issue not yet recovered) in one statement. */
-  async wordStats(userId: string) {
-    const { rows: [row] } = await this.db.execute<{ learnedWords: number; needPracticeWords: number }>(sql`
-      WITH learned AS (${learnedWithPronunciationSql(userId)})
-      SELECT count(DISTINCT l.word_id)::int AS "learnedWords", ${needPracticeWordsSql(userId)} AS "needPracticeWords"
-      FROM learned l`);
+  /** One statement; needPracticeWords is the Weak definition (weak-scope.sql.ts). */
+  async wordStats(userId: string, now: Date) {
+    const { rows: [row] } = await this.db.execute<{ learnedWords: number; needPracticeWords: number; fluentWords: number }>(sql`
+      WITH learned AS (
+        SELECT wt.word_id, ${defaultPronunciationSql} AS pronunciation_id
+        FROM user_meaning_progress ump
+        JOIN meanings m ON m.id = ump.meaning_id
+        JOIN word_types wt ON wt.id = m.type_id
+        JOIN user_settings s ON s.user_id = ump.user_id
+        JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = s.explanation_locale
+        JOIN meaning_publications p ON p.id = a.publication_id
+        WHERE ump.user_id = ${userId}::uuid)
+      SELECT count(DISTINCT l.word_id)::int AS "learnedWords",
+        ${needPracticeWordsSql(userId, weakSince(now))} AS "needPracticeWords",
+        (count(DISTINCT l.word_id) FILTER (WHERE sp.status = ${SPEAKING_STATUS.FLUENT}))::int AS "fluentWords"
+      FROM learned l
+      LEFT JOIN user_speaking_progress sp ON sp.user_id = ${userId}::uuid AND sp.pronunciation_id = l.pronunciation_id`);
     return row;
   }
 
-  async wordMeanings(userId: string, wordId: string) {
-    const { rows } = await this.db.execute<RawMeaningRow>(sql`
+  async wordMeanings(userId: string, wordId: string, now: Date) {
+    const { rows } = await this.db.execute<RawWordMeaningRow>(sql`
+        WITH weak AS (${weakMeaningsSql(userId, weakSince(now))})
         SELECT wt.word_id AS "wordId", m.id AS "meaningId", p.snapshot, o.content AS override,
                ump.learned_at AS "learnedAt", ump.next_review_at AS "nextReviewAt",
-               ump.last_reviewed_at AS "lastReviewedAt", ump.stability::float8 AS stability
+               ump.last_reviewed_at AS "lastReviewedAt", ump.stability::float8 AS stability,
+               m.id IN (SELECT meaning_id FROM weak) AS "needsPractice",
+               CASE WHEN sp.user_id IS NOT NULL THEN json_build_object(
+                 'status', sp.status, 'lastScore', sp.last_score::float8, 'bestScore', sp.best_score::float8, 'lastAssessedAt', sp.last_assessed_at)
+               END AS speaking
         FROM word_types wt
         JOIN meanings m ON m.type_id = wt.id
         JOIN user_settings s ON s.user_id = ${userId}::uuid
@@ -157,31 +174,10 @@ export class ProgressRepository {
         JOIN meaning_publications p ON p.id = a.publication_id
         LEFT JOIN user_meaning_progress ump ON ump.meaning_id = m.id AND ump.user_id = s.user_id
         LEFT JOIN user_meaning_overrides o ON o.user_id = s.user_id AND o.meaning_id = m.id AND o.locale = s.explanation_locale
+        LEFT JOIN user_speaking_progress sp ON sp.user_id = s.user_id AND sp.pronunciation_id = ${defaultPronunciationSql}
         WHERE wt.word_id = ${wordId}::uuid AND (a.recalled_at IS NULL OR ump.user_id IS NOT NULL)
           AND (m.owner_user_id IS NULL OR m.owner_user_id = s.user_id)
         ORDER BY m.id`);
     return rows;
-  }
-
-  async evidence(userId: string, meaningIds: string[], pronunciationIds: string[]) {
-    const rows = await this.db
-      .select({
-        sessionId: skillEvidence.sessionId,
-        skill: skillEvidence.skill,
-        passed: skillEvidence.passed,
-        reasons: skillEvidence.reasons,
-        committedAt: skillEvidence.committedAt,
-        meaningId: skillEvidence.meaningId,
-        pronunciationId: skillEvidence.pronunciationId,
-      })
-      .from(skillEvidence)
-      .where(and(
-        eq(skillEvidence.userId, userId),
-        skillStateReasonsSql,
-        eq(skillEvidence.validity, VALIDITY.VALID),
-        or(inArray(skillEvidence.meaningId, meaningIds), pronunciationIds.length > 0 ? inArray(skillEvidence.pronunciationId, pronunciationIds) : undefined),
-      ))
-      .orderBy(asc(skillEvidence.committedAt), asc(skillEvidence.id));
-    return rows as EvidenceQueryRow[];
   }
 }

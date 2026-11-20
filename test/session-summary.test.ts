@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
-import { ASSESSMENT_INTENT, TEMPLATE } from '../src/common/constants/domain';
-import { learningSessions, words as wordsTable } from '../src/db/schema';
-import { ServerEvaluation } from '../src/modules/practice-resolver/task.types';
+import { TEMPLATE, VALIDITY } from '../src/common/constants/domain';
+import { POLICY } from '../src/config/policy';
+import { learningSessions, userSpeakingProgress, words as wordsTable } from '../src/db/schema';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 import { answers, correctEvents, tasksOf, wrongEvents } from './support/driver';
 
@@ -60,7 +60,7 @@ describe('commit summary for the results screen', () => {
         expect(item.wordId).toEqual(expect.any(String));
         expect(new Date(item.nextReviewAt).getTime()).toBeGreaterThan(h.clock.now().getTime());
       }
-      expect(summary).toMatchObject({ practice: null, skillChanges: null, needPractice: null, countedAsReview: null });
+      expect(summary).toMatchObject({ practice: null, speaking: null, skillChanges: null, needPractice: null, countedAsReview: null });
       // The legacy counts stay for one release.
       expect(summary).toMatchObject({ newWordGoalSlots: 2, knownMeanings: 0, practiceTasks: expect.any(Number) });
 
@@ -109,12 +109,15 @@ describe('commit summary for the results screen', () => {
 
     it('C66 a recording the learner could not do keeps the word smooth', async () => {
       await onboard(6);
+      await api('put', '/v1/me/settings').send({ dailySpeaking: true }).expect(200);
       await goal(1);
       const p = await plan();
       expect((tasksOf(p) as Task[]).some((t) => t.template === TEMPLATE.RECORDING)).toBe(true);
       // The driver answers recordings without a receipt as `unavailable`.
       const { summary } = (await commit(p, answers(p)).expect(200)).body;
       expect(summary.newWords.groups.smooth).toHaveLength(1);
+      // A new word's recording never feeds speaking progress.
+      expect(summary.speaking).toBeNull();
     });
 
     describe('"I know this"', () => {
@@ -158,30 +161,30 @@ describe('commit summary for the results screen', () => {
       return { p, response };
     }
 
-    it('C69 random practice: answers and skill changes, no daily blocks, replayed whole', async () => {
+    it('C69 random practice: answers grouped, no daily blocks, replayed whole', async () => {
       await onboard(6);
       await learn(3);
       h.clock.advance(24 * 3);
-      const { p, response } = await practiced('random_practice', undefined, { skills: ['spelling'] });
+      const { p, response } = await practiced('random_practice');
       const { summary } = response.body;
-      expect(summary).toMatchObject({ review: null, newWords: null });
-      expect(summary.practice.total).toBe(summary.practice.groups.clean.length);
-      expect(summary.practice.total + summary.practice.excluded.count).toBeGreaterThan(0);
-      expect(summary.skillChanges).toMatchObject({ cleared: [], pendingConfirm: [], regressed: [] });
-      expect(summary.skillChanges.leveledUp.length).toBeGreaterThan(0);
+      expect(summary).toMatchObject({ review: null, newWords: null, skillChanges: null });
+      expect(summary.practice.groups.missed).toEqual([]);
+      expect(summary.practice.total).toBeGreaterThan(0);
+      const [first] = [...summary.practice.groups.clean, ...summary.practice.groups.helped];
+      expect(first).toEqual({ meaningId: expect.any(String), wordId: expect.any(String), lemma: expect.any(String), gloss: expect.any(String), skill: first.skill });
+      expect([null, 'spelling', 'listening', 'speaking']).toContain(first.skill);
       expect(summary.needPractice).toEqual({ before: 0, after: 0 });
-      // Every word is due after three days: exactly the clean, unprimed answers count as its review.
-      const recalled = new Set((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).plan!.tasks
-        .filter((t) => { const e = t.serverEvaluation as ServerEvaluation; return e.intent === ASSESSMENT_INTENT.MEANING_RECALL && !e.isPrimed; })
+      // Every word is due after three days: words answered cleanly count as their review.
+      const practised = new Set((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).plan!.tasks
         .flatMap((t) => t.targets.flatMap((g) => g.meaningId ?? [])));
-      expect(new Set(ids(summary.countedAsReview))).toEqual(recalled);
+      expect(summary.countedAsReview.length).toBeGreaterThan(0);
+      for (const id of ids(summary.countedAsReview)) expect(practised).toContain(id);
 
       const retried = await commit(p, answers(p)).expect(200);
       expect(retried.text).toBe(response.text);
       expect((await api('get', `/v1/sessions/${p.sessionId}/commit-status`).expect(200)).body.response).toEqual(response.body);
       expect((await result(p.sessionId)).summary).toEqual({
-        practiceTotal: summary.practice.total, practiceClean: summary.practice.groups.clean.length,
-        leveledUp: summary.skillChanges.leveledUp.length, needPracticeAfter: 0,
+        practiceTotal: summary.practice.total, practiceClean: summary.practice.groups.clean.length, needPracticeAfter: 0,
       });
     });
 
@@ -193,36 +196,119 @@ describe('commit summary for the results screen', () => {
       expect(response.body.summary.countedAsReview).toEqual([]);
     });
 
-    it('C71 a failure regresses the skill and raises needPractice', async () => {
+    it('C71 a word turns weak after enough recent misses, the latest one a miss', async () => {
       await onboard(6);
       await learn(1);
-      h.clock.advance(30);
-      const { response } = await practiced('random_practice', fail, { skills: ['spelling'] });
-      const { summary } = response.body;
-      expect(summary.practice.groups.missed.length).toBeGreaterThan(0);
-      expect(summary.skillChanges.regressed.length).toBeGreaterThan(0);
-      expect(summary.needPractice).toEqual({ before: 0, after: 1 });
+      // No bonus task or match: each session asks the word once.
+      h.planner.setRng(() => 0.99);
+      const counts = [];
+      for (let i = 0; i < POLICY.weak.minAttempts; i += 1) {
+        h.clock.advance(30);
+        const { summary } = (await practiced('random_practice', fail)).response.body;
+        expect(summary.practice.groups.missed).toHaveLength(1);
+        counts.push(summary.needPractice);
+      }
+      expect(counts.at(-1)).toEqual({ before: 0, after: 1 });
+      expect(counts.slice(0, -1).every((c) => c.after === 0)).toBe(true);
     });
 
-    it('C72 weak: a pass before 12 h waits to confirm; after 12 h it clears and the count drops', async () => {
+    it('C72 weak: practises exactly the needPractice words, and a clean answer clears them at once', async () => {
       await onboard(6);
-      await learn(1);
-      h.clock.advance(30);
-      await practiced('random_practice', fail, { skills: ['spelling'] });
+      await learn(2);
+      h.planner.setRng(() => 0.99);
+      for (let i = 0; i < POLICY.weak.minAttempts; i += 1) {
+        h.clock.advance(30);
+        await practiced('random_practice', fail);
+      }
+      const stats = (await api('get', '/v1/me/words/stats').expect(200)).body;
+      expect(stats.needPracticeWords).toBe(2);
 
       h.clock.advance(1);
-      const early = (await practiced('weak_words_practice')).response.body.summary;
-      expect(early.skillChanges.pendingConfirm.length).toBeGreaterThan(0);
-      const confirmableAt = new Date(early.skillChanges.pendingConfirm[0].confirmableAt).getTime();
-      expect(confirmableAt).toBe(h.clock.now().getTime() + 11 * 3_600_000);
-      expect(early.skillChanges.cleared).toEqual([]);
-      expect(early.needPractice).toEqual({ before: 1, after: 1 });
-      expect(early.practice.groups.clean.every((i: { hadIssue: boolean }) => i.hadIssue)).toBe(true);
+      const p = await plan({}, 'weak_words_practice');
+      const weakMeanings = new Set((await h.first(learningSessions, eq(learningSessions.id, p.sessionId))).plan!.tasks
+        .flatMap((t) => t.targets.flatMap((g) => g.meaningId ?? [])));
+      expect(weakMeanings.size).toBe(stats.needPracticeWords);
+      const { summary } = (await commit(p, answers(p)).expect(200)).body;
+      // No waiting period: FSRS already spaces the reviews.
+      expect(summary.needPractice).toEqual({ before: 2, after: 0 });
+      expect((await api('get', '/v1/me/words/stats').expect(200)).body.needPracticeWords).toBe(0);
+    });
+  });
 
-      h.clock.advance(12);
-      const late = (await practiced('weak_words_practice')).response.body.summary;
-      expect(late.skillChanges.cleared.length).toBeGreaterThan(0);
-      expect(late.needPractice).toEqual({ before: 1, after: 0 });
+  describe('speaking', () => {
+    type Recording = Task & { evaluation: { acceptedResponses: string[] } };
+    const recordings = (p: { steps: { type: string }[] }) => (tasksOf(p) as Recording[]).filter((t) => t.template === TEMPLATE.RECORDING);
+    const said = (text: string) => (t: Task) => (t.template === TEMPLATE.RECORDING ? [{ seq: 1, action: 'transcribed', transcript: text }] : undefined);
+    const right = (t: Task) => (t.template === TEMPLATE.RECORDING ? said((t as Recording).evaluation.acceptedResponses[0])(t) : undefined);
+    const progressRows = () => h.db.select().from(userSpeakingProgress);
+
+    it('C74 speaking mode: two passing sessions make a word fluent, a miss slips it back', async () => {
+      await onboard(4);
+      await learn(1);
+      const first = await plan({}, 'speaking_practice');
+      expect(recordings(first)).toHaveLength(1);
+      expect(recordings(first)[0]).toMatchObject({ meaningCue: expect.any(Object) });
+      const one = (await commit(first, answers(first, { override: right })).expect(200)).body.summary;
+      expect(one).toMatchObject({ practice: null, review: null, speaking: { total: 1, passed: 1, becameFluent: [], slipped: [] } });
+      expect(await progressRows()).toEqual([expect.objectContaining({ status: 'practicing', deviceSessions: 1, deviceStreak: 1, lastPassed: true })]);
+      expect((await result(first.sessionId)).summary).toEqual({ speakingTotal: 1, speakingPassed: 1 });
+
+      h.clock.advance(24);
+      const second = await plan({}, 'speaking_practice');
+      const two = (await commit(second, answers(second, { override: right })).expect(200)).body.summary;
+      expect(two.speaking.becameFluent).toEqual([expect.objectContaining({ status: 'fluent', score: null, lemma: expect.any(String) })]);
+
+      h.clock.advance(24);
+      const third = await plan({}, 'speaking_practice');
+      const three = (await commit(third, answers(third, { override: said('zzz') })).expect(200)).body.summary;
+      expect(three.speaking).toMatchObject({ total: 1, passed: 0, becameFluent: [], slipped: [expect.objectContaining({ status: 'practicing' })] });
+      expect(await progressRows()).toEqual([expect.objectContaining({ status: 'practicing', deviceStreak: 0, fluentAt: null, deviceSessions: 3 })]);
+    });
+
+    it('C75 Azure: the first valid receipt is scored, not the one the learner kept', async () => {
+      await onboard(4);
+      await learn(1);
+      const p = await plan({}, 'speaking_practice');
+      const [task] = recordings(p);
+      const assess = async (accuracyScore: number) => {
+        h.speech.next = { validity: VALIDITY.VALID, accuracyScore, meta: {} };
+        return (await api('post', `/v1/sessions/${p.sessionId}/recording-assess`).field('taskId', task.id)
+          .attach('audio', Buffer.from('RIFF'), { filename: 'a.wav', contentType: 'audio/wav' }).expect(200)).body.assessmentReceiptId;
+      };
+      await assess(60);
+      h.clock.advance(0.01);
+      const kept = await assess(95);
+      const { summary } = (await commit(p, answers(p, { receipts: new Map([[task.id, kept]]) })).expect(200)).body;
+      expect(summary.speaking).toMatchObject({ total: 1, passed: 0 });
+      expect(await progressRows()).toEqual([expect.objectContaining({ scoredSessions: 1, scoreAvg: 60, lastScore: 60, bestScore: 60, lastPassed: false })]);
+    });
+
+    it('C76 Daily with speaking on updates the table for due words only', async () => {
+      await onboard(6);
+      await api('put', '/v1/me/settings').send({ dailySpeaking: true }).expect(200);
+      const learned = await learn(1);
+      expect(learned.summary.speaking).toBeNull();
+      expect(await progressRows()).toEqual([]);
+
+      h.clock.advance(24 * 5);
+      const p = await plan({ reviewOnly: true });
+      expect(recordings(p)).toHaveLength(1);
+      const { summary } = (await commit(p, answers(p, { override: right })).expect(200)).body;
+      expect(summary.speaking).toMatchObject({ total: 1, passed: 1 });
+      expect(await progressRows()).toHaveLength(1);
+      expect((await result(p.sessionId)).summary).toMatchObject({ speakingTotal: 1, speakingPassed: 1 });
+    });
+
+    it('C77 speaking mode puts missed words first and needs a microphone', async () => {
+      await onboard(6);
+      await learn(3);
+      const first = await plan({}, 'speaking_practice');
+      const [missed] = recordings(first);
+      await commit(first, answers(first, { override: (t) => (t.id === missed.id ? said('zzz')(t) : right(t)) })).expect(200);
+      h.clock.advance(1);
+      const next = await plan({}, 'speaking_practice');
+      expect(recordings(next)[0].evaluation.acceptedResponses).toEqual(missed.evaluation.acceptedResponses);
+      expect(await plan({ capabilities: { ...CAPS, microphone: false } }, 'speaking_practice')).toEqual({ sessionId: null, mode: 'speaking_practice', steps: [] });
     });
   });
 
