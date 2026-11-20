@@ -100,6 +100,7 @@ export class PlannerService {
       proficiency: learner.proficiencyLevel,
       knownCheck: request.knownCheck,
       speaking: settings.dailySpeaking && request.capabilities.microphone,
+      speakingOrder: new Map(selected.reviewTargets.flatMap((t) => (t.speakingOrder === undefined ? [] : [[t.snapshot.meaningId, t.speakingOrder] as const]))),
       rng: this.rng,
       ctx: {
         locale,
@@ -213,7 +214,7 @@ export class PlannerService {
 }
 
 type Selection = {
-  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null }[];
+  reviewTargets: { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; speakingOrder?: number }[];
   newTargets: { snapshot: MeaningSnapshot; viaTopicId: string | null }[];
   challengeId?: string;
   budget?: ReturnType<typeof effectiveNewWords>;

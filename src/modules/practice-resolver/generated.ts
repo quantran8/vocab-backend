@@ -190,6 +190,7 @@ export function buildRecording(target: MeaningSnapshot, ctx: ResolveContext, { m
     body: {
       question: copyFor(ctx.locale, 'recording.question'),
       assessment: AZURE_ASSESSMENT,
+      ...(pronunciation.ipa?.trim() && { ipa: pronunciation.ipa.trim() }),
       ...(meaningCue && { meaningCue: { text: target.meaningText, question: copyFor(ctx.locale, 'recording.meaningCue.question') } }),
     },
     evaluation: { acceptedResponses: [target.lemma] },

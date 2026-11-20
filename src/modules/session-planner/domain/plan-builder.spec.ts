@@ -80,6 +80,33 @@ describe('Daily review', () => {
     }
   });
 
+  it('recordings go to the due words first in speaking order, whatever the rng', () => {
+    const many = Array.from({ length: POLICY.review.dailySpeakingCap + 3 }, (_, i) => snapshot(`word${i}`));
+    // Reverse of the review order, so the pick cannot come from the planner's FSRS order.
+    const speakingOrder = new Map(many.map((t, i) => [t.meaningId, many.length - i]));
+    const expected = many.slice(-POLICY.review.dailySpeakingCap).map((t) => `p-${t.lemma}`).sort();
+    for (let seed = 0; seed < 20; seed += 1) {
+      let state = seed + 1;
+      const rng = () => ((state = (state * 16807) % 2147483647) / 2147483647);
+      const steps = daily({ reviewTargets: many, speaking: true, speakingOrder }, rng);
+      const spoken = steps.filter((s) => s.task.template === TEMPLATE.RECORDING).map((s) => s.task.targets[0].pronunciationId);
+      expect(spoken.sort()).toEqual(expected);
+    }
+  });
+
+  it('meanings that share a spelling and IPA get one recording, the first in speaking order', () => {
+    const sense = (id: string, ipa: string): MeaningSnapshot => {
+      const base = snapshot('bank');
+      return { ...base, meaningId: `m-${id}`, pronunciations: [{ ...base.pronunciations[0], id: `p-${id}`, ipa }] };
+    };
+    const targets = [sense('a', '/bæŋk/'), sense('b', '/bæŋk/'), sense('c', '/bɑŋk/')];
+    const speakingOrder = new Map([['m-a', 3], ['m-b', 1], ['m-c', 2]]);
+    const steps = daily({ reviewTargets: targets, speaking: true, speakingOrder });
+    const spoken = steps.filter((s) => s.task.template === TEMPLATE.RECORDING);
+    expect(spoken.map((s) => s.task.targets[0].pronunciationId).sort()).toEqual(['p-b', 'p-c']);
+    expect(spoken.map((s) => s.task.clientPayload.ipa).sort()).toEqual(['/bæŋk/', '/bɑŋk/']);
+  });
+
   it('speaking off, or outside Daily, adds no recording', () => {
     expect(daily({ speaking: false }).some((s) => s.task.template === TEMPLATE.RECORDING)).toBe(false);
     const learning = buildPlan({

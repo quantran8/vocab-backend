@@ -10,6 +10,7 @@ import { SessionPlan } from '../../session-planner/domain/session-plan';
 import { lpContextColumnsSql, parseLpContext, RawLpContext } from '../../learning-points/repositories/effort.repository';
 import { needPracticeWordsSql, weakSince } from '../../review-load/repositories/weak-scope.sql';
 import { SpeakingState } from '../../speaking/speaking-progress';
+import { learnedFormsSql } from '../../speaking/spoken-form.sql';
 import { TargetRow } from '../domain/commit-evaluator';
 import { MeaningLabel } from '../domain/result-summary';
 
@@ -99,6 +100,12 @@ export class CommitRepository {
       SELECT (g->>'pronunciationId')::uuid
       FROM jsonb_array_elements(s.plan->'tasks') t, jsonb_array_elements(t->'targets') g
       WHERE t->>'template' = ${TEMPLATE.RECORDING} AND g->>'pronunciationId' IS NOT NULL`;
+    // A result is shared by every learned Meaning with the recorded spoken form, the recorded one included.
+    const recordedSiblings = sql`
+      SELECT DISTINCT r.id AS recorded, f2.pronunciation_id AS sibling
+      FROM (${recordedPronunciations}) r(id)
+      JOIN (${learnedFormsSql(userId)}) f1 ON f1.pronunciation_id = r.id
+      JOIN (${learnedFormsSql(userId)}) f2 ON f2.form = f1.form`;
     // A listening/speaking target names only a pronunciation: label it with the Meaning that owns it, if the learner has it.
     const labelMeanings = sql`
       ${planMeanings}
@@ -113,6 +120,7 @@ export class CommitRepository {
       progress: (Omit<ProgressRow, keyof SrsDates> & Record<keyof SrsDates, string | null>)[];
       labels: MeaningLabel[];
       speaking: (Omit<SpeakingRow, keyof SpeakingDates> & { lastAssessedAt: string; fluentAt: string | null })[];
+      speakingSiblings: Record<string, string[]>;
     }>(sql`
       SELECT s.user_id AS "userId", s.mode, s.status, s.issued_at AS "issuedAt", s.expires_at AS "expiresAt", s.scope_snapshot AS "scopeSnapshot",
         s.commit_request_sha256 AS "commitRequestSha256", s.commit_response AS "commitResponse",
@@ -145,8 +153,11 @@ export class CommitRepository {
             'lastPassed', sp.last_passed, 'lastAssessedAt', sp.last_assessed_at, 'fluentAt', sp.fluent_at))
           FROM (
             SELECT * FROM user_speaking_progress
-            WHERE user_id = ${userId}::uuid AND pronunciation_id IN (${recordedPronunciations})
+            WHERE user_id = ${userId}::uuid
+              AND pronunciation_id IN (${recordedPronunciations} UNION SELECT sibling FROM (${recordedSiblings}) rs)
             FOR UPDATE) sp), '[]'::json) AS speaking,
+        COALESCE((SELECT json_object_agg(rs.recorded, rs.siblings)
+          FROM (SELECT recorded, json_agg(sibling) AS siblings FROM (${recordedSiblings}) x GROUP BY recorded) rs), '{}'::json) AS "speakingSiblings",
         ${lpContextColumnsSql(userId, planMeanings, now)}
       FROM learning_sessions s
       WHERE s.id = ${sessionId}::uuid
@@ -166,6 +177,7 @@ export class CommitRepository {
       speaking: new Map<string, SpeakingRow>(row.speaking.map((r) => [r.pronunciationId, {
         ...r, lastAssessedAt: toDate(r.lastAssessedAt), fluentAt: date(r.fluentAt),
       }])),
+      speakingSiblings: new Map(Object.entries(row.speakingSiblings)),
       lp: parseLpContext(row),
       progress: new Map<string, ProgressRow>(row.progress.map((p) => [p.meaningId, {
         ...p,

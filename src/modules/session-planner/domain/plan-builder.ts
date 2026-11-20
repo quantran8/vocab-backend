@@ -9,6 +9,7 @@ import {
 } from '../../practice-resolver/generated';
 import { DistractorView, MeaningSnapshot, ResolveContext, ResolvedTask } from '../../practice-resolver/task.types';
 import { evidenceClassOf } from '../../memory-srs/evidence-weight';
+import { spokenForm } from '../../speaking/speaking-progress';
 import { pickWeighted, planNewMeanings, Rng, shuffle, TaskSlot } from './interleave';
 
 export interface PlanInput {
@@ -22,6 +23,8 @@ export interface PlanInput {
   knownCheck?: boolean;
   // Daily: the learner opted in to recordings; they train speaking only and never move memory.
   speaking?: boolean;
+  // Daily: which due words get a recording first, lowest first (missed last time leads).
+  speakingOrder?: Map<string, number>;
   ctx: ResolveContext;
   rng: Rng;
 }
@@ -86,7 +89,14 @@ const curatedFor = (input: PlanInput, target: MeaningSnapshot) => {
 const curatedTasks = (input: PlanInput, target: MeaningSnapshot, semantic: boolean) =>
   curatedFor(input, target)
     .filter((item) => SEMANTIC_INTENTS.includes(intentOf(item.variant)!) === semantic)
-    .flatMap((item) => [resolveCurated(item, PROMPT_TYPE.TEXT, input.ctx), resolveCurated(item, PROMPT_TYPE.AUDIO, input.ctx)]);
+    .flatMap((item) => [resolveCurated(item, PROMPT_TYPE.TEXT, input.ctx), resolveCurated(item, PROMPT_TYPE.AUDIO, input.ctx)])
+    .map((task) => (task?.template === TEMPLATE.RECORDING ? withIpa(task, target, input.ctx) : task));
+
+// The learner reads by this IPA: one spelling can have two sounds (bass /bæs/, /beɪs/).
+function withIpa(task: ResolvedTask, target: MeaningSnapshot, ctx: ResolveContext): ResolvedTask {
+  const ipa = pronunciationFor(target, ctx.accent)?.ipa?.trim();
+  return ipa ? { ...task, clientPayload: { ...task.clientPayload, ipa } } : task;
+}
 
 const weighted = (tasks: (ResolvedTask | null)[], weight: number) =>
   tasks.filter((task): task is ResolvedTask => task !== null).map((value) => ({ value, weight }));
@@ -157,12 +167,21 @@ function reviewTasks(input: PlanInput): ResolvedTask[] {
 }
 
 // Each recording goes after its word's meaning task: it shows the word, so it would prime a recall.
+// One recording per spoken form: meanings that share it would ask the same thing twice.
 function withRecordings(tasks: ResolvedTask[], input: PlanInput) {
-  const { reviewTargets, ctx, rng } = input;
-  const recordings = shuffle(reviewTargets, rng)
+  const { reviewTargets, ctx, rng, speakingOrder } = input;
+  const order = (target: MeaningSnapshot) => speakingOrder?.get(target.meaningId) ?? Number.MAX_SAFE_INTEGER;
+  const forms = new Set<string>();
+  const recordings = [...reviewTargets]
+    .sort((a, b) => order(a) - order(b))
     .flatMap((target) => {
+      const pronunciation = pronunciationFor(target, ctx.accent);
+      const form = pronunciation && spokenForm(target.lemma, pronunciation.ipa);
+      if (!form || forms.has(form)) return [];
       const recording = buildRecording(target, ctx, { meaningCue: true });
-      return recording ? [{ meaningId: target.meaningId, recording }] : [];
+      if (!recording) return [];
+      forms.add(form);
+      return [{ meaningId: target.meaningId, recording }];
     })
     .slice(0, dailySpeakingCap);
   const result = [...tasks];
