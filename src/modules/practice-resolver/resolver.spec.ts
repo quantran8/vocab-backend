@@ -87,6 +87,8 @@ describe('generated tasks', () => {
     expect(recording.clientPayload.evaluation).toEqual({ acceptedResponses: ['clarify'] });
     expect(recording.serverEvaluation.referenceText).toBe('clarify');
     expect(recording.clientPayload.meaningCue).toBeUndefined();
+    expect(recording.clientPayload.ipa).toBe('/x/');
+    expect(expectClean(buildRecording({ ...clarify, pronunciations: [{ ...clarify.pronunciations[0], ipa: ' ' }] }, ctx, { meaningCue: false })).clientPayload.ipa).toBeUndefined();
   });
 
   it('a recording with a meaning cue shows the meaning first and is scored the same', () => {

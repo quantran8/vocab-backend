@@ -299,6 +299,22 @@ describe('commit summary for the results screen', () => {
       expect((await result(p.sessionId)).summary).toMatchObject({ speakingTotal: 1, speakingPassed: 1 });
     });
 
+    it('Daily gives its capped recordings to the due words missed last time first', async () => {
+      const cap = POLICY.review.dailySpeakingCap;
+      await onboard(cap * 2 + 2);
+      await learn(cap * 2);
+      const spoken = await plan({}, 'speaking_practice');
+      const missed = recordings(spoken).slice(0, 2).map((t) => t.evaluation.acceptedResponses[0]);
+      const missedIds = new Set(recordings(spoken).slice(0, 2).map((t) => t.id));
+      await commit(spoken, answers(spoken, { override: (t) => (missedIds.has(t.id) ? said('zzz')(t) : right(t)) })).expect(200);
+
+      await api('put', '/v1/me/settings').send({ dailySpeaking: true, reviewsPerSession: cap * 2 }).expect(200);
+      h.clock.advance(24 * 5);
+      const daily = recordings(await plan({ reviewOnly: true })).map((t) => t.evaluation.acceptedResponses[0]);
+      expect(daily).toHaveLength(cap);
+      expect(daily).toEqual(expect.arrayContaining(missed));
+    });
+
     it('C77 speaking mode puts missed words first and needs a microphone', async () => {
       await onboard(6);
       await learn(3);

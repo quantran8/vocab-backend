@@ -635,6 +635,48 @@ describe('Vocab Flow API', () => {
       expect((await progressRows()).map((r) => r.meaningId)).toContain(second.id);
     });
 
+    it('meanings that share a spelling and IPA get one recording and share its result', async () => {
+      const seeded = await onboard(words(4));
+      const admin = h.app.get(AdminService);
+      const example = { sourceText: 'Use bank here.', targetLocator: { start: 4, end: 8 } };
+      const sense = (ipa: string) => ({ cefrLevel: 'B1' as const, pronunciations: [{ accentLocale: 'en-US', ipa }], examples: [example] });
+      const created = await admin.createWord({
+        language: 'en', lemma: 'bank', types: [{ partOfSpeech: 'noun', meanings: [sense('/bæŋk/'), sense('/bæŋk/'), sense('/bɑŋk/')] }],
+      });
+      const senses = created.types[0].meanings;
+      for (const [index, meaning] of senses.entries()) {
+        await admin.putMeaningLocale(meaning.id, 'vi-VN', {
+          meaningText: `ngân hàng ${index}`, definitionText: 'x', editorialState: 'approved',
+          exampleTranslations: [{ exampleId: meaning.examples[0].id, translationText: 'dịch' }],
+        });
+        await h.app.get(PublicationService).publish(meaning.id, 'vi-VN');
+      }
+      await h.db.insert(topicMeanings).values(senses.map((m, i) => ({ topicId: seeded.topicId, meaningId: m.id, curatedRank: 100 + i })));
+      await h.db.delete(topicMeanings).where(inArray(topicMeanings.meaningId, seeded.meaningIds));
+      // One Meaning of a Word per session.
+      for (let day = 0; day < senses.length; day += 1) {
+        await learnOne();
+        h.clock.advance(24);
+      }
+      expect(await h.count(userMeaningProgress)).toBe(3);
+
+      type Recording = { id: string; template: string; ipa?: string; evaluation: { acceptedResponses: string[] } };
+      const recordings = (p: object) => (tasksOf(p) as Recording[]).filter((t) => t.template === TEMPLATE.RECORDING);
+      const spoken = await plan('speaking_practice');
+      expect(recordings(spoken).map((t) => t.ipa).sort()).toEqual(['/bæŋk/', '/bɑŋk/']);
+      const right = (t: Recording) => (t.template === TEMPLATE.RECORDING ? [{ seq: 1, action: 'transcribed', transcript: t.evaluation.acceptedResponses[0] }] : undefined);
+      const { summary } = (await commit(spoken, answers(spoken, { override: right })).expect(200)).body;
+      expect(summary.speaking).toMatchObject({ total: 2, passed: 2 });
+      const rows = await h.db.select().from(userSpeakingProgress);
+      expect(rows).toHaveLength(3);
+      expect(rows.every((r) => r.status === 'practicing' && r.deviceStreak === 1 && r.deviceSessions === 1)).toBe(true);
+
+      await speakInDaily();
+      h.clock.advance(24 * 30);
+      const daily = (await api('post', '/v1/sessions/plan').send({ mode: 'daily', capabilities: CAPS, reviewOnly: true }).expect(200)).body;
+      expect(recordings(daily).map((t) => t.ipa).sort()).toEqual(['/bæŋk/', '/bɑŋk/']);
+    });
+
     it('the most popular Meaning of a Word is learned first, ahead of CEFR fit and curated rank', async () => {
       const seeded = await onboard(words(4), 'B1');
       const admin = h.app.get(AdminService);

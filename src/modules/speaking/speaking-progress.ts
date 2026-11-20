@@ -23,6 +23,9 @@ export type SpeakingResult =
   | { pronunciationId: string; method: typeof SPEAKING_METHOD.DEVICE; passed: boolean }
   | { pronunciationId: string; method: typeof SPEAKING_METHOD.AZURE; passed: boolean; score: number };
 
+/** Same key as spokenFormSql. */
+export const spokenForm = (lemma: string, ipa: string | null | undefined) => `${lemma.trim().toLowerCase()}|${(ipa ?? '').trim()}`;
+
 const { deviceFluentStreak, scoreAlpha, fluentScore, slipScore, minScoredSessions } = POLICY.speaking;
 
 const NO_TRACKS: Tracks = { deviceSessions: 0, deviceStreak: 0, scoredSessions: 0, scoreAvg: null, lastScore: null, bestScore: null };
@@ -66,4 +69,9 @@ export function applySpeaking(prev: SpeakingState | null, result: SpeakingResult
   };
   const change = !wasFluent && isFluent ? SPEAKING_CHANGE.BECAME_FLUENT : wasFluent && !isFluent ? SPEAKING_CHANGE.SLIPPED : null;
   return { next, change };
+}
+
+/** A spoken form's state is its most recently assessed row, as formStateSql picks it. */
+export function latestState<T extends SpeakingState>(rows: T[]): T | null {
+  return rows.reduce<T | null>((latest, row) => (!latest || row.lastAssessedAt > latest.lastAssessedAt ? row : latest), null);
 }

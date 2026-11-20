@@ -15,7 +15,7 @@ import { EffortRepository, EffortResult } from '../../learning-points/repositori
 import { canonicalHash } from '../domain/canonical';
 import { CommitRepository, ProgressRow, SpeakingRow } from '../repositories/commit.repository';
 import { countedAsReview, Labels, newWordSummary, planOrder, practiceSummary, reviewSummary, SpeakingOutcome, speakingSummary } from '../domain/result-summary';
-import { applySpeaking } from '../../speaking/speaking-progress';
+import { applySpeaking, latestState } from '../../speaking/speaking-progress';
 import { countedTasks, evaluateBatch, EvaluatedTask, LearnStepRow, memoryDrafts, sessionResult, speakingResults, TargetRow } from '../domain/commit-evaluator';
 
 // A word marked known with no check has no recall to judge; only a miss in a shared task undoes it.
@@ -87,7 +87,7 @@ export class CommitService {
 
     const newStates = this.applySrs(memory, newMeaningIds, known, declared, progress, now);
     const learnedHere = new Set(newMeaningIds);
-    const speaking = this.speakingProgress(speakingResults(counted, targets, session.receipts), session.speaking, now);
+    const speaking = this.speakingProgress(speakingResults(counted, targets, session.receipts), session.speaking, session.speakingSiblings, now);
     const results = this.resultSummary({
       mode: session.mode, now, tasks, targets, steps, counted, memory, known, progress, newStates, learnedHere,
       labels: new Labels(session.labels), speaking: speaking.outcomes,
@@ -117,13 +117,22 @@ export class CommitService {
     return settled;
   }
 
-  private speakingProgress(results: ReturnType<typeof speakingResults>, before: Map<string, SpeakingRow>, now: Date) {
+  // One result per spoken form, written to every learned Meaning that shares it; see docs/DECISIONS.md "Speaking progress".
+  private speakingProgress(results: ReturnType<typeof speakingResults>, before: Map<string, SpeakingRow>, siblings: Map<string, string[]>, now: Date) {
     const outcomes: SpeakingOutcome[] = [];
     const rows: SpeakingRow[] = [];
+    const written = new Set<string>();
     for (const result of results) {
-      const { next, change } = applySpeaking(before.get(result.pronunciationId) ?? null, result, now);
+      const ids = siblings.get(result.pronunciationId) ?? [result.pronunciationId];
+      // A plan issued before forms were deduped may record one form twice: the first by task order counts.
+      if (ids.some((id) => written.has(id))) continue;
+      const prev = latestState(ids.flatMap((id) => before.get(id) ?? []));
+      const { next, change } = applySpeaking(prev, result, now);
       outcomes.push({ result, status: next.status, change });
-      rows.push({ ...next, pronunciationId: result.pronunciationId });
+      for (const id of ids) {
+        rows.push({ ...next, pronunciationId: id });
+        written.add(id);
+      }
     }
     return { outcomes, rows };
   }

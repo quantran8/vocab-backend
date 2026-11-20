@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, exists, inArray, or, SQL, sql } from 'drizzle-orm';
-import { CEFR_LEVELS, CONTENT_STATUS, NewWordOverrideMode, DEFAULT_ACCENT, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, CHECKPOINT_STATE, SPEAKING_STATUS } from '../../../common/constants/domain';
+import { CEFR_LEVELS, CONTENT_STATUS, NewWordOverrideMode, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, CHECKPOINT_STATE, SPEAKING_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { DB, Db, toDate } from '../../../db/db';
 import { practiceItemLocalizations, practiceItemTargets, checkpointChallenges, learningSessions, userMeaningOverrides } from '../../../db/schema';
@@ -9,12 +9,14 @@ import { DistractorView, MeaningSnapshot } from '../../practice-resolver/task.ty
 import { DECAY, FACTOR } from '../../memory-srs/fsrs';
 import { weakMeaningsSql } from '../../review-load/repositories/weak-scope.sql';
 import { NewWordOverride } from '../../review-load/domain/review-load';
+import { formStateSql, learnedFormsSql } from '../../speaking/spoken-form.sql';
 import { backlogSql, pendingCustomSql, remainingNewSql, reviewableSql } from '../../review-load/repositories/review-scope.sql';
 
 type SnapshotRow = { snapshot: MeaningSnapshot };
 
 export interface SourceTopic { id: string; name: string; personal: boolean }
-export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null };
+// speakingOrder: position among the due words by their spoken form's speakingRankSql, for picking Daily recordings.
+export type DueTarget = { snapshot: MeaningSnapshot; sourceTopic: SourceTopic | null; speakingOrder: number };
 export type NewTarget = { snapshot: MeaningSnapshot; viaTopicId: string | null };
 
 /** Random practice source (§9); unset means every reviewable learned Meaning. */
@@ -42,6 +44,15 @@ export const CEFR_ARRAY = sql`ARRAY[${sql.join(CEFR_LEVELS.map((l) => sql`${l}`)
 const uuidList = (ids: string[]) => sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
 
 const inScope = (rows: SnapshotRow[]) => rows.map((r) => r.snapshot);
+
+// Missed last time, then never tried, then practicing, then fluent; oldest attempt first within each.
+const speakingRankSql = sql`
+  CASE
+    WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} AND NOT sp.last_passed THEN 0
+    WHEN sp.status IS NULL THEN 1
+    WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} THEN 2
+    ELSE 3
+  END`;
 
 function practiceSource(userId: string, filter?: PracticeFilter) {
   if (!filter) return reviewableSql(userId, sql`ump.meaning_id`);
@@ -108,9 +119,10 @@ export class PlannerRepository {
     // Lowest FSRS retrievability first: the word most likely forgotten by now leads the session.
     const elapsedDays = sql`GREATEST(0, extract(epoch FROM ${now}::timestamptz - COALESCE(ump.last_reviewed_at, ump.learned_at)) / 86400)`;
     const { rows } = await this.db.execute<{
-      snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null;
+      snapshot: MeaningSnapshot; topicId: string | null; topicName: string | null; personal: boolean | null; speakingOrder: string;
     }>(sql`
-      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal
+      SELECT p.snapshot, st.id AS "topicId", st.name AS "topicName", st.personal,
+        row_number() OVER (ORDER BY ${speakingRankSql}, sp.last_assessed_at NULLS FIRST, ump.meaning_id) AS "speakingOrder"
       FROM user_meaning_progress ump
       JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
       JOIN meaning_publications p ON p.id = a.publication_id
@@ -128,6 +140,8 @@ export class PlannerRepository {
           (t.id = ump.learned_via_topic_id) IS TRUE DESC,
           t.owner_user_id IS NOT NULL, c.slug, t.slug, tm.curated_rank
         LIMIT 1) st ON true
+      LEFT JOIN (${learnedFormsSql(userId)}) f ON f.meaning_id = ump.meaning_id
+      LEFT JOIN (${formStateSql(userId)}) sp ON sp.form = f.form
       WHERE ump.user_id = ${userId}::uuid AND ump.next_review_at <= ${now}::timestamptz
         AND ${reviewableSql(userId, sql`ump.meaning_id`)}
       ORDER BY power(1 + ${FACTOR}::float8 * ${elapsedDays} / ump.stability, ${DECAY}::float8), ump.meaning_id
@@ -135,6 +149,7 @@ export class PlannerRepository {
     return rows.map((r) => ({
       snapshot: r.snapshot,
       sourceTopic: r.topicId ? { id: r.topicId, name: r.topicName!, personal: r.personal! } : null,
+      speakingOrder: Number(r.speakingOrder),
     }));
   }
 
@@ -207,26 +222,17 @@ export class PlannerRepository {
       LIMIT ${limit}`)).rows);
   }
 
-  // Missed last time, then never tried, then practicing, then fluent; oldest attempt first within each.
   async speakingTargets(userId: string, locale: string, limit: number) {
     return inScope((await this.db.execute<SnapshotRow>(sql`
       SELECT x.snapshot FROM (
-        SELECT DISTINCT ON (pr.id) p.snapshot, ump.meaning_id, sp.last_assessed_at,
-          CASE
-            WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} AND NOT sp.last_passed THEN 0
-            WHEN sp.status IS NULL THEN 1
-            WHEN sp.status = ${SPEAKING_STATUS.PRACTICING} THEN 2
-            ELSE 3
-          END AS rank
+        SELECT DISTINCT ON (f.form) p.snapshot, ump.meaning_id, sp.last_assessed_at, ${speakingRankSql} AS rank
         FROM user_meaning_progress ump
         JOIN active_meaning_publications a ON a.meaning_id = ump.meaning_id AND a.locale = ${locale} AND a.recalled_at IS NULL
         JOIN meaning_publications p ON p.id = a.publication_id
-        CROSS JOIN LATERAL (
-          SELECT (e->>'id')::uuid AS id FROM jsonb_array_elements(p.snapshot->'pronunciations') e
-          WHERE e->>'accentLocale' = ${DEFAULT_ACCENT} LIMIT 1) pr
-        LEFT JOIN user_speaking_progress sp ON sp.user_id = ump.user_id AND sp.pronunciation_id = pr.id
+        JOIN (${learnedFormsSql(userId)}) f ON f.meaning_id = ump.meaning_id
+        LEFT JOIN (${formStateSql(userId)}) sp ON sp.form = f.form
         WHERE ump.user_id = ${userId}::uuid AND ${reviewableSql(userId, sql`ump.meaning_id`)}
-        ORDER BY pr.id, ump.meaning_id) x
+        ORDER BY f.form, ump.meaning_id) x
       ORDER BY x.rank, x.last_assessed_at NULLS FIRST, x.meaning_id
       LIMIT ${limit}`)).rows);
   }

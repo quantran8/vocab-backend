@@ -97,7 +97,7 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 - `explanationLocale` quyết định ngôn ngữ của nghĩa, câu hỏi và nội dung trong task. Đổi locale ảnh hưởng đến session sau đó, không ảnh hưởng session đã plan.
 - `dailyNewWordGoal` là số từ mới **mỗi session** daily, không phải mỗi ngày: hoàn tất một session thì luôn có thể plan session tiếp theo.
 - `reviewsPerSession` là số từ ôn tối đa mỗi session daily (kể cả review-only). `null` (mặc định) nghĩa là theo `dailyNewWordGoal`, nhưng không dưới 5. `GET /me` trả lại giá trị đã chọn; số đang áp dụng là `reviewLoad.dueCap` trong `learn-home`.
-- `dailySpeaking` (mặc định `false`) bật bài luyện nói (`recording`) trong Daily: mỗi từ mới có một lượt đọc to, và tối đa `5` từ ôn mỗi session có thêm một lượt. Hỏi ở bước onboarding và cho đổi bất cứ lúc nào trong Cài đặt; áp dụng từ session plan sau. Cần nói rõ với user: **đúng hay sai phần nói không ảnh hưởng tiến độ học của từ** (lịch ôn, nhóm kết quả, LP), chỉ giúp luyện phát âm. Thiết bị gửi `capabilities.microphone=false` thì Daily không có recording dù đã bật.
+- `dailySpeaking` (mặc định `false`) bật bài luyện nói (`recording`) trong Daily: mỗi từ mới có một lượt đọc to, và tối đa `5` từ ôn mỗi session có thêm một lượt (ưu tiên từ lần trước nói trượt → chưa thử → đang luyện → `fluent`, như `speaking_practice`). Hỏi ở bước onboarding và cho đổi bất cứ lúc nào trong Cài đặt; áp dụng từ session plan sau. Cần nói rõ với user: **đúng hay sai phần nói không ảnh hưởng tiến độ học của từ** (lịch ôn, nhóm kết quả, LP), chỉ giúp luyện phát âm. Thiết bị gửi `capabilities.microphone=false` thì Daily không có recording dù đã bật.
 - `weeklySessionGoal` là số buổi học mỗi tuần user chọn (mặc định 7). Chỉ dùng để hiển thị (`checkpointSessionsRequired`, độ dài chặng Journey cũ): không còn mở challenge, và không ảnh hưởng Challenge Map. `dailyNewWordGoal` cũng không ảnh hưởng Challenge Map.
 
 ### Bài test xếp level
@@ -196,7 +196,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
 | `checkpoint_challenge` | **Deprecated.** Ôn lại các Meaning của một challenge cũ còn `available`, chỉ dạng nhớ lại (typing/flyReorder, không có select-recognition) |
 | `random_practice` | Practice tổng hợp từ các Meaning đã học (hoặc theo `filter`), tối đa 10 từ |
 | `weak_words_practice` | Nghĩa đang yếu: trong 30 ngày qua có ít nhất 3 lần thử (không tính buổi học từ đó), có lần sai/dùng hint/thử lại, và **lần gần nhất** vẫn yếu. Tỉ lệ yếu cao trước, rồi từ lâu chưa ôn. Practice tổng hợp như random, tối đa 10 từ. Trả lời đúng một lần là từ ra khỏi danh sách |
-| `speaking_practice` | Mỗi từ đã học có phát âm `en-US` một bài `recording` kèm `meaningCue`, tối đa 10. Thứ tự: lần trước nói trượt → chưa thử → đang luyện → `fluent`, lâu chưa nói trước. Không đổi lịch ôn, không nhận `filter`. `microphone=false` trả plan rỗng |
+| `speaking_practice` | Mỗi cách đọc (mặt chữ + IPA) của các từ đã học có phát âm `en-US` một bài `recording` kèm `meaningCue`, tối đa 10. Nhiều nghĩa cùng mặt chữ và IPA chỉ ra một bài, kết quả tính chung cho các nghĩa đó. Thứ tự: lần trước nói trượt → chưa thử → đang luyện → `fluent`, lâu chưa nói trước. Không đổi lịch ôn, không nhận `filter`. `microphone=false` trả plan rỗng |
 
 `capabilities` là cam kết của client: `audioPlayback=false` thì không có task nào có `prompt.type = "audio"`. `microphone=false` thì Daily không phát hành `recording`; ở các mode khác task `recording` **vẫn có thể được phát hành**, client gửi event `unavailable` (xem 7.7).
 
@@ -393,8 +393,11 @@ Xem 7.1.
   "prompt": { "type": "text", "text": "clarify" },      // hoặc audio: nghe mẫu rồi đọc lại
   "question": "Read this word aloud.",
   "assessment": { "kind": "azurePronunciation" },
+  "ipa": "/ˈklærəfaɪ/",                                  // không có khi meaning chưa có IPA
   "evaluation": { "acceptedResponses": ["clarify"] } }   // text cần đọc, dùng để chấm on-device
 ```
+
+**`ipa`**: cách đọc cần đọc theo, hiện cạnh `prompt`. Một mặt chữ có thể có nhiều cách đọc (bass /bæs/ "cá vược" và /beɪs/ "âm trầm"), nên đây là cách user biết phải đọc theo cách nào. Chỉ hiện ở bước đọc; ở bước `meaningCue` không hiện, vì IPA lộ luôn cách đọc của từ.
 
 **`meaningCue`** (chỉ có ở recording của từ đã học: từ ôn trong Daily, Random, Weak; recording của từ mới không có):
 
