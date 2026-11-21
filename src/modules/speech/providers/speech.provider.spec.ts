@@ -31,7 +31,31 @@ describe('AzureRestSpeechProvider', () => {
     const headers = init!.headers as Record<string, string>;
     expect(headers['Ocp-Apim-Subscription-Key']).toBe('key');
     const assessment = JSON.parse(Buffer.from(headers['Pronunciation-Assessment'], 'base64').toString());
-    expect(assessment.ReferenceText).toBe('clarify');
+    expect(assessment).toMatchObject({ ReferenceText: 'clarify', Granularity: 'Phoneme', PhonemeAlphabet: 'IPA' });
+  });
+
+  it('reads the syllables in reading order, across words', async () => {
+    const syllable = (Grapheme: string, Syllable: string, AccuracyScore: number) => ({ Grapheme, Syllable, PronunciationAssessment: { AccuracyScore } });
+    fetchMock.mockResolvedValue(respond(200, {
+      RecognitionStatus: 0,
+      NBest: [{
+        PronunciationAssessment: { AccuracyScore: 64 },
+        Words: [{ Syllables: [syllable('look', 'lʊk', 90)] }, { Syllables: [syllable('af', 'æf', 84), { Grapheme: 'ter', Syllable: 'tər', AccuracyScore: 42 }] }],
+      }],
+    }));
+    expect(await provider.assess(REQUEST)).toMatchObject({
+      validity: VALIDITY.VALID,
+      accuracyScore: 64,
+      syllables: [{ text: 'look', ipa: 'lʊk', score: 90 }, { text: 'af', ipa: 'æf', score: 84 }, { text: 'ter', ipa: 'tər', score: 42 }],
+    });
+  });
+
+  it('drops every syllable when one has no letters, so the word is never half coloured', async () => {
+    fetchMock.mockResolvedValue(respond(200, {
+      RecognitionStatus: 'Success',
+      NBest: [{ AccuracyScore: 80, Words: [{ Syllables: [{ Grapheme: 'cla', Syllable: 'klæ', AccuracyScore: 80 }, { Syllable: 'rɪ', AccuracyScore: 80 }] }] }],
+    }));
+    expect((await provider.assess(REQUEST)).syllables).toEqual([]);
   });
 
   it('accepts the flat NBest score shape', async () => {

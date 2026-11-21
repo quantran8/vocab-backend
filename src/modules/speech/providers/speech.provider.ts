@@ -10,9 +10,18 @@ export interface SpeechRequest {
   locale: string;
 }
 
+/** One syllable as Azure heard it: its letters in the word, its IPA and its score. */
+export interface SpeechSyllable {
+  text: string;
+  ipa: string;
+  score: number;
+}
+
 export interface SpeechResult {
   validity: Validity;
   accuracyScore: number | null;
+  // Empty when Azure gives no letters per syllable (only en-US does).
+  syllables?: SpeechSyllable[];
   meta: Record<string, unknown>;
 }
 
@@ -21,13 +30,38 @@ export abstract class SpeechProvider {
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
-const RECOGNITION_SUCCESS = 'Success';
+// The REST API sends 'Success'; some Azure surfaces send the enum's number, 0.
+const RECOGNITION_SUCCESS: readonly unknown[] = ['Success', 0];
 const CLIENT_ERROR_MIN = 400;
 const SERVER_ERROR_MIN = 500;
 
+// Scores come nested in PronunciationAssessment or flat on the item, depending on the API version.
+interface AzureScored {
+  AccuracyScore?: number;
+  PronunciationAssessment?: { AccuracyScore?: number };
+}
+
+interface AzureSyllable extends AzureScored {
+  Syllable?: string;
+  Grapheme?: string;
+}
+
 interface AzureResponse {
-  RecognitionStatus?: string;
-  NBest?: { AccuracyScore?: number; PronunciationAssessment?: { AccuracyScore?: number } }[];
+  RecognitionStatus?: string | number;
+  NBest?: (AzureScored & { Words?: (AzureScored & { Syllables?: AzureSyllable[] })[] })[];
+}
+
+const scoreOf = (item: AzureScored) => item.PronunciationAssessment?.AccuracyScore ?? item.AccuracyScore;
+
+/** All-or-nothing: a partial list would colour only part of the word. */
+function readSyllables(words: { Syllables?: AzureSyllable[] }[] = []): SpeechSyllable[] {
+  const syllables: SpeechSyllable[] = [];
+  for (const syllable of words.flatMap((w) => w.Syllables ?? [])) {
+    const score = scoreOf(syllable);
+    if (!syllable.Grapheme || score === undefined) return [];
+    syllables.push({ text: syllable.Grapheme, ipa: syllable.Syllable ?? '', score });
+  }
+  return syllables;
 }
 
 @Injectable()
@@ -40,7 +74,7 @@ export class AzureRestSpeechProvider extends SpeechProvider {
     const { azureSpeechKey: key, azureSpeechRegion: region } = this.config;
     if (!key || !region) throw new ApiError('SPEECH_PROVIDER_UNAVAILABLE', 'Azure Speech is not configured');
 
-    const assessment = { ReferenceText: referenceText, GradingSystem: 'HundredMark', Granularity: 'Word', Dimension: 'Comprehensive' };
+    const assessment = { ReferenceText: referenceText, GradingSystem: 'HundredMark', Granularity: 'Phoneme', Dimension: 'Comprehensive', PhonemeAlphabet: 'IPA' };
     const url = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(locale)}&format=detailed`;
 
     let response: Response;
@@ -64,11 +98,16 @@ export class AzureRestSpeechProvider extends SpeechProvider {
     if (response.status >= CLIENT_ERROR_MIN) return this.invalid(`http${response.status}`);
 
     const body = (await response.json()) as AzureResponse;
-    if (body.RecognitionStatus !== RECOGNITION_SUCCESS) return this.invalid(body.RecognitionStatus ?? 'unknown');
+    if (!RECOGNITION_SUCCESS.includes(body.RecognitionStatus)) return this.invalid(String(body.RecognitionStatus ?? 'unknown'));
     const best = body.NBest?.[0];
-    const accuracyScore = best?.PronunciationAssessment?.AccuracyScore ?? best?.AccuracyScore;
+    const accuracyScore = best && scoreOf(best);
     if (accuracyScore === undefined) return this.invalid('noScore');
-    return { validity: VALIDITY.VALID, accuracyScore, meta: { provider: 'azure', recognitionStatus: body.RecognitionStatus } };
+    return {
+      validity: VALIDITY.VALID,
+      accuracyScore,
+      syllables: readSyllables(best?.Words),
+      meta: { provider: 'azure', recognitionStatus: body.RecognitionStatus },
+    };
   }
 
   private invalid(reason: string): SpeechResult {

@@ -5,6 +5,7 @@ import { addHours } from '../../../common/constants/time';
 import { ApiError } from '../../../common/http/api-error';
 import { POLICY } from '../../../config/policy';
 import { toDate } from '../../../db/db';
+import { bandedSyllables, pronunciationBand } from '../domain/pronunciation-bands';
 import { SpeechProvider } from '../providers/speech.provider';
 import { SpeechRepository } from '../repositories/speech.repository';
 
@@ -53,6 +54,15 @@ export class SpeechService {
       assessedAt: now,
       expiresAt: addHours(now, POLICY.speech.receiptTtlHours),
     });
-    return { assessmentReceiptId: receiptId, validity: result.validity, passed, accuracyScore: result.accuracyScore };
+    // Display only: band and syllables are not stored, the commit reads `passed` from the receipt.
+    const score = valid ? result.accuracyScore : null;
+    return {
+      assessmentReceiptId: receiptId,
+      validity: result.validity,
+      passed,
+      accuracyScore: result.accuracyScore,
+      band: score === null ? null : pronunciationBand(score),
+      syllables: score === null ? [] : bandedSyllables(result.syllables),
+    };
   }
 }

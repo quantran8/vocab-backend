@@ -1,4 +1,4 @@
-import { EVIDENCE_CLASS, TEMPLATE, TIER_KEY } from '../common/constants/domain';
+import { EVIDENCE_CLASS, PRONUNCIATION_BAND, TEMPLATE, TIER_KEY } from '../common/constants/domain';
 import { HOURS_PER_DAY } from '../common/constants/time';
 
 // Every [TRIAL] value from the spec; tune here, not at call sites.
@@ -81,7 +81,14 @@ export const POLICY = {
     maxElapsedMs: 30 * 60_000,
   },
   memory: { lightRetryAttempts: 2 },
-  speech: { passAccuracy: 80, receiptTtlHours: 72, maxAudioBytes: 2 * 1024 * 1024 },
+  speech: {
+    passAccuracy: 80,
+    receiptTtlHours: 72,
+    maxAudioBytes: 2 * 1024 * 1024,
+    // Lowest score of each overall band; good starts at passAccuracy so the title never contradicts `passed`.
+    bandFloors: { [PRONUNCIATION_BAND.EXCELLENT]: 90, [PRONUNCIATION_BAND.GOOD]: 80, [PRONUNCIATION_BAND.FAIR]: 60 },
+    syllableGoodFloor: 80,
+  },
   // Speaking progress [TRIAL]: on-device fluent after this many passing sessions in a row;
   // Azure fluent at an EWMA score >= fluentScore over minScoredSessions, back to practicing below slipScore.
   speaking: { deviceFluentStreak: 2, scoreAlpha: 0.4, fluentScore: 85, slipScore: 75, minScoredSessions: 2 },
