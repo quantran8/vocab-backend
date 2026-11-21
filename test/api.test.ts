@@ -501,7 +501,7 @@ describe('Vocab Flow API', () => {
       const p = await plan();
       const [task] = recordings(p);
       const { body } = await assess(p.sessionId, task.id).expect(200);
-      expect(body).toMatchObject({ validity: 'valid', passed: true });
+      expect(body).toMatchObject({ validity: 'valid', passed: true, band: 'excellent', syllables: [] });
       const receipts = new Map([[task.id, body.assessmentReceiptId]]);
       const { summary } = (await commit(p, answers(p, { receipts })).expect(200)).body;
       expect(summary.newWords.groups.smooth).toHaveLength(1);
@@ -516,7 +516,7 @@ describe('Vocab Flow API', () => {
       const [task] = recordings(p);
       h.speech.next = { validity: VALIDITY.INVALID, accuracyScore: null, meta: {} };
       const { body } = await assess(p.sessionId, task.id).expect(200);
-      expect(body).toMatchObject({ validity: 'invalid', passed: null });
+      expect(body).toMatchObject({ validity: 'invalid', passed: null, band: null, syllables: [] });
       const { summary } = (await commit(p, answers(p, { receipts: new Map([[task.id, body.assessmentReceiptId]]) })).expect(200)).body;
       expect(summary.newWords.groups.smooth).toHaveLength(1);
     });
@@ -547,6 +547,21 @@ describe('Vocab Flow API', () => {
       const res = await assess(p.sessionId, task.id).expect(422);
       expect(res.body).toMatchObject({ code: 'INVALID_SUBMISSION' });
       expect(await h.count(speechAssessmentReceipts)).toBe(allowed);
+    });
+
+    it('T7b sends the overall band and each syllable\'s band for the app to colour', async () => {
+      await onboard(words(4));
+      await speakInDaily();
+      await goal(1);
+      const p = await plan();
+      h.speech.next = { validity: VALIDITY.VALID, accuracyScore: 64, syllables: [{ text: 'ap', ipa: 'ə', score: 90 }, { text: 'ci', ipa: 'ʃi', score: 42 }], meta: {} };
+      const { body } = await assess(p.sessionId, recordings(p)[0].id).expect(200);
+      expect(body).toMatchObject({
+        passed: false,
+        accuracyScore: 64,
+        band: 'fair',
+        syllables: [{ text: 'ap', ipa: 'ə', score: 90, band: 'good' }, { text: 'ci', ipa: 'ʃi', score: 42, band: 'poor' }],
+      });
     });
 
     it('transcribed takes are scored at Finish with no receipt', async () => {

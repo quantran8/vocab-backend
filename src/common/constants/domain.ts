@@ -151,6 +151,13 @@ export type PracticeExcludedReason = (typeof PRACTICE_EXCLUDED_REASON)[keyof typ
 export const VALIDITY = { VALID: 'valid', INVALID: 'invalid' } as const;
 export type Validity = (typeof VALIDITY)[keyof typeof VALIDITY];
 
+// Recording score bands the app colours by; thresholds in POLICY.speech.
+export const PRONUNCIATION_BAND = { EXCELLENT: 'excellent', GOOD: 'good', FAIR: 'fair', POOR: 'poor' } as const;
+export type PronunciationBand = (typeof PRONUNCIATION_BAND)[keyof typeof PRONUNCIATION_BAND];
+
+export const SYLLABLE_BAND = { GOOD: 'good', POOR: 'poor' } as const;
+export type SyllableBand = (typeof SYLLABLE_BAND)[keyof typeof SYLLABLE_BAND];
+
 export const DELIVERY_MODE = { AUDIO: 'audio', FALLBACK: 'fallback', NONE: 'none' } as const;
 export type DeliveryMode = (typeof DELIVERY_MODE)[keyof typeof DELIVERY_MODE];
 
