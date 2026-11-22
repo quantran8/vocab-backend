@@ -1,13 +1,14 @@
 import {
   ASSESSMENT_INTENT, AssessmentIntent, FSRS_GRADE, MEMORY_SIGNAL, NEW_WORD_GROUP, NewWordGroup, OUTCOME, Outcome, PRACTICE_EXCLUDED_REASON,
   PRACTICE_GROUP, PracticeExcludedReason, PracticeGroup, RESULT_CAUSE, ResultCause, REVIEW_GROUP, ReviewGroup, Skill, SPEAKING_CHANGE,
-  SPEAKING_METHOD, SpeakingChange, StoredSpeakingStatus, TASK_PHASE,
+  PronunciationBand, SPEAKING_METHOD, SpeakingChange, StoredSpeakingStatus, TASK_PHASE,
 } from '../../../common/constants/domain';
 import { MemoryDraft, signalOf } from '../../memory-srs/memory-reducer';
 import { SrsState } from '../../memory-srs/fsrs';
 import { skillOf } from '../../practice-resolver/task-skill';
 import { ServerEvaluation } from '../../practice-resolver/task.types';
 import { SpeakingResult } from '../../speaking/speaking-progress';
+import { pronunciationBand } from '../../speech/domain/pronunciation-bands';
 import { EvaluatedTask, LearnStepRow, TargetRow } from './commit-evaluator';
 
 /** What the results screen shows for a Meaning, read at commit in the learner's explanation locale. */
@@ -302,21 +303,26 @@ export function practiceSummary(input: { counted: EvaluatedTask[]; targets: Targ
 
 export interface SpeakingOutcome { result: SpeakingResult; status: StoredSpeakingStatus; change: SpeakingChange | null }
 
-/** Null when the session scored no recording. */
+/**
+ * Null when the session scored no recording. `groups` lists every counted result in plan order, split by `passed`.
+ * `score` and `band` come from the Azure receipt the result used (band as the assessment showed it); both null on-device.
+ */
 export function speakingSummary(input: { outcomes: SpeakingOutcome[]; labels: Labels; sessionMeanings: Set<string> }) {
   const { outcomes, labels, sessionMeanings } = input;
   if (outcomes.length === 0) return null;
-  type SpeakingItem = ReturnType<typeof item> & { status: StoredSpeakingStatus; score: number | null };
-  const changed = (change: SpeakingChange) => outcomes.flatMap(({ result, status, change: c }): SpeakingItem[] => {
-    const label = c === change ? labels.ofTarget({ meaningId: null, pronunciationId: result.pronunciationId }, sessionMeanings) : undefined;
+  type SpeakingItem = ReturnType<typeof item> & { status: StoredSpeakingStatus; score: number | null; band: PronunciationBand | null };
+  const items = (keep: (o: SpeakingOutcome) => boolean) => outcomes.filter(keep).flatMap(({ result, status }): SpeakingItem[] => {
+    const label = labels.ofTarget({ meaningId: null, pronunciationId: result.pronunciationId }, sessionMeanings);
     if (!label) return [];
-    return [{ ...item(label.meaningId, labels), status, score: result.method === SPEAKING_METHOD.AZURE ? result.score : null }];
+    const azure = result.method === SPEAKING_METHOD.AZURE;
+    return [{ ...item(label.meaningId, labels), status, score: azure ? result.score : null, band: azure ? pronunciationBand(result.score) : null }];
   });
   return {
     total: outcomes.length,
     passed: outcomes.filter((o) => o.result.passed).length,
-    becameFluent: changed(SPEAKING_CHANGE.BECAME_FLUENT),
-    slipped: changed(SPEAKING_CHANGE.SLIPPED),
+    groups: { passed: items((o) => o.result.passed), notPassed: items((o) => !o.result.passed) },
+    becameFluent: items((o) => o.change === SPEAKING_CHANGE.BECAME_FLUENT),
+    slipped: items((o) => o.change === SPEAKING_CHANGE.SLIPPED),
   };
 }
 

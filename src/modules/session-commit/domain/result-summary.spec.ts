@@ -236,15 +236,39 @@ describe('speakingSummary', () => {
       labels,
       sessionMeanings: new Set(),
     });
+    const a = { meaningId: 'a', wordId: 'w-a', lemma: 'lemma-a', gloss: 'gloss-a', status: 'fluent', score: null, band: null };
+    const b = { meaningId: 'b', wordId: 'w-b', lemma: 'lemma-b', gloss: 'gloss-b', status: 'practicing', score: null, band: null };
+    const c = { meaningId: 'c', wordId: 'w-c', lemma: 'lemma-c', gloss: 'gloss-c', status: 'fluent', score: 91, band: 'excellent' };
+    const d = { meaningId: 'd', wordId: 'w-d', lemma: 'lemma-d', gloss: 'gloss-d', status: 'practicing', score: null, band: null };
     expect(summary).toEqual({
       total: 4,
       passed: 3,
-      becameFluent: [
-        { meaningId: 'a', wordId: 'w-a', lemma: 'lemma-a', gloss: 'gloss-a', status: 'fluent', score: null },
-        { meaningId: 'c', wordId: 'w-c', lemma: 'lemma-c', gloss: 'gloss-c', status: 'fluent', score: 91 },
-      ],
-      slipped: [{ meaningId: 'b', wordId: 'w-b', lemma: 'lemma-b', gloss: 'gloss-b', status: 'practicing', score: null }],
+      groups: { passed: [a, c, d], notPassed: [b] },
+      becameFluent: [a, c],
+      slipped: [b],
     });
+  });
+
+  it('lists every scored word by pass/fail in plan order, with the score and band of an Azure take', () => {
+    const azure = (id: string, passed: boolean, score: number) => ({ pronunciationId: `p-${id}`, method: SPEAKING_METHOD.AZURE, passed, score });
+    const summary = speakingSummary({
+      outcomes: [
+        { result: azure('a', false, 55), status: SPEAKING_STATUS.PRACTICING, change: null },
+        { result: device('b', true), status: SPEAKING_STATUS.PRACTICING, change: null },
+        { result: azure('c', true, 84.5), status: SPEAKING_STATUS.PRACTICING, change: null },
+        { result: device('d', false), status: SPEAKING_STATUS.PRACTICING, change: null },
+        { result: azure('e', false, 72), status: SPEAKING_STATUS.PRACTICING, change: null },
+      ],
+      labels,
+      sessionMeanings: new Set(),
+    })!;
+    const pick = (items: { meaningId: string; score: number | null; band: string | null }[]) => items.map((i) => [i.meaningId, i.score, i.band]);
+    expect(pick(summary.groups.passed)).toEqual([['b', null, null], ['c', 84.5, 'good']]);
+    expect(pick(summary.groups.notPassed)).toEqual([['a', 55, 'poor'], ['d', null, null], ['e', 72, 'fair']]);
+    expect(summary.groups.passed).toHaveLength(summary.passed);
+    expect(summary.groups.passed.length + summary.groups.notPassed.length).toBe(summary.total);
+    expect(summary.becameFluent).toEqual([]);
+    expect(summary.slipped).toEqual([]);
   });
 });
 
