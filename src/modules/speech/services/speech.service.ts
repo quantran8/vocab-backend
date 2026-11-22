@@ -62,7 +62,7 @@ export class SpeechService {
       passed,
       accuracyScore: result.accuracyScore,
       band: score === null ? null : pronunciationBand(score),
-      syllables: score === null ? [] : bandedSyllables(result.syllables),
+      syllables: score === null ? [] : bandedSyllables(result.syllables, passed === true),
     };
   }
 }

@@ -14,8 +14,15 @@ describe('pronunciation bands', () => {
     expect(pronunciationBand(score)).toBe(band);
   });
 
-  it('bands each syllable good or poor', () => {
-    expect(bandedSyllables([{ text: 'ci', ipa: 'ʃi', score: 42 }, { text: 'ap', ipa: 'ə', score: 90 }]).map((s) => s.band))
-      .toEqual([SYLLABLE_BAND.POOR, SYLLABLE_BAND.GOOD]);
+  const syl = (text: string, score: number) => ({ text, ipa: text, score });
+  const bands = (syllables: ReturnType<typeof syl>[], passed: boolean) => bandedSyllables(syllables, passed).map((s) => s.band);
+
+  it('colours a one-syllable word by the overall result, not its own score', () => {
+    expect(bands([syl('can', 78)], true)).toEqual([SYLLABLE_BAND.GOOD]);
+    expect(bands([syl('think', 82)], false)).toEqual([SYLLABLE_BAND.POOR]);
+  });
+
+  it('bands each syllable of a longer word by the pass mark', () => {
+    expect(bands([syl('ap', 90), syl('ci', 78)], true)).toEqual([SYLLABLE_BAND.GOOD, SYLLABLE_BAND.POOR]);
   });
 });
