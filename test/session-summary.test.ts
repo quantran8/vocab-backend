@@ -250,6 +250,7 @@ describe('commit summary for the results screen', () => {
       expect(recordings(first)[0]).toMatchObject({ meaningCue: expect.any(Object) });
       const one = (await commit(first, answers(first, { override: right })).expect(200)).body.summary;
       expect(one).toMatchObject({ practice: null, review: null, speaking: { total: 1, passed: 1, becameFluent: [], slipped: [] } });
+      expect(one.speaking.groups).toEqual({ passed: [expect.objectContaining({ status: 'practicing', score: null, band: null })], notPassed: [] });
       expect(await progressRows()).toEqual([expect.objectContaining({ status: 'practicing', deviceSessions: 1, deviceStreak: 1, lastPassed: true })]);
       expect((await result(first.sessionId)).summary).toEqual({ speakingTotal: 1, speakingPassed: 1 });
 
@@ -280,6 +281,7 @@ describe('commit summary for the results screen', () => {
       const kept = await assess(95);
       const { summary } = (await commit(p, answers(p, { receipts: new Map([[task.id, kept]]) })).expect(200)).body;
       expect(summary.speaking).toMatchObject({ total: 1, passed: 0 });
+      expect(summary.speaking.groups).toEqual({ passed: [], notPassed: [expect.objectContaining({ score: 60, band: 'fair', lemma: expect.any(String) })] });
       expect(await progressRows()).toEqual([expect.objectContaining({ scoredSessions: 1, scoreAvg: 60, lastScore: 60, bestScore: 60, lastPassed: false })]);
     });
 

@@ -1146,11 +1146,16 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
 `speaking` có mặt khi buổi có ít nhất một bài ghi âm được chấm (ngoài ghi âm của từ mới và ghi âm `invalid`/`unavailable`), ngược lại là null. Ở Daily nó nằm cạnh `review` và `newWords`; ở `speaking_practice` các khối khác đều null.
 
 ```jsonc
-"speaking": { "total": 3, "passed": 2, "becameFluent": [SItem], "slipped": [SItem] }
+"speaking": {
+  "total": 3, "passed": 2,
+  "groups": { "passed": [SItem], "notPassed": [SItem] },
+  "becameFluent": [SItem], "slipped": [SItem]
+}
 ```
 
 - Mỗi phát âm tính một kết quả mỗi buổi: bài ghi âm đầu tiên theo thứ tự plan. Chấm trên máy chỉ đạt khi lần nói **đầu tiên** đạt; chấm Azure lấy điểm của receipt hợp lệ **đầu tiên**, không phải receipt người học giữ lại.
-- `SItem` = Item (không có `nextReviewAt`) + `status` (`practicing|fluent`, sau buổi này) + `score` (null khi chấm trên máy).
+- `SItem` = Item (không có `nextReviewAt`) + `status` (`practicing|fluent`, sau buổi này) + `score` (null khi chấm trên máy) + `band` (`excellent|good|fair|poor`, null khi chấm trên máy). `score` và `band` lấy từ đúng receipt đã tính kết quả; `band` tính từ `score` bằng cùng ngưỡng với `band` của `recording-assess` (POLICY.speech.bandFloors).
+- `groups`: luôn có khi `speaking` khác null (mảng có thể rỗng). Liệt kê **mọi** phát âm được tính trong `total`, theo thứ tự plan: `passed` là các kết quả đạt, `notPassed` là các kết quả không đạt. `groups.passed.length == passed`, `groups.passed.length + groups.notPassed.length == total`. Client hiển thị nguyên nhóm server gửi, không tự chia lại.
 - `becameFluent`: từ vừa lên `fluent`. `slipped`: từ đang `fluent` bị tụt về `practicing`.
 
 ### 15.4 Lưu trữ
