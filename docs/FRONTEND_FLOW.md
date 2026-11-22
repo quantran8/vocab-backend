@@ -434,7 +434,7 @@ Flow:
 ```
 
    - `band`: band của tổng điểm (≥90 excellent, ≥80 good, ≥60 fair, còn lại poor; ngưỡng trong `POLICY.speech`). `null` khi `invalid`. Client hiện tiêu đề và màu theo band này, không tự chia ngưỡng.
-   - `syllables`: các âm tiết theo thứ tự đọc. `text` là chữ cái của âm tiết trong từ (để tô màu), `ipa` là cách đọc, `band` good khi `score >= 80`. Mảng rỗng khi `invalid` hoặc khi Azure không trả chữ cái theo âm tiết (chỉ en-US có): khi đó không tô màu. Chỉ để hiển thị, không lưu.
+   - `syllables`: các âm tiết theo thứ tự đọc. `text` là chữ cái của âm tiết trong từ (để tô màu), `ipa` là cách đọc, `band` good khi `score >= 80`; riêng từ 1 âm tiết thì `band` theo `passed` để màu chữ khớp vòng điểm (client không hiện phần chi tiết khi chỉ có 1 âm tiết). Mảng rỗng khi `invalid` hoặc khi Azure không trả chữ cái theo âm tiết (chỉ en-US có): khi đó không tô màu. Chỉ để hiển thị, không lưu.
 
    - Điểm đạt: `accuracyScore >= 80` (`passed`). `validity: "invalid"` nghĩa là không đánh giá được (im lặng, nhiễu, không nhận ra giọng) và `passed = null`: cho phép đọc lại, không phải là fail.
    - Nên hiển thị kết quả ngay. Được gọi assess nhiều lần (đọc lại), mỗi lần ra một receipt riêng.

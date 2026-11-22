@@ -1,4 +1,4 @@
-import { PRONUNCIATION_BAND, PronunciationBand, SYLLABLE_BAND, SyllableBand } from '../../../common/constants/domain';
+import { PRONUNCIATION_BAND, PronunciationBand, SYLLABLE_BAND } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { SpeechSyllable } from '../providers/speech.provider';
 
@@ -11,8 +11,8 @@ export function pronunciationBand(score: number): PronunciationBand {
   return PRONUNCIATION_BAND.POOR;
 }
 
-export const syllableBand = (score: number): SyllableBand =>
-  (score >= syllableGoodFloor ? SYLLABLE_BAND.GOOD : SYLLABLE_BAND.POOR);
-
-export const bandedSyllables = (syllables: SpeechSyllable[] = []) =>
-  syllables.map((s) => ({ ...s, band: syllableBand(s.score) }));
+// A one-syllable word is the whole word, so its colour follows the overall result instead of its own score.
+export function bandedSyllables(syllables: SpeechSyllable[] = [], passed: boolean) {
+  if (syllables.length === 1) return [{ ...syllables[0], band: passed ? SYLLABLE_BAND.GOOD : SYLLABLE_BAND.POOR }];
+  return syllables.map((s) => ({ ...s, band: s.score >= syllableGoodFloor ? SYLLABLE_BAND.GOOD : SYLLABLE_BAND.POOR }));
+}
