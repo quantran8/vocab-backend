@@ -26,6 +26,7 @@
     { "idx": 21, "version": "7", "when": 1761868800021, "tag": "0021_reviews_per_session_min_one", "breakpoints": true },
     { "idx": 22, "version": "7", "when": 1761868800022, "tag": "0022_catalog_appearance", "breakpoints": true },
     { "idx": 23, "version": "7", "when": 1761868800023, "tag": "0023_daily_speaking", "breakpoints": true },
-    { "idx": 24, "version": "7", "when": 1761868800024, "tag": "0024_speaking_progress", "breakpoints": true }
+    { "idx": 24, "version": "7", "when": 1761868800024, "tag": "0024_speaking_progress", "breakpoints": true },
+    { "idx": 25, "version": "7", "when": 1761868800025, "tag": "0025_freemium", "breakpoints": true }
   ]
 }

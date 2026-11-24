@@ -80,6 +80,10 @@ import { EffortRepository } from './modules/learning-points/repositories/effort.
 import { MeRankingController, RankingController } from './modules/ranking/controllers/ranking.controller';
 import { RankingRepository } from './modules/ranking/repositories/ranking.repository';
 import { RankingService } from './modules/ranking/services/ranking.service';
+import { AdminRedeemCodesController, AppStoreNotificationsController, MeEntitlementController } from './modules/entitlement/controllers/entitlement.controller';
+import { EntitlementRepository } from './modules/entitlement/repositories/entitlement.repository';
+import { AppStoreService } from './modules/entitlement/services/appstore.service';
+import { EntitlementService } from './modules/entitlement/services/entitlement.service';
 
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
@@ -87,7 +91,7 @@ import { RankingService } from './modules/ranking/services/ranking.service';
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
     SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController, AdminAudioController,
-    MeRankingController, RankingController, HealthController,
+    MeRankingController, RankingController, HealthController, MeEntitlementController, AppStoreNotificationsController, AdminRedeemCodesController,
   ],
   providers: [
     UserIdCache, UserProvisioningRepository, SpeechRepository,
@@ -104,6 +108,7 @@ import { RankingService } from './modules/ranking/services/ranking.service';
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker, PronunciationAudio, ReviewLoadRepository, ReviewLoadService,
     EffortRepository, RankingRepository, RankingService, AdminRankingService, AdminAudioRepository, AdminAudioService,
+    EntitlementRepository, EntitlementService, AppStoreService,
   ],
 })
 export class AppModule {}

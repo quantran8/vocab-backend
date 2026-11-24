@@ -3,16 +3,17 @@ import { z } from 'zod';
 import { Clock } from '../../../common/clock';
 import { ApiError } from '../../../common/http/api-error';
 import { IdentityRepository } from '../repositories/identity.repository';
+import { EntitlementService } from '../../entitlement/services/entitlement.service';
 import { tierKey } from '../../learning-points/domain/tier';
 import { usernameChangeAvailableAt } from '../../ranking/domain/username';
 import { levelsSchema, scopeSchema, settingsSchema } from '../dto/identity.schemas';
 
 @Injectable()
 export class IdentityService {
-  constructor(private readonly repository: IdentityRepository, private readonly clock: Clock) {}
+  constructor(private readonly repository: IdentityRepository, private readonly entitlements: EntitlementService, private readonly clock: Clock) {}
 
   async getMe(userId: string) {
-    const user = await this.repository.findProfile(userId);
+    const [user, plan] = await Promise.all([this.repository.findProfile(userId), this.entitlements.plan(userId)]);
     if (!user) throw new ApiError('NOT_FOUND', 'User not found');
     const { learningScope, activeTopics, effortTotals, usernameGenerated, usernameChangedAt, ...profile } = user;
     const tierLevel = effortTotals?.tierLevel ?? 0;
@@ -23,6 +24,8 @@ export class IdentityService {
         level: tierLevel, key: tierKey(tierLevel), lifetimeLP: effortTotals?.lifetimeLp ?? 0, lifetimeActiveDays: effortTotals?.lifetimeActiveDays ?? 0,
       },
       scope: learningScope && { collectionId: learningScope.collectionId, topicIds: activeTopics.map((t) => t.topicId) },
+      plan,
+      features: this.entitlements.features(),
     };
   }
 
@@ -39,6 +42,7 @@ export class IdentityService {
 
   async setScope(userId: string, { collectionId, topicIds }: z.infer<typeof scopeSchema>) {
     const ids = [...new Set(topicIds)];
+    await this.entitlements.assertTopicCount(userId, ids.length);
     if ((await this.repository.countPublishedTopics(collectionId, ids)) !== ids.length) {
       throw new ApiError('VALIDATION_FAILED', 'Topics must be published and belong to the Collection');
     }
