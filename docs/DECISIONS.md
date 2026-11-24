@@ -103,6 +103,22 @@ Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for 
 | Existing users | Migration 0017 gives each a generated username and a random avatar; `leaderboard_visible` is `false` for all. No LP is backfilled: there was no ledger | §7.2 |
 | Not implemented | Admin dashboard (P6), LP correction flow, simulation (P3), Tier-unlocked avatars, holding a changed username for 30 days | Open in §12, §14 |
 
+## Freemium
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Launch gate | `FREEMIUM_ENABLED` (default `false`). Off: `plan.limits` is null for everyone, nothing is capped, and `recording-assess` works for all | The backend ships before the app build that has the paywall; old builds must keep working |
+| Who is Premium | Any `user_entitlements` row with status `active` or `grace` whose `expires_at` is in the future. The server decides; the client only reads `GET /me` `plan` | One source of truth for App Store and redeem codes |
+| Free scope | At most `FREE_MAX_TOPICS` topics (default 3) in one collection. `PUT /me/scope` answers `403 FREE_TOPIC_LIMIT`. A scope saved while Premium is kept after it lapses; the cap applies at the next save | Losing Premium must not erase the learner's choice |
+| Free words | At most `FREE_MAX_NEW_WORDS` (default 150) Meanings in `user_meaning_progress`, custom words and "I know this" included. Daily caps new words at what is left; when that is the tightest limit, `withheldReason` is `free_limit`. Reviews are never limited | Lifetime cap is what the product asked for; counting rows keeps it exact |
+| Free speech | `recording-assess` answers `403 PREMIUM_REQUIRED` before calling Azure. The app scores free takes on the device (`transcribed`) or sends `unavailable` | Azure is the cost being saved |
+| App Store verification | Signed payloads are checked locally (x5c chain to Apple Root CA G3 by SHA-256 fingerprint, Apple's marker OIDs, ES256 signature), like Apple's app-store-server-library without OCSP. No App Store Server API key is needed. `APPSTORE_ALLOW_XCODE` accepts Xcode StoreKit-testing payloads unverified, for local runs only | Avoids a new dependency and a secret; the notifications carry everything needed |
+| Ownership | A subscription (`original_transaction_id`) belongs to the first account that syncs it; another live account gets `409 APPSTORE_TRANSACTION_OWNED`. Deleting the account deletes the row, so a restore on a new account works. Notifications find the owner by `original_transaction_id`, then by `appAccountToken` (the app sets it to the user id) | Stops one purchase unlocking many accounts |
+| Notifications | `POST /v1/appstore/notifications`, public. Stored once per `notificationUUID` in the same transaction as the update, so a redelivery is a no-op and a failure lets Apple retry. A payload whose `signedDate` is older than the stored one changes nothing | Apple retries and may deliver out of order |
+| Sandbox | Production accepts Sandbox transactions and stores the environment | App Review and TestFlight buy in Sandbox against the production server |
+| Ads | `features.adEverySessions` (`AD_EVERY_SESSIONS`, default 3; 0 off, and 0 while freemium is off). The app counts finished sessions on the device and shows a Google AdMob interstitial after every Nth, only to learners with `plan.limits` | The server tunes frequency without an app release; counting locally keeps it off the commit path |
+| Redeem codes | `REDEEM_ENABLED` (default `false`); off, `POST /me/redeem` is `404`. A code adds `durationDays` after any redeemed time still left (never on top of a subscription). One use per account, `maxUses` in total. Admins create, list and disable codes at `/admin/redeem-codes` | Promotions without App Store offer codes |
+
 ## Session result statistics
 
 Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo). Contract: `FRONTEND_FLOW.md` §15.

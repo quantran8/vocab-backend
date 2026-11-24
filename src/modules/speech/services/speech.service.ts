@@ -8,6 +8,7 @@ import { toDate } from '../../../db/db';
 import { bandedSyllables, pronunciationBand } from '../domain/pronunciation-bands';
 import { SpeechProvider } from '../providers/speech.provider';
 import { SpeechRepository } from '../repositories/speech.repository';
+import { EntitlementService } from '../../entitlement/services/entitlement.service';
 
 interface AudioUpload {
   buffer: Buffer;
@@ -19,6 +20,7 @@ export class SpeechService {
   constructor(
     private readonly repository: SpeechRepository,
     private readonly provider: SpeechProvider,
+    private readonly entitlements: EntitlementService,
     private readonly clock: Clock,
   ) {}
 
@@ -38,6 +40,8 @@ export class SpeechService {
 
     const { referenceText, referenceLocale } = task.serverEvaluation;
     if (!referenceText || !referenceLocale) throw new ApiError('TASK_DATA_INVALID', 'Recording has no reference');
+    // Free learners are scored on the device; only Premium pays for the provider.
+    await this.entitlements.assertPremium(userId);
 
     // Audio stays in memory only and is dropped after this call; never inside a DB transaction.
     const result = await this.provider.assess({ audio: audio.buffer, contentType: audio.mimetype, referenceText, locale: referenceLocale });

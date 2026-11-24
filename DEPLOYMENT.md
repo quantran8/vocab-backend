@@ -62,7 +62,7 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `BUILD_PLATFORM` | `linux/arm64` (default) or `linux/amd64` |
 | `APP_PORT` | loopback port on the VM, default `3001` (money-space uses 3000) |
 | `EDGE_DIR` | money-space's `APP_DIR`, default `/opt/money-space` |
-| optional | `AZURE_SPEECH_REGION`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_VOICE_OPTIONS`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED` |
+| optional | `AZURE_SPEECH_REGION`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_VOICE_OPTIONS`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED`, `FREEMIUM_ENABLED`, `FREE_MAX_TOPICS`, `FREE_MAX_NEW_WORDS`, `REDEEM_ENABLED`, `AD_EVERY_SESSIONS`, `APPSTORE_BUNDLE_ID`, `APPSTORE_PRODUCT_IDS` |
 | `CORS_ORIGINS` | comma-separated browser origins allowed to call the API, e.g. `https://vocab-admin.vercel.app`. Unset keeps CORS off |
 | `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` | login name and address of the seeded admin. Without them the admin signs in by email only. The password is not deployed: `pnpm db:seed` reads it from your local `.env` |
 

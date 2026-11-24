@@ -11,6 +11,8 @@ import { applyOverride } from '../../practice-resolver/meaning-override';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { LearnHomeRow, ProgressRepository, RawMeaningRow, RawWordMeaningRow } from '../repositories/progress.repository';
 import { retrievability } from '../../memory-srs/fsrs';
+import { freeRemaining, type PlanView } from '../../entitlement/domain/entitlement';
+import { EntitlementService } from '../../entitlement/services/entitlement.service';
 
 interface MeaningRow {
   wordId: string;
@@ -105,14 +107,15 @@ const wordSummary = (rows: MeaningRow[], meaningCount: number, ipaVaries: boolea
   })),
 });
 
-function learnHomeView(row: LearnHomeRow, now: Date) {
+function learnHomeView(row: LearnHomeRow, now: Date, plan: PlanView) {
   const { remaining, pendingCustom, topics, dailyNewWordGoal, reviewsPerSession: chosenReviews, autoBalanceNewWords, overrideValue, overrideMode, overrideUntil, lastPromptedBacklog, ...counts } = row;
   const backlog = counts.dueCount;
   const stored = overrideValue === null || overrideMode === null
     ? null
     : { value: overrideValue, mode: overrideMode, until: overrideUntil === null ? null : toDate(overrideUntil) };
   const override = activeOverride(stored, now);
-  const budget = effectiveNewWords({ goal: dailyNewWordGoal, override, autoBalance: autoBalanceNewWords, backlog, remaining, pendingCustom, now });
+  const free = freeRemaining(plan);
+  const budget = effectiveNewWords({ goal: dailyNewWordGoal, override, autoBalance: autoBalanceNewWords, backlog, remaining, pendingCustom, freeRemaining: free, now });
   const status = scopeStatus(remaining, budget.chosen, counts.checkpointSessionsRequired);
   return {
     ...counts,
@@ -126,18 +129,25 @@ function learnHomeView(row: LearnHomeRow, now: Date) {
       autoBalance: autoBalanceNewWords,
       promptChoice: shouldPromptChoice(backlog, lastPromptedBacklog),
     },
+    // Free tier only: how many of its new words the learner has used.
+    freeAllowance: plan.limits && { used: plan.limits.newWordsUsed, max: plan.limits.maxNewWords, remaining: free },
   };
 }
 
 @Injectable()
 export class ProgressService {
-  constructor(private readonly repository: ProgressRepository, private readonly clock: Clock, private readonly config: AppConfig) {}
+  constructor(
+    private readonly repository: ProgressRepository,
+    private readonly entitlements: EntitlementService,
+    private readonly clock: Clock,
+    private readonly config: AppConfig,
+  ) {}
 
   async learnHome(userId: string) {
     const now = this.clock.now();
-    const row = await this.repository.learnHomeCounts(userId, now);
+    const [row, plan] = await Promise.all([this.repository.learnHomeCounts(userId, now), this.entitlements.plan(userId, now)]);
     if (!row) throw new ApiError('NOT_FOUND', 'Settings not found');
-    return learnHomeView(row, now);
+    return learnHomeView(row, now, plan);
   }
 
   async words(userId: string, limit: number, offset: number, query?: string) {

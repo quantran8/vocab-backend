@@ -18,6 +18,8 @@ export interface NewWordBudgetInput {
   remaining: number;
   pendingCustom: number;
   reviewOnly?: boolean;
+  /** New words the free tier still allows; null or absent means no limit. */
+  freeRemaining?: number | null;
   now: Date;
 }
 
@@ -47,7 +49,7 @@ export function autoBalanced(goal: number, backlog: number): number {
   return Math.max(Math.min(goal, autoBalanceFloor), Math.round((goal * backlogStatusThreshold) / backlog));
 }
 
-/** E: override, then auto-balance, then goal; capped by what scope and custom words still hold. */
+/** E: override, then auto-balance, then goal; capped by what scope and custom words still hold, then by the free tier. */
 export function effectiveNewWords(input: NewWordBudgetInput): NewWordBudget {
   if (input.reviewOnly) return { value: 0, chosen: 0, reason: NEW_WORD_REASON.REVIEW_ONLY };
   const override = activeOverride(input.override, input.now);
@@ -65,8 +67,11 @@ export function effectiveNewWords(input: NewWordBudgetInput): NewWordBudget {
   }
   const available = input.remaining + input.pendingCustom;
   if (available === 0) return { value: 0, chosen, reason: NEW_WORD_REASON.SCOPE_EXHAUSTED };
-  if (available < chosen) return { value: available, chosen, reason: NEW_WORD_REASON.SCOPE_LIMITED };
-  return { value: chosen, chosen, reason };
+  const budget = available < chosen ? { value: available, chosen, reason: NEW_WORD_REASON.SCOPE_LIMITED as NewWordReason } : { value: chosen, chosen, reason };
+  const free = input.freeRemaining;
+  // Upgrading would only help when the free tier is the tightest limit.
+  if (free != null && free < budget.value) return { value: Math.max(free, 0), chosen, reason: NEW_WORD_REASON.FREE_LIMIT };
+  return budget;
 }
 
 export function scopeStatus(remaining: number, chosen: number, weeklySessionGoal: number): { status: ScopeStatus; sessionsLeftEstimate: number | null } {

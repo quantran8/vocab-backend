@@ -154,6 +154,13 @@ jobs:
           R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL }}
           ENABLE_CRON: ${{ vars.ENABLE_CRON }}
           RANKING_ENABLED: ${{ vars.RANKING_ENABLED }}
+          FREEMIUM_ENABLED: ${{ vars.FREEMIUM_ENABLED }}
+          FREE_MAX_TOPICS: ${{ vars.FREE_MAX_TOPICS }}
+          FREE_MAX_NEW_WORDS: ${{ vars.FREE_MAX_NEW_WORDS }}
+          REDEEM_ENABLED: ${{ vars.REDEEM_ENABLED }}
+          AD_EVERY_SESSIONS: ${{ vars.AD_EVERY_SESSIONS }}
+          APPSTORE_BUNDLE_ID: ${{ vars.APPSTORE_BUNDLE_ID }}
+          APPSTORE_PRODUCT_IDS: ${{ vars.APPSTORE_PRODUCT_IDS }}
           CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
           SEED_ADMIN_USERNAME: ${{ vars.SEED_ADMIN_USERNAME }}
           SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
@@ -167,6 +174,8 @@ jobs:
                        ELEVENLABS_API_KEY ELEVENLABS_VOICE_ID ELEVENLABS_MODEL_ID ELEVENLABS_VOICE_OPTIONS \
                        R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_PUBLIC_BASE_URL \
                        SEED_ADMIN_USERNAME SEED_ADMIN_EMAIL \
+                       FREEMIUM_ENABLED FREE_MAX_TOPICS FREE_MAX_NEW_WORDS REDEEM_ENABLED AD_EVERY_SESSIONS \
+                       APPSTORE_BUNDLE_ID APPSTORE_PRODUCT_IDS \
                        ENABLE_CRON RANKING_ENABLED CORS_ORIGINS BACKEND_IMAGE APP_PORT; do
               # Unset must be absent, not KEY="": optional providers switch on by presence, and "" beats zod defaults.
               if [ -z "${!key}" ]; then continue; fi
