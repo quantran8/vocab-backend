@@ -37,6 +37,15 @@ describe('effectiveNewWords', () => {
   it('issues nothing for a review-only session', () => {
     expect(effectiveNewWords({ ...base, reviewOnly: true })).toMatchObject({ value: 0, reason: NEW_WORD_REASON.REVIEW_ONLY });
   });
+
+  it('caps by the free tier only when it is the tightest limit', () => {
+    expect(effectiveNewWords({ ...base, freeRemaining: 2 })).toEqual({ value: 2, chosen: 5, reason: NEW_WORD_REASON.FREE_LIMIT });
+    expect(effectiveNewWords({ ...base, freeRemaining: 0 })).toMatchObject({ value: 0, reason: NEW_WORD_REASON.FREE_LIMIT });
+    expect(effectiveNewWords({ ...base, freeRemaining: 9 })).toMatchObject({ value: 5, reason: NEW_WORD_REASON.GOAL });
+    expect(effectiveNewWords({ ...base, freeRemaining: null })).toMatchObject({ value: 5, reason: NEW_WORD_REASON.GOAL });
+    expect(effectiveNewWords({ ...base, remaining: 1, freeRemaining: 3 })).toMatchObject({ value: 1, reason: NEW_WORD_REASON.SCOPE_LIMITED });
+    expect(effectiveNewWords({ ...base, remaining: 0, freeRemaining: 0 })).toMatchObject({ value: 0, reason: NEW_WORD_REASON.SCOPE_EXHAUSTED });
+  });
 });
 
 describe('scopeStatus', () => {

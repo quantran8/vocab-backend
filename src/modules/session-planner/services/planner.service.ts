@@ -10,6 +10,7 @@ import { POLICY } from '../../../config/policy';
 import { copyFor } from '../../practice-resolver/locale-copy';
 import { applyOverride } from '../../practice-resolver/meaning-override';
 import { effectiveNewWords, reviewsPerSession, withheldReason } from '../../review-load/domain/review-load';
+import { EntitlementService } from '../../entitlement/services/entitlement.service';
 import { MeaningSnapshot } from '../../practice-resolver/task.types';
 import { Rng, shuffle } from '../domain/interleave';
 import { buildPlan, PlannedLearn, PlannedStep, PlannedTask } from '../domain/plan-builder';
@@ -48,6 +49,7 @@ export class PlannerService {
 
   constructor(
     private readonly repository: PlannerRepository,
+    private readonly entitlements: EntitlementService,
     private readonly config: AppConfig,
     private readonly clock: Clock,
   ) {}
@@ -167,6 +169,7 @@ export class PlannerService {
     if (mode === SESSION_MODE.DAILY) {
       // Nothing gates new words: the Challenge Map is optional. The learner's own choices size them (§7.5).
       const counts = learner.budget!;
+      const freeRemaining = reviewOnly ? null : await this.entitlements.freeRemaining(userId, now);
       const budget = effectiveNewWords({
         goal: settings.dailyNewWordGoal,
         override: settings.override,
@@ -175,6 +178,7 @@ export class PlannerService {
         remaining: counts.remaining,
         pendingCustom: counts.pendingCustom,
         reviewOnly,
+        freeRemaining,
         now,
       });
       const [reviewTargets, newTargets] = await Promise.all([

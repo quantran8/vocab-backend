@@ -304,6 +304,8 @@ export const NEW_WORD_REASON = {
   SCOPE_LIMITED: 'scope_limited',
   SCOPE_EXHAUSTED: 'scope_exhausted',
   REVIEW_ONLY: 'review_only',
+  // Free tier: the learner has used every new word it allows.
+  FREE_LIMIT: 'free_limit',
 } as const;
 export type NewWordReason = (typeof NEW_WORD_REASON)[keyof typeof NEW_WORD_REASON];
 export type WithheldReason = Exclude<NewWordReason, typeof NEW_WORD_REASON.GOAL>;
@@ -383,3 +385,13 @@ export const REPORT_STATUS = { OPEN: 'open', RESOLVED: 'resolved' } as const;
 export const RANKING_POSITION_KIND = { RANK: 'rank', PERCENTILE: 'percentile', UNRANKED: 'unranked' } as const;
 export type RankingPositionKind = (typeof RANKING_POSITION_KIND)[keyof typeof RANKING_POSITION_KIND];
 export const LEADERBOARD_VIEW = { TOP: 'top', AROUND: 'around' } as const;
+
+export const ENTITLEMENT_SOURCE = { APPSTORE: 'appstore', REDEEM: 'redeem' } as const;
+export type EntitlementSource = (typeof ENTITLEMENT_SOURCE)[keyof typeof ENTITLEMENT_SOURCE];
+
+/** active and grace grant Premium until expiresAt; the others never do. */
+export const ENTITLEMENT_STATUS = { ACTIVE: 'active', GRACE: 'grace', EXPIRED: 'expired', REVOKED: 'revoked' } as const;
+export type EntitlementStatus = (typeof ENTITLEMENT_STATUS)[keyof typeof ENTITLEMENT_STATUS];
+
+export const PLAN_TIER = { FREE: 'free', PREMIUM: 'premium' } as const;
+export type PlanTier = (typeof PLAN_TIER)[keyof typeof PLAN_TIER];

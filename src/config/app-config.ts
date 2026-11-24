@@ -28,6 +28,26 @@ const envSchema = z.object({
   ENABLE_CRON: z.stringbool().default(true),
   // Leaderboard launch gate (Ranking spec R14); LP and Tier work either way.
   RANKING_ENABLED: z.stringbool().default(false),
+  // Freemium launch gate: off, every learner has full access (old app builds keep working).
+  FREEMIUM_ENABLED: z.stringbool().default(true),
+  FREE_MAX_TOPICS: z.coerce.number().int().positive().default(5),
+  FREE_MAX_NEW_WORDS: z.coerce.number().int().nonnegative().default(200),
+  REDEEM_ENABLED: z.stringbool().default(false),
+  // Free learners see an interstitial ad after every N finished sessions; 0 turns ads off.
+  AD_EVERY_SESSIONS: z.coerce.number().int().nonnegative().default(3),
+  APPSTORE_BUNDLE_ID: z.string().default('com.visiongroup.syll'),
+  // Comma-separated product ids that grant Premium.
+  APPSTORE_PRODUCT_IDS: z
+    .string()
+    .default('syll.premium.monthly,syll.premium.yearly')
+    .transform((v) => v.split(',').map((p) => p.trim()).filter(Boolean)),
+  // Accept unsigned Xcode StoreKit-testing transactions. Never on in production.
+  APPSTORE_ALLOW_XCODE: z.stringbool().default(false),
+  // SHA-256 fingerprints (hex, colons optional) of trusted root certificates; defaults to Apple Root CA - G3.
+  APPSTORE_ROOT_FINGERPRINTS: z
+    .string()
+    .default('63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179')
+    .transform((v) => v.split(',').map((f) => f.replace(/[^0-9a-f]/gi, '').toUpperCase()).filter(Boolean)),
   SEED_ADMIN_USERNAME: z.string().trim().toLowerCase().min(1).optional(),
   SEED_ADMIN_EMAIL: z.string().trim().toLowerCase().pipe(z.email()).optional(),
   SEED_ADMIN_PASSWORD: z.string().optional(),
@@ -71,6 +91,15 @@ export class AppConfig {
   readonly allowPlaceholderAudio = this.env.ALLOW_PLACEHOLDER_AUDIO;
   readonly enableCron = this.env.ENABLE_CRON;
   readonly rankingEnabled = this.env.RANKING_ENABLED;
+  readonly freemiumEnabled = this.env.FREEMIUM_ENABLED;
+  readonly freeMaxTopics = this.env.FREE_MAX_TOPICS;
+  readonly freeMaxNewWords = this.env.FREE_MAX_NEW_WORDS;
+  readonly redeemEnabled = this.env.REDEEM_ENABLED;
+  readonly adEverySessions = this.env.AD_EVERY_SESSIONS;
+  readonly appStoreBundleId = this.env.APPSTORE_BUNDLE_ID;
+  readonly appStoreProductIds = this.env.APPSTORE_PRODUCT_IDS;
+  readonly appStoreAllowXcode = this.env.APPSTORE_ALLOW_XCODE;
+  readonly appStoreRootFingerprints = this.env.APPSTORE_ROOT_FINGERPRINTS;
   readonly seedAdminUsername = this.env.SEED_ADMIN_USERNAME;
   readonly seedAdminEmail = this.env.SEED_ADMIN_EMAIL;
   readonly seedAdminPassword = this.env.SEED_ADMIN_PASSWORD;

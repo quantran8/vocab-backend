@@ -8,7 +8,7 @@ import {
   CONTENT_STATUS, EDITORIAL_STATE, ITEM_STATUS, MEANING_ORIGIN, SESSION_STATUS, CHECKPOINT_STATE, CHALLENGE_RUN_STATUS,
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
   type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type FsrsGrade, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type StoredSpeakingStatus, type Template, type Validity, type Variant, type CheckpointState,
-  type AvatarKey, type ContentProvenance, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
+  type AvatarKey, type ContentProvenance,type EntitlementSource, type EntitlementStatus, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
@@ -532,6 +532,52 @@ export const rankingEligibilityAudit = pgTable('ranking_eligibility_audit', {
   reason: text('reason').notNull(),
   createdAt: ts('created_at').notNull(),
 });
+
+// H. Premium: App Store subscriptions and redeem codes
+export const userEntitlements = pgTable('user_entitlements', {
+  id: id(),
+  userId: uuid('user_id').notNull(),
+  source: varchar('source', { length: 16 }).$type<EntitlementSource>().notNull(),
+  productId: text('product_id'),
+  /** App Store subscriptions only: one row per original transaction, whoever it moves to. */
+  originalTransactionId: text('original_transaction_id').unique('user_entitlements_original_transaction_id_key'),
+  environment: varchar('environment', { length: 16 }),
+  status: varchar('status', { length: 16 }).$type<EntitlementStatus>().notNull(),
+  expiresAt: ts('expires_at').notNull(),
+  autoRenew: boolean('auto_renew'),
+  /** signedDate of the newest App Store payload applied; an older one arriving late is ignored. */
+  signedAt: ts('signed_at'),
+  redeemCode: text('redeem_code'),
+  createdAt: createdAt(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [index('idx_user_entitlements_user').on(t.userId, t.expiresAt)]);
+
+export const appStoreNotifications = pgTable('appstore_notifications', {
+  notificationUuid: uuid('notification_uuid').primaryKey(),
+  notificationType: varchar('notification_type', { length: 64 }).notNull(),
+  subtype: varchar('subtype', { length: 64 }),
+  environment: varchar('environment', { length: 16 }),
+  originalTransactionId: text('original_transaction_id'),
+  signedAt: ts('signed_at').notNull(),
+  receivedAt: ts('received_at').notNull().defaultNow(),
+});
+
+export const redeemCodes = pgTable('redeem_codes', {
+  code: text('code').primaryKey(),
+  durationDays: integer('duration_days').notNull(),
+  maxUses: integer('max_uses').notNull(),
+  usedCount: integer('used_count').notNull().default(0),
+  expiresAt: ts('expires_at'),
+  disabledAt: ts('disabled_at'),
+  note: text('note'),
+  createdAt: createdAt(),
+});
+
+export const redeemCodeUses = pgTable('redeem_code_uses', {
+  code: text('code').notNull(),
+  userId: uuid('user_id').notNull(),
+  redeemedAt: ts('redeemed_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.code, t.userId] })]);
 
 export const appUsersRelations = relations(appUsers, ({ one, many }) => ({
   settings: one(userSettings, { fields: [appUsers.id], references: [userSettings.userId] }),

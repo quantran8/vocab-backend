@@ -920,7 +920,7 @@ Theo spec "Scope Completion & Review Load" v1.0. Mọi ngưỡng nằm trong `PO
 
   Gửi các trường này với mode khác daily thì trả 400.
 - Response daily có thêm `newWords: {requested, issued, withheldReason}`, kể cả khi plan rỗng (`sessionId: null`).
-  - `withheldReason` là `null | review_only | user_override | auto_balanced | scope_limited | scope_exhausted | checkpoint_gate`.
+  - `withheldReason` là `null | review_only | user_override | auto_balanced | scope_limited | scope_exhausted | checkpoint_gate | free_limit` (`free_limit`: §16).
   - **Client chỉ tự plan tiếp daily khi `withheldReason == null`.** Mọi lý do khác thì đi thẳng tới màn kết quả.
 - Step ôn (`phase: "due_review"`) có thêm `sourceTopic: {id, name}`, tên đã localize. Từ tự thêm có tên "Từ của bạn" / "Your words".
 - Plan daily có thêm `reviewWords: [{wordId, meaningId, lemma, sourceTopic}]`, gồm đúng các từ plan này ôn, dùng cho màn "Ôn từ bạn đã học".
@@ -1160,4 +1160,57 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
 
 ### 15.4 Lưu trữ
 
-`learning_sessions.result.summary` giữ vài số nguyên để so sánh các buổi sau khi `raw_events` bị xoá: daily `{reviewTotal, reviewSolid, newTotal, newSmooth}`, Random/Weak `{practiceTotal, practiceClean, needPracticeAfter}`; thêm `{speakingTotal, speakingPassed}` khi có khối `speaking`. Chưa có API đọc.
+`learning_sessions.result.summary` giữ vài số nguyên để so sánh các buổi sau khi `raw_events` bị xoá: daily `{reviewTotal, reviewSolid, newTotal, newSmooth}`, Random/Weak `{practiceTotal, practiceClean, leveledUp, needPracticeAfter}`. Chưa có API đọc.
+
+## 16. Premium và giới hạn free
+
+Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1/me` và gửi giao dịch StoreKit lên. Cờ `FREEMIUM_ENABLED` tắt thì `plan.limits` luôn `null`: không giới hạn gì, app cũ vẫn chạy như trước.
+
+### 16.1 `GET /v1/me` trả thêm
+
+```jsonc
+"plan": {
+  "tier": "free",              // free | premium
+  "premiumUntil": null,        // ISO, khi premium
+  "source": null,              // appstore | redeem
+  "productId": null,           // vd. syll.premium.yearly
+  "autoRenew": null,           // chỉ với appstore, khi đã biết
+  "limits": { "maxTopics": 3, "maxNewWords": 150, "newWordsUsed": 42 }  // null khi không bị giới hạn
+},
+"features": { "freemiumEnabled": true, "redeemEnabled": false, "adEverySessions": 3 }  // 0: no ads
+```
+
+- `adEverySessions`: user đang bị giới hạn free (`limits != null`) thấy một quảng cáo interstitial sau mỗi N session hoàn thành (commit thành công), không bao giờ giữa session. `0` hoặc thiếu: không quảng cáo. Bằng `0` khi `FREEMIUM_ENABLED` tắt.
+- Client coi `limits != null` là đang bị giới hạn free. Thiếu `plan` (backend cũ) thì coi như không giới hạn.
+- `newWordsUsed` đếm mọi Meaning đã có tiến trình, gồm custom word và từ đánh dấu "Tôi biết từ này".
+
+### 16.2 Giới hạn
+
+- **Scope:** `PUT /v1/me/scope` với số topic lớn hơn `limits.maxTopics` trả `403 FREE_TOPIC_LIMIT` (`details.maxTopics`). Scope đã lưu lúc còn Premium được giữ nguyên khi hết hạn; giới hạn áp dụng từ lần lưu sau.
+- **Từ mới:** daily chỉ phát hành tối đa `maxNewWords − newWordsUsed` từ mới. Khi đó là giới hạn chặt nhất, `newWords.withheldReason` là `free_limit` (§13.3: client không tự plan tiếp). `GET /v1/me/learn-home` có `reviewLoad.newWordReason = "free_limit"` và `freeAllowance: {used, max, remaining}` (null khi không bị giới hạn). Ôn tập không bị giới hạn.
+- **Phát âm:** `POST /sessions/{id}/recording-assess` trả `403 PREMIUM_REQUIRED` cho user free. Client chấm trên máy (event `transcribed`) hoặc gửi `unavailable`. Plan vẫn phát hành task `recording` như cũ.
+
+### 16.3 App Store
+
+| Endpoint | Body | Response |
+|---|---|---|
+| `POST /v1/me/subscriptions/appstore` | `{signedTransaction}` (`Transaction.jwsRepresentation`) | `200 plan` |
+| `POST /v1/appstore/notifications` | `{signedPayload}` (App Store Server Notifications V2, public) | `200 {applied}` |
+
+- App gắn `appAccountToken = user id` (UUID trong `GET /me`) khi mua.
+- Gửi mỗi giao dịch xác minh được từ `Transaction.updates`, `Transaction.currentEntitlements` và sau khi mua. Chỉ `finish()` giao dịch sau khi server trả 200.
+- Lỗi: `422 APPSTORE_TRANSACTION_INVALID` (chữ ký, bundle, product sai), `409 APPSTORE_TRANSACTION_OWNED` (gói đang thuộc tài khoản khác). Với 409, app hiện thông báo và vẫn `finish()`.
+- Notification URL (production và sandbox) trỏ về `/v1/appstore/notifications`. Gia hạn, grace period, hết hạn, hoàn tiền và thu hồi đều cập nhật `plan`.
+
+### 16.4 Redeem code
+
+`POST /v1/me/redeem {code}` → `200 plan`. Chỉ khi `features.redeemEnabled`; tắt thì `404`. Code không phân biệt hoa thường, bỏ khoảng trắng.
+
+| Lỗi | Khi |
+|---|---|
+| `422 REDEEM_INVALID` | Không có code, hoặc đã bị vô hiệu hoá |
+| `422 REDEEM_EXPIRED` | Code đã hết hạn dùng |
+| `422 REDEEM_EXHAUSTED` | Hết lượt |
+| `409 REDEEM_ALREADY_USED` | Tài khoản này đã dùng code |
+
+Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays, maxUses?, expiresAt?, note?}`, `POST /admin/redeem-codes/{code}/disable`.
