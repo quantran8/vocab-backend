@@ -3,7 +3,7 @@ import { and, count, desc, eq, isNull, lte, max, or, sql } from 'drizzle-orm';
 import { ENTITLEMENT_SOURCE, ENTITLEMENT_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { DB, Db, Executor } from '../../../db/db';
-import { appStoreNotifications, appUsers, redeemCodeUses, redeemCodes, userEntitlements, userMeaningProgress } from '../../../db/schema';
+import { appStoreNotifications, appUsers, redeemCodeUses, redeemCodes, userEntitlements, userLearningScope, userMeaningProgress } from '../../../db/schema';
 import type { EntitlementUpdate } from '../domain/appstore';
 import type { EntitlementRow } from '../domain/entitlement';
 import { redeemExpiry } from '../domain/entitlement';
@@ -37,6 +37,11 @@ export class EntitlementRepository {
       })
       .from(userEntitlements)
       .where(eq(userEntitlements.userId, userId));
+  }
+
+  async scopeCollectionId(userId: string): Promise<string | null> {
+    const [row] = await this.db.select({ collectionId: userLearningScope.collectionId }).from(userLearningScope).where(eq(userLearningScope.userId, userId));
+    return row?.collectionId ?? null;
   }
 
   /** Every Meaning the learner has started, custom words and "I know this" included. */

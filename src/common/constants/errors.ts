@@ -38,6 +38,7 @@ export const ERROR = {
   REVIEW_PAUSE_ACTIVE_COLLECTION: { status: 422, retryable: false },
   RANKING_DISABLED: { status: 403, retryable: false },
   FREE_TOPIC_LIMIT: { status: 403, retryable: false },
+  FREE_COLLECTION_LOCKED: { status: 403, retryable: false },
   PREMIUM_REQUIRED: { status: 403, retryable: false },
   REDEEM_INVALID: { status: 422, retryable: false },
   REDEEM_EXPIRED: { status: 422, retryable: false },

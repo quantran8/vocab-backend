@@ -1186,7 +1186,7 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 
 ### 16.2 Giới hạn
 
-- **Scope:** `PUT /v1/me/scope` với số topic lớn hơn `limits.maxTopics` trả `403 FREE_TOPIC_LIMIT` (`details.maxTopics`). Scope đã lưu lúc còn Premium được giữ nguyên khi hết hạn; giới hạn áp dụng từ lần lưu sau.
+- **Scope:** user free chỉ giữ collection chọn đầu tiên: `PUT /v1/me/scope` với collection khác trả `403 FREE_COLLECTION_LOCKED` (`details.collectionId` là collection đang giữ); vẫn đổi topic trong collection đó được. Với số topic lớn hơn `limits.maxTopics` trả `403 FREE_TOPIC_LIMIT` (`details.maxTopics`). Scope đã lưu lúc còn Premium được giữ nguyên khi hết hạn; giới hạn áp dụng từ lần lưu sau.
 - **Từ mới:** daily chỉ phát hành tối đa `maxNewWords − newWordsUsed` từ mới. Khi đó là giới hạn chặt nhất, `newWords.withheldReason` là `free_limit` (§13.3: client không tự plan tiếp). `GET /v1/me/learn-home` có `reviewLoad.newWordReason = "free_limit"` và `freeAllowance: {used, max, remaining}` (null khi không bị giới hạn). Ôn tập không bị giới hạn.
 - **Phát âm:** `POST /sessions/{id}/recording-assess` trả `403 PREMIUM_REQUIRED` cho user free. Client chấm trên máy (event `transcribed`) hoặc gửi `unavailable`. Plan vẫn phát hành task `recording` như cũ.
 

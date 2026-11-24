@@ -72,6 +72,18 @@ describe('freemium', () => {
     await api('put', '/v1/me/scope').send({ collectionId: a.collectionId, topicIds: topicIds.slice(0, 2) }).expect(200);
   });
 
+  it('keeps a free learner in the first Collection chosen', async () => {
+    const [a] = await onboard();
+    const b = await h.seed('topic-b', words(2, 10));
+    await api('put', '/v1/me/scope').send({ collectionId: a.collectionId, topicIds: [a.topicId] }).expect(200);
+    const res = await api('put', '/v1/me/scope').send({ collectionId: b.collectionId, topicIds: [b.topicId] }).expect(403);
+    expect(res.body).toMatchObject({ code: 'FREE_COLLECTION_LOCKED', details: { collectionId: a.collectionId } });
+    await api('put', '/v1/me/scope').send({ collectionId: a.collectionId, topicIds: [a.topicId] }).expect(200);
+
+    await api('post', '/v1/me/subscriptions/appstore').send({ signedTransaction: jws(transaction()) }).expect(200);
+    await api('put', '/v1/me/scope').send({ collectionId: b.collectionId, topicIds: [b.topicId] }).expect(200);
+  });
+
   it('stops new words at the free allowance and says why', async () => {
     const [a] = await onboard();
     await api('put', '/v1/me/scope').send({ collectionId: a.collectionId, topicIds: [a.topicId] }).expect(200);
