@@ -246,6 +246,8 @@ export async function createHarness(): Promise<Harness> {
     ELEVENLABS_VOICE_OPTIONS: 'alt-voice:Alt voice',
     ENABLE_CRON: 'false',
     RANKING_ENABLED: 'true',
+    // Only freemium.test.ts runs with the free plan on.
+    FREEMIUM_ENABLED: process.env.FREEMIUM_ENABLED ?? 'false',
     CORS_ORIGINS: CORS_TEST_ORIGIN,
   });
 

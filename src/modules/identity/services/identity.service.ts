@@ -42,7 +42,7 @@ export class IdentityService {
 
   async setScope(userId: string, { collectionId, topicIds }: z.infer<typeof scopeSchema>) {
     const ids = [...new Set(topicIds)];
-    await this.entitlements.assertTopicCount(userId, ids.length);
+    await this.entitlements.assertScope(userId, collectionId, ids.length);
     if ((await this.repository.countPublishedTopics(collectionId, ids)) !== ids.length) {
       throw new ApiError('VALIDATION_FAILED', 'Topics must be published and belong to the Collection');
     }

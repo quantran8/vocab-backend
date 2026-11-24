@@ -32,9 +32,12 @@ export class EntitlementService {
     };
   }
 
-  async assertTopicCount(userId: string, topicCount: number) {
-    const { limits } = await this.plan(userId);
-    if (limits && topicCount > limits.maxTopics) {
+  /** The free plan keeps the first Collection chosen and caps its topics. */
+  async assertScope(userId: string, collectionId: string, topicCount: number) {
+    const [{ limits }, current] = await Promise.all([this.plan(userId), this.repository.scopeCollectionId(userId)]);
+    if (!limits) return;
+    if (current && current !== collectionId) throw new ApiError('FREE_COLLECTION_LOCKED', 'The free plan keeps the first Collection chosen', { collectionId: current });
+    if (topicCount > limits.maxTopics) {
       throw new ApiError('FREE_TOPIC_LIMIT', `The free plan allows ${limits.maxTopics} topics`, { maxTopics: limits.maxTopics });
     }
   }
