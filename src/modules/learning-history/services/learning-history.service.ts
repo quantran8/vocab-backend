@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
 import { HistoryPeriod } from '../../../common/constants/domain';
-import { HistoryRow, LearningHistoryRepository } from '../repositories/learning-history.repository';
+import { HistoryRow, JourneyTopicFilter, LearningHistoryRepository } from '../repositories/learning-history.repository';
 
 /** The learning journey: history only, built from committed sessions. See docs/FRONTEND_FLOW.md §17. */
 export function learningHistoryView(row: HistoryRow, period: HistoryPeriod, now: Date) {
@@ -37,6 +37,8 @@ export function learningHistoryView(row: HistoryRow, period: HistoryPeriod, now:
       completedSessions: row.completedSessions,
       reviewedMeanings: row.reviewedMeanings,
       points: row.points,
+      /** The period's new words by the Topic each was first learned in; counts add up to `newWords`. */
+      newWordsByTopic: row.newWordsByTopic,
     },
   };
 }
@@ -50,7 +52,7 @@ export class LearningHistoryService {
     return learningHistoryView(await this.repository.history(userId, period, now), period, now);
   }
 
-  words(userId: string, period: HistoryPeriod, limit: number, offset: number) {
-    return this.repository.words(userId, period, this.clock.now(), limit, offset);
+  words(userId: string, period: HistoryPeriod, limit: number, offset: number, topic: JourneyTopicFilter) {
+    return this.repository.words(userId, period, this.clock.now(), limit, offset, topic);
   }
 }

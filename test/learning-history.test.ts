@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { SESSION_MODE, SESSION_STATUS } from '../src/common/constants/domain';
 import { newId } from '../src/common/ids';
-import { appUsers, learningSessions, meanings, userMeaningOverrides } from '../src/db/schema';
+import { appUsers, learningSessions, meanings, topicLocalizations, topics, userMeaningOverrides, userMeaningProgress } from '../src/db/schema';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 import { answers } from './support/driver';
 
@@ -160,6 +160,88 @@ describe('learning journey history', () => {
     expect((await api('get', '/v1/me/learning-journey/words?period=week').expect(200)).body).toEqual({ total: 0, items: [] });
     expect((await api('get', '/v1/me/learning-journey/words?period=all').expect(200)).body.total).toBe(1);
     await api('get', '/v1/me/learning-journey/words?limit=51').expect(400);
+  });
+
+  describe('new words by topic', () => {
+    type Group = { topicId: string | null; title: string | null; iosIcon: string | null; color: string | null; count: number; recentLemmas: string[]; finishedInPeriod: boolean };
+    const byTopic = async (period?: string): Promise<{ newWords: number; newWordsByTopic: Group[] }> => (await journey(period)).period;
+    const wordList = async (query: string) => (await api('get', `/v1/me/learning-journey/words?period=week${query}`).expect(200)).body;
+    const progressOf = (meaningId: string) => eq(userMeaningProgress.meaningId, meaningId);
+    const setProgress = (meaningIds: string[], values: Partial<typeof userMeaningProgress.$inferInsert>) =>
+      h.db.update(userMeaningProgress).set(values).where(inArray(userMeaningProgress.meaningId, meaningIds));
+
+    it('puts each word in one topic, names the topic in the UI locale and keeps the null group last', async () => {
+      const a = await onboard(4);
+      const b = await h.seed('topic-b', [seedWord(10), seedWord(11)]);
+      await learn(4);
+      await h.db.update(topics).set({ iosIcon: 'leaf', color: '#2F9BF4' }).where(eq(topics.id, a.topicId));
+      await h.db.insert(topicLocalizations).values({ topicId: a.topicId, locale: 'vi-VN', title: 'Chủ đề A' });
+      // Word 0 gets a second Meaning learned earlier via topic-b: its first learning decides the topic.
+      const [first] = await h.db.select({ typeId: meanings.typeId }).from(meanings).where(eq(meanings.id, a.meaningIds[0]));
+      await h.db.update(meanings).set({ typeId: first.typeId }).where(eq(meanings.id, a.meaningIds[1]));
+      const [learnedAt] = await h.db.select({ at: userMeaningProgress.learnedAt }).from(userMeaningProgress).where(progressOf(a.meaningIds[0]));
+      await setProgress([a.meaningIds[1]], { learnedAt: new Date(learnedAt.at.getTime() - 60_000), learnedViaTopicId: b.topicId });
+      await setProgress([a.meaningIds[2]], { learnedViaTopicId: null });
+
+      const period = await byTopic();
+      expect(period.newWords).toBe(3);
+      expect(period.newWordsByTopic.reduce((sum, g) => sum + g.count, 0)).toBe(period.newWords);
+      expect(period.newWordsByTopic).toEqual([
+        { topicId: a.topicId, title: 'Chủ đề A', iosIcon: 'leaf', color: '#2F9BF4', count: 1, recentLemmas: [seedWord(3).lemma], finishedInPeriod: true },
+        { topicId: b.topicId, title: 'topic-b', iosIcon: null, color: null, count: 1, recentLemmas: [seedWord(0).lemma], finishedInPeriod: false },
+        { topicId: null, title: null, iosIcon: null, color: null, count: 1, recentLemmas: [seedWord(2).lemma], finishedInPeriod: false },
+      ]);
+    });
+
+    it('orders by count, names the newest three, and filters the word list by topic', async () => {
+      const a = await onboard(5);
+      await learn(2);
+      h.clock.advance(1);
+      await learn(2);
+      h.clock.advance(1);
+      await learn(1);
+      await setProgress([a.meaningIds[0]], { learnedViaTopicId: null });
+
+      const [group, none] = (await byTopic()).newWordsByTopic;
+      expect(group).toMatchObject({ topicId: a.topicId, count: 4, finishedInPeriod: true });
+      const listed = await wordList(`&topicId=${a.topicId}`);
+      expect(listed.total).toBe(4);
+      expect(group.recentLemmas).toEqual(listed.items.slice(0, 3).map((w: { lemma: string }) => w.lemma));
+      expect(none).toMatchObject({ topicId: null, count: 1 });
+      const unassigned = await wordList('&topicId=none');
+      expect(unassigned.total).toBe(1);
+      expect(unassigned.items.map((w: { wordId: string }) => w.wordId)).toEqual([a.wordIds[0]]);
+      expect(listed.items.map((w: { wordId: string }) => w.wordId)).not.toContain(a.wordIds[0]);
+      expect((await wordList('')).total).toBe(5);
+      expect((await wordList(`&topicId=${a.collectionId}`)).total).toBe(0);
+      await api('get', '/v1/me/learning-journey/words?topicId=abc').expect(400);
+    });
+
+    it('is not finished in the period when the topic is incomplete or its last learning was earlier', async () => {
+      const a = await onboard(3);
+      const b = await h.seed('topic-b', [seedWord(10), seedWord(11)]);
+      await learn(2);
+      expect((await byTopic()).newWordsByTopic).toEqual([expect.objectContaining({ topicId: a.topicId, count: 2, finishedInPeriod: false })]);
+
+      // topic-b was finished a week earlier; this week's word that came via topic-b does not finish it again.
+      const [row] = await h.db.select().from(userMeaningProgress).where(progressOf(a.meaningIds[0]));
+      const earlier = new Date(row.learnedAt.getTime() - 7 * 24 * 3600_000);
+      await h.db.insert(userMeaningProgress).values(b.meaningIds.map((meaningId) => ({ ...row, meaningId, learnedAt: earlier, learnedViaTopicId: b.topicId })));
+      await setProgress([a.meaningIds[0]], { learnedViaTopicId: b.topicId });
+      const groups = (await byTopic()).newWordsByTopic;
+      expect(groups).toEqual([
+        expect.objectContaining({ topicId: a.topicId, count: 1, finishedInPeriod: false }),
+        expect.objectContaining({ topicId: b.topicId, count: 1, finishedInPeriod: false }),
+      ]);
+      expect((await byTopic('all')).newWordsByTopic).toEqual([
+        expect.objectContaining({ topicId: b.topicId, count: 3, finishedInPeriod: true }),
+        expect.objectContaining({ topicId: a.topicId, count: 1, finishedInPeriod: false }),
+      ]);
+    });
+
+    it('is empty with no new words in the period', async () => {
+      expect((await byTopic()).newWordsByTopic).toEqual([]);
+    });
   });
 
   it('rejects an unknown period', async () => {

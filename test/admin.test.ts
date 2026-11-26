@@ -374,6 +374,9 @@ describe('admin API', () => {
       expect((await api('patch', `/admin/topics/${topicId}`).send({ iosIcon: 'globe' }).expect(200)).body.iosIcon).toBe('globe');
       expect((await api('patch', `/admin/collections/${id}`).send({ color: null }).expect(200)).body.color).toBeNull();
       expect((await api('get', `/admin/topics/${topicId}`).expect(200)).body.iosIcon).toBe('globe');
+      expect((await api('patch', `/admin/topics/${topicId}`).send({ color: '#2f9bf4' }).expect(200)).body.color).toBe('#2F9BF4');
+      await api('patch', `/admin/topics/${topicId}`).send({ color: '#2F9BF' }).expect(400);
+      expect((await api('get', `/admin/collections/${id}`).expect(200)).body.topics[0].color).toBe('#2F9BF4');
     });
 
     it('deletes only drafts, and only when learners do not use them', async () => {

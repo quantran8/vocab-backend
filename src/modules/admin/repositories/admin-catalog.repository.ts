@@ -12,7 +12,7 @@ const SLUG_EXISTS = 'This slug already exists';
 const isCatalogCollection = ne(collections.slug, PERSONAL_COLLECTION_SLUG);
 const isCatalogTopic = (id: string) => and(eq(topics.id, id), isNull(topics.ownerUserId));
 
-const topicColumns = { id: topics.id, collectionId: topics.collectionId, slug: topics.slug, title: topics.title, status: topics.status, iosIcon: topics.iosIcon };
+const topicColumns = { id: topics.id, collectionId: topics.collectionId, slug: topics.slug, title: topics.title, status: topics.status, iosIcon: topics.iosIcon, color: topics.color };
 
 @Injectable()
 export class AdminCatalogRepository {
@@ -38,7 +38,7 @@ export class AdminCatalogRepository {
         COALESCE((SELECT jsonb_agg(jsonb_build_object('locale', l.locale, 'title', l.title, 'description', l.description) ORDER BY l.locale)
                   FROM collection_localizations l WHERE l.collection_id = c.id), '[]') AS localizations,
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
-            'id', t.id, 'slug', t.slug, 'title', t.title, 'status', t.status, 'iosIcon', t.ios_icon,
+            'id', t.id, 'slug', t.slug, 'title', t.title, 'status', t.status, 'iosIcon', t.ios_icon, 'color', t.color,
             'meaningCount', (SELECT count(*)::int FROM topic_meanings tm WHERE tm.topic_id = t.id),
             'locales', COALESCE((SELECT jsonb_agg(tl.locale ORDER BY tl.locale) FROM topic_localizations tl WHERE tl.topic_id = t.id), '[]')) ORDER BY t.slug)
           FROM topics t WHERE t.collection_id = c.id AND t.owner_user_id IS NULL), '[]') AS topics
@@ -96,7 +96,7 @@ export class AdminCatalogRepository {
 
   async findTopic(id: string) {
     const { rows: [topic] } = await this.db.execute(sql`
-      SELECT t.id, t.collection_id AS "collectionId", t.slug, t.title, t.status, t.ios_icon AS "iosIcon",
+      SELECT t.id, t.collection_id AS "collectionId", t.slug, t.title, t.status, t.ios_icon AS "iosIcon", t.color,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('locale', l.locale, 'title', l.title, 'description', l.description) ORDER BY l.locale)
                   FROM topic_localizations l WHERE l.topic_id = t.id), '[]') AS localizations
       FROM topics t WHERE t.id = ${id}::uuid AND t.owner_user_id IS NULL`);
