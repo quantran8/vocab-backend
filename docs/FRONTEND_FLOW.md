@@ -176,6 +176,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   - `needsPractice`: nghĩa đang yếu theo trí nhớ, cùng định nghĩa với Weak (§5). Tắt ngay sau một lần trả lời đúng, không chờ 12h.
   - `skills` luôn là `null` trong một bản phát hành rồi bỏ; không dùng nữa.
   - `needsPractice` ở cấp Word. Không còn `fullyVerified` và trạng thái `verified`.
+  - `edited`: `true` khi meaning đang hiện bản user tự sửa (§11.5). Không hiện nút báo lỗi trên meaning đó (§18).
 
 ## 5. Plan một session
 
