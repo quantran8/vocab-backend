@@ -10,25 +10,28 @@ export type HistoryRow = {
   timeZone: string; weeklySessionGoal: number; today: string; firstDay: string | null;
   weekStart: string; weekEnd: string; periodStart: string; periodEnd: string; bucket: HistoryBucket;
   wordsAtStart: number; wordsAtEnd: number; activeDays: number; completedSessions: number; reviewedMeanings: number;
-  days: HistoryDayRow[]; points: HistoryPointRow[];
+  days: HistoryDayRow[]; points: HistoryPointRow[]; recentWords: { wordId: string; lemma: string }[];
 };
+
+export type JourneyWordRow = { wordId: string; lemma: string; meaningTexts: string[]; learnedOn: string };
+
+/** Home names this many of the week's newest words. */
+const RECENT_WORDS = 3;
 
 const { monthlyBucketsUpToMonths, quarterlyBucketsUpToMonths } = POLICY.learningHistory;
 const iso = (column: ReturnType<typeof sql>) => sql`to_char(${column}, 'YYYY-MM-DD')`;
 
-@Injectable()
-export class LearningHistoryRepository {
-  constructor(@Inject(DB) private readonly db: Db) {}
-
-  // One statement for the whole screen. Dates are the learner's local calendar days (user_settings.time_zone).
-  async history(userId: string, period: HistoryPeriod, now: Date) {
-    const { rows: [row] } = await this.db.execute<HistoryRow>(sql`
-      WITH cfg AS (
+/**
+ * The learner's zone and goal (`cfg`), each Word's first learning (`firsts`), committed sessions (`sess`) and the
+ * period's local-day bounds (`span`). Shared so every journey figure counts the same way.
+ */
+const periodCtes = (userId: string, period: HistoryPeriod, now: Date) => sql`
+      cfg AS (
         SELECT time_zone AS tz, weekly_session_goal::int AS goal, (${now}::timestamptz AT TIME ZONE time_zone)::date AS today
         FROM user_settings WHERE user_id = ${userId}::uuid
       ), firsts AS (
         -- A Word counts once, when its first Meaning was learned; learned_at is never rewritten.
-        SELECT (min(p.learned_at) AT TIME ZONE cfg.tz)::date AS day
+        SELECT wt.word_id, min(p.learned_at) AS at, (min(p.learned_at) AT TIME ZONE cfg.tz)::date AS day
         FROM cfg, user_meaning_progress p JOIN meanings m ON m.id = p.meaning_id JOIN word_types wt ON wt.id = m.type_id
         WHERE p.user_id = ${userId}::uuid AND p.learned_at <= ${now}::timestamptz
         GROUP BY wt.word_id, cfg.tz
@@ -54,7 +57,16 @@ export class LearningHistoryRepository {
             WHEN ${HISTORY_PERIOD.MONTH} THEN (date_trunc('month', o.today) + interval '1 month')::date
             ELSE o.today + 1 END AS period_end
         FROM origin o
-      ), grain AS (
+      )`;
+
+@Injectable()
+export class LearningHistoryRepository {
+  constructor(@Inject(DB) private readonly db: Db) {}
+
+  // One statement for the whole screen. Dates are the learner's local calendar days (user_settings.time_zone).
+  async history(userId: string, period: HistoryPeriod, now: Date) {
+    const { rows: [row] } = await this.db.execute<HistoryRow>(sql`
+      WITH ${periodCtes(userId, period, now)}, grain AS (
         SELECT span.*, CASE span.unit
           WHEN ${HISTORY_BUCKET.DAY} THEN interval '1 day' WHEN ${HISTORY_BUCKET.MONTH} THEN interval '1 month'
           WHEN ${HISTORY_BUCKET.QUARTER} THEN interval '3 months' ELSE interval '1 year' END AS step
@@ -76,6 +88,9 @@ export class LearningHistoryRepository {
          WHERE mo.user_id = ${userId}::uuid AND sess.day >= g.period_start AND sess.day < g.period_end
            AND NOT EXISTS (SELECT 1 FROM user_meaning_progress p
              WHERE p.user_id = mo.user_id AND p.meaning_id = mo.meaning_id AND p.learned_session_id = mo.session_id)) AS "reviewedMeanings",
+        (SELECT COALESCE(json_agg(json_build_object('wordId', r.word_id, 'lemma', w.lemma) ORDER BY r.at DESC, r.word_id), '[]'::json)
+         FROM (SELECT word_id, at FROM firsts WHERE day >= g.week_start ORDER BY at DESC, word_id LIMIT ${RECENT_WORDS}::int) r
+         JOIN words w ON w.id = r.word_id) AS "recentWords",
         (SELECT json_agg(json_build_object('date', ${iso(sql`d`)},
             'sessions', (SELECT count(*) FROM sess WHERE sess.day = d::date),
             'newWords', (SELECT count(*) FROM firsts WHERE firsts.day = d::date)) ORDER BY d)
@@ -85,5 +100,43 @@ export class LearningHistoryRepository {
          FROM buckets b) AS points
       FROM grain g`);
     return row;
+  }
+
+  /**
+   * Words first learned in the period, newest first, with the meanings of each learned in that period (as the
+   * learner reads them, their own edit included). One statement; `total` counts the whole period.
+   */
+  async words(userId: string, period: HistoryPeriod, now: Date, limit: number, offset: number) {
+    const { rows: [row] } = await this.db.execute<{ total: number; items: JourneyWordRow[] | null }>(sql`
+      WITH ${periodCtes(userId, period, now)}, picked AS (
+        SELECT f.word_id, f.at, f.day FROM firsts f, span
+        WHERE f.day >= span.period_start AND f.day < span.period_end
+        ORDER BY f.at DESC, f.word_id
+        LIMIT ${limit}::int OFFSET ${offset}::int
+      )
+      SELECT
+        (SELECT count(*)::int FROM firsts f, span WHERE f.day >= span.period_start AND f.day < span.period_end) AS total,
+        (SELECT json_agg(json_build_object(
+            'wordId', pk.word_id, 'lemma', w.lemma, 'learnedOn', ${iso(sql`pk.day`)},
+            'meaningTexts', (
+              SELECT COALESCE(json_agg(x.text ORDER BY x.at, x.id) FILTER (WHERE x.text IS NOT NULL), '[]'::json)
+              FROM (
+                SELECT p.meaning_id AS id, p.learned_at AS at,
+                  COALESCE(o.content ->> 'meaningText', mp.snapshot ->> 'meaningText') AS text
+                FROM user_meaning_progress p
+                JOIN meanings m ON m.id = p.meaning_id
+                JOIN word_types wt ON wt.id = m.type_id AND wt.word_id = pk.word_id
+                JOIN user_settings us ON us.user_id = p.user_id
+                LEFT JOIN active_meaning_publications a ON a.meaning_id = p.meaning_id AND a.locale = us.explanation_locale
+                LEFT JOIN meaning_publications mp ON mp.id = a.publication_id
+                LEFT JOIN user_meaning_overrides o ON o.user_id = p.user_id AND o.meaning_id = p.meaning_id AND o.locale = us.explanation_locale
+                WHERE p.user_id = ${userId}::uuid AND p.learned_at <= ${now}::timestamptz
+                  AND (p.learned_at AT TIME ZONE span.tz)::date >= span.period_start
+                  AND (p.learned_at AT TIME ZONE span.tz)::date < span.period_end
+              ) x)
+          ) ORDER BY pk.at DESC, pk.word_id)
+         FROM picked pk JOIN words w ON w.id = pk.word_id) AS items
+      FROM span`);
+    return { total: row?.total ?? 0, items: row?.items ?? [] };
   }
 }

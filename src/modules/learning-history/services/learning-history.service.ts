@@ -21,6 +21,8 @@ export function learningHistoryView(row: HistoryRow, period: HistoryPeriod, now:
       completedSessions: past.reduce((sum, d) => sum + d.completedSessions!, 0),
       activeDays: past.filter((d) => d.completed).length,
       weeklySessionGoal: row.weeklySessionGoal,
+      /** The week's newest words (at most three), for Home's line under the count. */
+      recentWords: row.recentWords,
       days,
     },
     period: {
@@ -46,5 +48,9 @@ export class LearningHistoryService {
   async history(userId: string, period: HistoryPeriod) {
     const now = this.clock.now();
     return learningHistoryView(await this.repository.history(userId, period, now), period, now);
+  }
+
+  words(userId: string, period: HistoryPeriod, limit: number, offset: number) {
+    return this.repository.words(userId, period, this.clock.now(), limit, offset);
   }
 }

@@ -6,6 +6,10 @@ import { ZodPipe } from '../../../common/http/zod.pipe';
 import { LearningHistoryService } from '../services/learning-history.service';
 
 const querySchema = z.object({ period: z.enum(HISTORY_PERIODS).default(HISTORY_PERIOD.WEEK) });
+const wordsSchema = querySchema.extend({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 @Controller('v1/me/learning-journey')
 export class LearningHistoryController {
@@ -14,5 +18,10 @@ export class LearningHistoryController {
   @Get()
   get(@CurrentUser() user: AuthUser, @Query(new ZodPipe(querySchema)) query: z.infer<typeof querySchema>) {
     return this.history.history(user.id, query.period);
+  }
+
+  @Get('words')
+  words(@CurrentUser() user: AuthUser, @Query(new ZodPipe(wordsSchema)) query: z.infer<typeof wordsSchema>) {
+    return this.history.words(user.id, query.period, query.limit, query.offset);
   }
 }
