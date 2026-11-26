@@ -53,6 +53,9 @@ export const ERROR = {
   AVATAR_INVALID: { status: 422, retryable: false },
   USERNAME_CHANGE_TOO_SOON: { status: 429, retryable: false },
   REPORT_LIMIT_REACHED: { status: 429, retryable: false },
+  REPORT_CONTEXT_UNAVAILABLE: { status: 404, retryable: false },
+  REPORT_IDEMPOTENCY_CONFLICT: { status: 409, retryable: false },
+  REPORT_TARGET_OVERRIDDEN: { status: 422, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: true },
 } as const;
 export type ErrorCode = keyof typeof ERROR;

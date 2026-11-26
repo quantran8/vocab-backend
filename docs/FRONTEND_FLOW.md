@@ -1214,3 +1214,70 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 | `409 REDEEM_ALREADY_USED` | Tài khoản này đã dùng code |
 
 Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays, maxUses?, expiresAt?, note?}`, `POST /admin/redeem-codes/{code}/disable`.
+
+## 17. Hành trình học tập (lịch sử)
+
+`GET /v1/me/learning-journey?period=week|month|all` (mặc định `week`). Home gọi `week`; màn chi tiết mặc định `month`. Chỉ đọc lịch sử, không ảnh hưởng plan hay commit. Không liên quan `GET /v1/me/journey` (deprecated, §4).
+
+```jsonc
+{
+  "asOf": "2026-11-26T04:00:00.000Z",
+  "timezone": "Asia/Ho_Chi_Minh",          // = user_settings.timeZone
+  "historyAvailableFrom": "2026-08-01",    // ngày local đầu tiên có học; null khi chưa học bao giờ
+  "historyComplete": true,                 // luôn true: lịch sử có đủ từ ngày đầu
+  "week": {                                // luôn là tuần hiện tại, T2–CN, không theo period
+    "startDate": "2026-11-23", "endDateExclusive": "2026-11-30",
+    "newWords": 24, "completedSessions": 5, "activeDays": 4,
+    "weeklySessionGoal": 7,
+    "days": [
+      { "date": "2026-11-23", "completed": true, "completedSessions": 2, "newWords": 5 },
+      // ... ngày tương lai: completed/completedSessions/newWords đều null
+    ]
+  },
+  "period": {
+    "kind": "month", "startDate": "2026-11-01", "endDateExclusive": "2026-12-01",
+    "bucketGranularity": "day",            // day | month | quarter | year
+    "wordsAtStart": 120, "wordsAtEnd": 248, "newWords": 128,
+    "activeDays": 18, "completedSessions": 26, "reviewedMeanings": 312,
+    "points": [ { "date": "2026-11-01", "cumulativeWords": 124 } /* ... đến hôm nay */ ]
+  }
+}
+```
+
+- **Mục tiêu tuần tính theo buổi:** hiển thị `week.completedSessions / weeklySessionGoal` (cùng setting với lộ trình checkpoint). Vượt mục tiêu thì hiện số thật. `activeDays` và `days[].completed` dùng cho dải ngày.
+- **Ngày** là ngày lịch theo `timeZone` trong settings, không theo request. Client cập nhật `PUT /v1/me/settings {timeZone}` khi múi giờ máy đổi rồi tải lại. Đổi múi giờ có thể dời ngày của các buổi cũ, tổng không đổi.
+- **Từ mới / `cumulativeWords`:** số Word (không phải Meaning) học lần đầu. Hai nghĩa của một từ tính một. Không giảm khi đổi scope, tạm dừng ôn hay quên; chỉ xoá tài khoản mới xoá.
+- **`completedSessions`:** session commit thành công, mọi mode trừ `checkpoint_challenge`. Match Madness và placement không phải session. Daily tách phần ôn và phần từ mới thành hai session nên tính hai buổi.
+- **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
+- **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
+- Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.
+
+## 18. Báo lỗi nội dung
+
+`POST /v1/me/content-reports`. Quy tắc đầy đủ: `docs/content-reports.md`. Báo cáo không ảnh hưởng task, attempt, commit, SRS hay LP; gửi trước hoặc sau commit đều được.
+
+```jsonc
+{
+  "clientReportId": "988269d9-0505-4a77-bf2d-4fc4478e033a", // UUID tạo một lần cho mỗi lần gửi, giữ nguyên khi retry
+  "source": "practice_task",                                // learn_card | practice_task | word_detail
+  "reason": "answer_should_be_accepted",
+  "context": {
+    "sessionId": "...", "taskId": "...",                     // learn_card: sessionId + learnStepId; word_detail: meaningId
+    "attemptExcerpt": { "submittedText": "resilient" }      // chỉ practice_task; submittedText | optionId | tileIds | receiptId
+  },
+  "note": "Tôi nghĩ câu này cũng đúng"                       // tuỳ chọn, ≤ 500 ký tự; bắt buộc với other
+}
+```
+
+- Trả `{reportId, duplicate, status: "received"}`. `201`: báo cáo mới. `200`: retry của cùng `clientReportId`, hoặc user đã có báo cáo đang mở cho đúng nội dung và lý do này (`duplicate: true`). Cả hai đều hiện toast thành công.
+- Không gửi nội dung, wordId, revision hay locale: server tự lấy. `learnStepId` và `taskId` là `id` của step/task trong plan.
+- Lý do theo nguồn: `incorrect_question` và `answer_should_be_accepted` chỉ cho `practice_task`, và `answer_should_be_accepted` cần `attemptExcerpt` (chỉ hiện sau khi user đã nộp). `incorrect_meaning`, `incorrect_definition`, `incorrect_example`, `audio_issue`, `other` dùng cho mọi nguồn.
+- Custom word dùng `word_detail` với `meaningId` của nó. Không có nút báo lỗi trên meaning user đã tự sửa: server trả `422 REPORT_TARGET_OVERRIDDEN`.
+- Không có nút trong Checkpoint challenge, Match Madness, placement.
+- Lỗi:
+  - `400 VALIDATION_FAILED`: sai lý do hoặc thiếu note; giữ nháp.
+  - `404 REPORT_CONTEXT_UNAVAILABLE`: không tìm thấy nội dung; đóng sheet.
+  - `409 REPORT_IDEMPOTENCY_CONFLICT`: cùng `clientReportId` nhưng nội dung khác; không retry, tạo id mới nếu user sửa.
+  - `422 REPORT_TARGET_OVERRIDDEN`.
+  - `429 REPORT_LIMIT_REACHED`: quá 20 báo cáo mới trong 24 giờ.
+  - `5xx`/mạng: retry với đúng body và `clientReportId` cũ.
