@@ -108,7 +108,7 @@ export class ContentReportRepository {
     return row;
   }
 
-  // One statement per page; reporters counts distinct learners in the open group, never retries.
+  // One statement per page, total included; reporterCount counts distinct learners in the open group, never retries.
   async list(q: ListReports) {
     const filters = [
       sql`r.status = ${q.status}`,
@@ -124,12 +124,14 @@ export class ContentReportRepository {
          WHERE m.id = (r.meaning_ids ->> 0)::uuid) AS lemma,
         (SELECT count(DISTINCT o.reporter_id)::int FROM content_reports o
          WHERE o.target_key = r.target_key AND o.reason = r.reason AND o.explanation_locale = r.explanation_locale
-           AND (o.status IN ${OPEN} OR o.id = r.id)) AS "reporterCount"
+           AND (o.status IN ${OPEN} OR o.id = r.id)) AS "reporterCount",
+        count(*) OVER ()::int AS total
       FROM content_reports r
       WHERE ${sql.join(filters, sql` AND `)}
       ORDER BY ${order}
       LIMIT ${q.perPage}::int OFFSET ${(q.page - 1) * q.perPage}::int`);
-    return rows.map((r) => ({ ...r, createdAt: toDate(r.createdAt) }));
+    const total = (rows[0]?.total as number | undefined) ?? 0;
+    return { total, items: rows.map(({ total: _, ...r }) => ({ ...r, createdAt: toDate(r.createdAt) })) };
   }
 
   /** The report with the original snapshot, the current revision of its Meanings and its history. */
