@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { SESSION_MODE, SESSION_STATUS } from '../src/common/constants/domain';
 import { newId } from '../src/common/ids';
-import { learningSessions, meanings } from '../src/db/schema';
+import { appUsers, learningSessions, meanings, userMeaningOverrides } from '../src/db/schema';
 import { CAPS, createHarness, Harness, seedWord } from './support/app';
 import { answers } from './support/driver';
 
@@ -116,6 +116,50 @@ describe('learning journey history', () => {
     expect(all.historyAvailableFrom).toBe('2026-11-02');
     expect(all.period).toMatchObject({ startDate: '2026-11-02', bucketGranularity: 'month', wordsAtStart: 0, activeDays: 2, completedSessions: 2 });
     expect(all.period.points).toEqual([{ date: '2026-11-30', cumulativeWords: 1 }, { date: '2026-12-02', cumulativeWords: 2 }]);
+  });
+
+  it('names the week\'s newest words, at most three', async () => {
+    await onboard(5);
+    await learn(2);
+    h.clock.advance(1);
+    await learn(2);
+    const { week } = await journey();
+    expect(week.recentWords).toHaveLength(3);
+    expect(week.recentWords[0]).toEqual({ wordId: expect.any(String), lemma: expect.stringMatching(/^word/) });
+    const words = (await api('get', '/v1/me/learning-journey/words?period=week').expect(200)).body;
+    expect(week.recentWords.map((w: { wordId: string }) => w.wordId)).toEqual(words.items.slice(0, 3).map((w: { wordId: string }) => w.wordId));
+  });
+
+  it('lists the period\'s new words newest first, with every meaning learned in it', async () => {
+    const seeded = await onboard(3);
+    await learn(2);
+    h.clock.advance(24);
+    await learn(1);
+    const [first] = await h.db.select({ typeId: meanings.typeId }).from(meanings).where(eq(meanings.id, seeded.meaningIds[0]));
+    await h.db.update(meanings).set({ typeId: first.typeId }).where(eq(meanings.id, seeded.meaningIds[1]));
+
+    const { body } = await api('get', '/v1/me/learning-journey/words?period=week').expect(200);
+    expect(body.total).toBe(2);
+    expect(body.items.map((w: { learnedOn: string }) => w.learnedOn)).toEqual(['2026-11-03', '2026-11-02']);
+    const merged = body.items.find((w: { wordId: string }) => w.wordId === seeded.wordIds[0]);
+    expect(merged.meaningTexts).toEqual(['nghĩa 0', 'nghĩa 1']);
+
+    const page = (await api('get', '/v1/me/learning-journey/words?period=week&limit=1&offset=1').expect(200)).body;
+    expect(page).toEqual({ total: 2, items: [body.items[1]] });
+    expect((await api('get', '/v1/me/learning-journey/words?period=week&offset=5').expect(200)).body).toEqual({ total: 2, items: [] });
+  });
+
+  it('shows the learner\'s own edit and keeps other periods out', async () => {
+    const seeded = await onboard(2);
+    await learn(1);
+    const [{ id: userId }] = await h.db.select({ id: appUsers.id }).from(appUsers);
+    await h.db.insert(userMeaningOverrides).values({ userId, meaningId: seeded.meaningIds[0], locale: 'vi-VN', content: { meaningText: 'của tôi' } });
+    expect((await api('get', '/v1/me/learning-journey/words?period=week').expect(200)).body.items[0].meaningTexts).toEqual(['của tôi']);
+
+    h.clock.advance(24 * 7);
+    expect((await api('get', '/v1/me/learning-journey/words?period=week').expect(200)).body).toEqual({ total: 0, items: [] });
+    expect((await api('get', '/v1/me/learning-journey/words?period=all').expect(200)).body.total).toBe(1);
+    await api('get', '/v1/me/learning-journey/words?limit=51').expect(400);
   });
 
   it('rejects an unknown period', async () => {

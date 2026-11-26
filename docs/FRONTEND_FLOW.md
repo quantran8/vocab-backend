@@ -1229,7 +1229,8 @@ Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays,
   "week": {                                // luôn là tuần hiện tại, T2–CN, không theo period
     "startDate": "2026-11-23", "endDateExclusive": "2026-11-30",
     "newWords": 24, "completedSessions": 5, "activeDays": 4,
-    "weeklySessionGoal": 7,
+    "weeklySessionGoal": 3,
+    "recentWords": [ { "wordId": "...", "lemma": "resilient" } ],  // tối đa 3, mới nhất trước
     "days": [
       { "date": "2026-11-23", "completed": true, "completedSessions": 2, "newWords": 5 },
       // ... ngày tương lai: completed/completedSessions/newWords đều null
@@ -1245,13 +1246,24 @@ Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays,
 }
 ```
 
-- **Mục tiêu tuần tính theo buổi:** hiển thị `week.completedSessions / weeklySessionGoal` (cùng setting với lộ trình checkpoint). Vượt mục tiêu thì hiện số thật. `activeDays` và `days[].completed` dùng cho dải ngày.
+- **Mục tiêu tuần tính theo ngày học:** Home hiện `week.activeDays / weeklySessionGoal` (app đặt goal = số ngày học người học chọn) bằng thẻ tem: số ô = goal, mỗi ngày có học (`days[].completed`) một tem ghi thứ của ngày đó. Không vẽ 7 ngày, không đánh dấu ngày bỏ lỡ. Vượt mục tiêu thì hiện số thật. `completedSessions` chỉ dùng ở Hoạt động.
+- **`recentWords`:** tối đa 3 từ học lần đầu tuần này, mới nhất trước, cho dòng "resilient, meticulous, ambiguous và 21 từ khác" (21 = `newWords` − số từ đã nêu).
 - **Ngày** là ngày lịch theo `timeZone` trong settings, không theo request. Client cập nhật `PUT /v1/me/settings {timeZone}` khi múi giờ máy đổi rồi tải lại. Đổi múi giờ có thể dời ngày của các buổi cũ, tổng không đổi.
 - **Từ mới / `cumulativeWords`:** số Word (không phải Meaning) học lần đầu. Hai nghĩa của một từ tính một. Không giảm khi đổi scope, tạm dừng ôn hay quên; chỉ xoá tài khoản mới xoá.
 - **`completedSessions`:** session commit thành công, mọi mode trừ `checkpoint_challenge`. Match Madness và placement không phải session. Daily tách phần ôn và phần từ mới thành hai session nên tính hai buổi.
 - **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
 - **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
 - Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.
+
+`GET /v1/me/learning-journey/words?period=week|month|all&limit=20&offset=0` (limit 1–50): các từ học lần đầu trong kỳ, mới nhất trước, cùng cách đếm và múi giờ với `newWords` (nên `total` = `period.newWords`).
+
+```jsonc
+{ "total": 128,
+  "items": [ { "wordId": "...", "lemma": "resilient", "meaningTexts": ["kiên cường", "đàn hồi"], "learnedOn": "2026-11-26" } ] }
+```
+
+- `meaningTexts`: các nghĩa của từ đó học trong kỳ, theo thứ tự học, đúng chữ người học thấy (gồm bản tự sửa). App nối bằng "; ".
+- `learnedOn`: ngày local học từ đó lần đầu. App gom các từ theo ngày này thành dòng thời gian; "Xem thêm" tải trang tiếp và nối vào ngày đang dở.
 
 ## 18. Báo lỗi nội dung
 

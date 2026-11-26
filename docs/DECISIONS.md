@@ -124,7 +124,8 @@ Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for 
 | Topic | Current behavior | Why |
 | --- | --- | --- |
 | Data source | `GET /v1/me/learning-journey` reads `user_meaning_progress.learned_at`, committed `learning_sessions` and `memory_observations`; no ledger table, no backfill. One SQL statement | `learned_at` is never overwritten and these rows are only deleted with the account, so history is complete from day one |
-| Weekly goal | Counted in sessions against `weekly_session_goal`, not in days | Product decision 2026-11-26: one goal setting, same unit as the checkpoint path |
+| Weekly goal | Counted in study days (`week.activeDays`) against `weekly_session_goal`, which the app sets to the number of study days the learner chose. Home draws one stamp per day learned in as many slots as the goal, never the seven weekdays | Product decision 2026-11-26 (replaces counting sessions): a learner who plans 3 days a week must not see the other days as missed, and a Daily split into two sessions must not count twice |
+| New words list | `GET /v1/me/learning-journey/words` pages the period's new words with the meanings learned in it; `week.recentWords` names the newest three for Home | Home's "+24 · resilient, …" must lead somewhere that lists them |
 | Time zone | `user_settings.time_zone`; the request carries none | One source per account, so two devices never disagree; review-load already uses it |
 | Word | Counted per Word (`word_types.word_id`), first Meaning learned wins | A Word with several Meanings is one new word to the learner |
 | Sessions | Committed sessions of every mode except `checkpoint_challenge`. A Daily split into reviews then new words counts twice | There is no flow id to merge them by |
