@@ -1251,3 +1251,33 @@ Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays,
 - **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
 - **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
 - Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.
+
+## 18. Báo lỗi nội dung
+
+`POST /v1/me/content-reports`. Quy tắc đầy đủ: `docs/content-reports.md`. Báo cáo không ảnh hưởng task, attempt, commit, SRS hay LP; gửi trước hoặc sau commit đều được.
+
+```jsonc
+{
+  "clientReportId": "988269d9-0505-4a77-bf2d-4fc4478e033a", // UUID tạo một lần cho mỗi lần gửi, giữ nguyên khi retry
+  "source": "practice_task",                                // learn_card | practice_task | word_detail
+  "reason": "answer_should_be_accepted",
+  "context": {
+    "sessionId": "...", "taskId": "...",                     // learn_card: sessionId + learnStepId; word_detail: meaningId
+    "attemptExcerpt": { "submittedText": "resilient" }      // chỉ practice_task; submittedText | optionId | tileIds | receiptId
+  },
+  "note": "Tôi nghĩ câu này cũng đúng"                       // tuỳ chọn, ≤ 500 ký tự; bắt buộc với other
+}
+```
+
+- Trả `{reportId, duplicate, status: "received"}`. `201`: báo cáo mới. `200`: retry của cùng `clientReportId`, hoặc user đã có báo cáo đang mở cho đúng nội dung và lý do này (`duplicate: true`). Cả hai đều hiện toast thành công.
+- Không gửi nội dung, wordId, revision hay locale: server tự lấy. `learnStepId` và `taskId` là `id` của step/task trong plan.
+- Lý do theo nguồn: `incorrect_question` và `answer_should_be_accepted` chỉ cho `practice_task`, và `answer_should_be_accepted` cần `attemptExcerpt` (chỉ hiện sau khi user đã nộp). `incorrect_meaning`, `incorrect_definition`, `incorrect_example`, `audio_issue`, `other` dùng cho mọi nguồn.
+- Custom word dùng `word_detail` với `meaningId` của nó. Không có nút báo lỗi trên meaning user đã tự sửa: server trả `422 REPORT_TARGET_OVERRIDDEN`.
+- Không có nút trong Checkpoint challenge, Match Madness, placement.
+- Lỗi:
+  - `400 VALIDATION_FAILED`: sai lý do hoặc thiếu note; giữ nháp.
+  - `404 REPORT_CONTEXT_UNAVAILABLE`: không tìm thấy nội dung; đóng sheet.
+  - `409 REPORT_IDEMPOTENCY_CONFLICT`: cùng `clientReportId` nhưng nội dung khác; không retry, tạo id mới nếu user sửa.
+  - `422 REPORT_TARGET_OVERRIDDEN`.
+  - `429 REPORT_LIMIT_REACHED`: quá 20 báo cáo mới trong 24 giờ.
+  - `5xx`/mạng: retry với đúng body và `clientReportId` cũ.

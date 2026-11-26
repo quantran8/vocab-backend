@@ -246,6 +246,24 @@ export const HISTORY_PERIODS = Object.values(HISTORY_PERIOD);
 export const HISTORY_BUCKET = { DAY: 'day', MONTH: 'month', QUARTER: 'quarter', YEAR: 'year' } as const;
 export type HistoryBucket = (typeof HISTORY_BUCKET)[keyof typeof HISTORY_BUCKET];
 
+export const CONTENT_REPORT_SOURCE = { LEARN_CARD: 'learn_card', PRACTICE_TASK: 'practice_task', WORD_DETAIL: 'word_detail' } as const;
+export type ContentReportSource = (typeof CONTENT_REPORT_SOURCE)[keyof typeof CONTENT_REPORT_SOURCE];
+export const CONTENT_REPORT_REASON = {
+  INCORRECT_MEANING: 'incorrect_meaning',
+  INCORRECT_DEFINITION: 'incorrect_definition',
+  INCORRECT_EXAMPLE: 'incorrect_example',
+  ANSWER_SHOULD_BE_ACCEPTED: 'answer_should_be_accepted',
+  INCORRECT_QUESTION: 'incorrect_question',
+  AUDIO_ISSUE: 'audio_issue',
+  OTHER: 'other',
+} as const;
+export type ContentReportReason = (typeof CONTENT_REPORT_REASON)[keyof typeof CONTENT_REPORT_REASON];
+export const CONTENT_REPORT_REASONS = Object.values(CONTENT_REPORT_REASON);
+export const CONTENT_REPORT_STATUS = { PENDING: 'pending', UNDER_REVIEW: 'under_review', RESOLVED: 'resolved', DISMISSED: 'dismissed' } as const;
+export type ContentReportStatus = (typeof CONTENT_REPORT_STATUS)[keyof typeof CONTENT_REPORT_STATUS];
+export const CONTENT_REPORT_STATUSES = Object.values(CONTENT_REPORT_STATUS);
+export const CONTENT_REPORT_SORT = { OLDEST: 'oldest', MOST_REPORTED: 'most_reported' } as const;
+
 export const GAME_MODE = { MATCH_MADNESS: 'match_madness' } as const;
 export type GameMode = (typeof GAME_MODE)[keyof typeof GAME_MODE];
 export const CHALLENGE_ROLE = { CORE: 'core', REVIEW: 'review' } as const;

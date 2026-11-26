@@ -131,6 +131,19 @@ Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for 
 | Reviews | One per (session, Meaning) with a memory observation, excluding Meanings that session learned | Observations already exclude failed known-checks and skipped tasks |
 | LP days differ | LP `scoring_day` is UTC; journey days are local | The two are never shown side by side |
 
+## Content reports
+
+Rules live in `docs/content-reports.md`. Decisions that differ from the client spec (04_LEARNING_JOURNEY_AND_CONTENT_REPORT_SPEC):
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Own edits | A Meaning the reporter edited cannot be reported (`422 REPORT_TARGET_OVERRIDDEN`) | Product decision 2026-11-26; edits are never shown to reviewers |
+| Sources | `learn_card`, `practice_task`, `word_detail`; no `custom_word` source | A custom Meaning has a stable Meaning id and goes through word detail |
+| Locale and revision | Read on the server from `user_settings` and `active_meaning_publications`; the client sends neither | The client cannot fake a revision; one source per account |
+| Context errors | A foreign, missing or purged context is the same `404 REPORT_CONTEXT_UNAVAILABLE` | Ids of other learners leak nothing |
+| Snapshot | Always present: the plan element or the publication; no `snapshot_status` | Plans live 30 days after commit, far beyond when a report is sent |
+| Admin role | Editors and admins | Content fixes are editor work |
+
 ## Session result statistics
 
 Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo). Contract: `FRONTEND_FLOW.md` §15.

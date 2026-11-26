@@ -9,6 +9,7 @@ import {
   type ChallengeRole, type ChallengeRunStatus, type GameMode,
   type LexicalDraftKind, type MeaningOrigin, type NewWordOverrideMode, type CefrLevel, type ContentStatus, type EditorialState, type ItemStatus, type FsrsGrade, type MemorySignal, type PartOfSpeech, type SessionMode, type SessionStatus, type StoredSpeakingStatus, type Template, type Validity, type Variant, type CheckpointState,
   type AvatarKey, type ContentProvenance,type EntitlementSource, type EntitlementStatus, type LpAwardType, type ReportReason, type ReportResolution, type TierKey, type TierUnlockSource,
+  CONTENT_REPORT_STATUS, type ContentReportReason, type ContentReportSource, type ContentReportStatus,
 } from '../common/constants/domain';
 import { newId } from '../common/ids';
 import type { MeaningOverride } from '../modules/practice-resolver/meaning-override';
@@ -439,6 +440,47 @@ export const challengeRuns = pgTable('challenge_runs', {
   commitResponse: jsonb('commit_response'),
   result: jsonb('result'),
 });
+
+// I. Content reports: learner feedback for admins; never read by learning code.
+export const contentReports = pgTable('content_reports', {
+  id: id(),
+  reporterId: uuid('reporter_id').notNull(),
+  clientReportId: uuid('client_report_id').notNull(),
+  requestSha256: char('request_sha256', { length: 64 }).notNull(),
+  source: varchar('source', { length: 16 }).$type<ContentReportSource>().notNull(),
+  reason: varchar('reason', { length: 32 }).$type<ContentReportReason>().notNull(),
+  note: text('note'),
+  sessionId: uuid('session_id'),
+  taskId: uuid('task_id'),
+  learnStepId: uuid('learn_step_id'),
+  meaningIds: jsonb('meaning_ids').notNull().$type<string[]>(),
+  /** Groups reports of the same content revision; see docs/content-reports.md. */
+  targetKey: text('target_key').notNull(),
+  contentVersion: text('content_version'),
+  explanationLocale: varchar('explanation_locale', { length: 32 }).notNull(),
+  snapshot: jsonb('snapshot').notNull(),
+  attemptExcerpt: jsonb('attempt_excerpt'),
+  status: varchar('status', { length: 16 }).$type<ContentReportStatus>().notNull().default(CONTENT_REPORT_STATUS.PENDING),
+  reviewedBy: uuid('reviewed_by'),
+  reviewedAt: ts('reviewed_at'),
+  resolutionNote: text('resolution_note'),
+  createdAt: createdAt(),
+}, (t) => [
+  unique('content_reports_reporter_id_client_report_id_key').on(t.reporterId, t.clientReportId),
+  index('idx_content_reports_queue').on(t.status, t.createdAt),
+  index('idx_content_reports_target').on(t.targetKey, t.reason, t.explanationLocale),
+  index('idx_content_reports_reporter').on(t.reporterId, t.createdAt),
+]);
+
+export const contentReportEvents = pgTable('content_report_events', {
+  id: id(),
+  reportId: uuid('report_id').notNull(),
+  actorId: uuid('actor_id').notNull(),
+  fromStatus: varchar('from_status', { length: 16 }).$type<ContentReportStatus>().notNull(),
+  toStatus: varchar('to_status', { length: 16 }).$type<ContentReportStatus>().notNull(),
+  note: text('note'),
+  createdAt: createdAt(),
+}, (t) => [index('idx_content_report_events_report').on(t.reportId, t.createdAt)]);
 
 // Relations are only declared for the nested reads that use `db.query`.
 // G. Ranking & Tier: the LP ledger is the source of truth; totals, days and weekly scores are aggregates of it.
