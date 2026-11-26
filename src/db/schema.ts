@@ -581,13 +581,13 @@ export const userEntitlements = pgTable('user_entitlements', {
   userId: uuid('user_id').notNull(),
   source: varchar('source', { length: 16 }).$type<EntitlementSource>().notNull(),
   productId: text('product_id'),
-  /** App Store subscriptions only: one row per original transaction, whoever it moves to. */
+  /** Store subscriptions only (App Store original transaction id, Play purchase token): one row each, whoever it moves to. */
   originalTransactionId: text('original_transaction_id').unique('user_entitlements_original_transaction_id_key'),
   environment: varchar('environment', { length: 16 }),
   status: varchar('status', { length: 16 }).$type<EntitlementStatus>().notNull(),
   expiresAt: ts('expires_at').notNull(),
   autoRenew: boolean('auto_renew'),
-  /** signedDate of the newest App Store payload applied; an older one arriving late is ignored. */
+  /** signedDate of the newest App Store payload (or when Play was last asked) applied; an older one arriving late is ignored. */
   signedAt: ts('signed_at'),
   redeemCode: text('redeem_code'),
   createdAt: createdAt(),
@@ -601,6 +601,15 @@ export const appStoreNotifications = pgTable('appstore_notifications', {
   environment: varchar('environment', { length: 16 }),
   originalTransactionId: text('original_transaction_id'),
   signedAt: ts('signed_at').notNull(),
+  receivedAt: ts('received_at').notNull().defaultNow(),
+});
+
+/** Real-time Developer Notifications already applied, by Pub/Sub message id. */
+export const playStoreNotifications = pgTable('playstore_notifications', {
+  messageId: text('message_id').primaryKey(),
+  notificationType: integer('notification_type'),
+  purchaseToken: text('purchase_token'),
+  eventAt: ts('event_at').notNull(),
   receivedAt: ts('received_at').notNull().defaultNow(),
 });
 

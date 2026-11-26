@@ -44,6 +44,7 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 | `POST /v1/auth/login` | `{email, password}` | `200 session` |
 | `POST /v1/auth/google` | `{idToken, nonce?}` | `200 session` |
 | `POST /v1/auth/apple` | `{idToken, nonce?}` | `200 session` |
+| `POST /v1/auth/apple/callback` | form Apple post (`id_token`, `state`, `error`) | `303` về app Android |
 | `POST /v1/auth/recover` | `{email}` | `200 {sent: true}` |
 | `POST /v1/auth/recover/verify` | `{email, code, password}` | `200 session` |
 | `POST /v1/auth/refresh` | `{refreshToken}` | `200 session` |
@@ -57,6 +58,7 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 - **Signup:** nếu project bật xác nhận email, response là `{session: null, confirmationRequired: true}`. Hiện màn "kiểm tra email", sau khi xác nhận thì gọi `login`.
 - **Google:** dùng Google Sign-In SDK trên iOS lấy ID token, gửi `idToken`. Nếu SDK yêu cầu nonce, gửi nonce **gốc** (chưa hash) vào `nonce`. Không có redirect OAuth.
 - **Apple:** Sign in with Apple trên iOS lấy `identityToken`, gửi vào `idToken`. Gửi SHA-256 của nonce cho Apple, nonce **gốc** vào `nonce`. Supabase phải bật provider Apple với bundle ID của app làm client ID.
+- **Apple trên Android (web flow):** app mở `https://appleid.apple.com/auth/authorize` trong Custom Tab với client ID là **Services ID**, `response_type=code id_token`, `response_mode=form_post`, `scope=email`, `state` ngẫu nhiên và nonce đã hash. Return URL của Services ID là `…/v1/auth/apple/callback`: Apple post form về đây, backend chỉ giữ `id_token`, `state`, `error` (bỏ `code`, `user`), không xác thực gì và trả `303` tới `intent://callback?…#Intent;package=<APPLE_ANDROID_PACKAGE>;scheme=syll-apple;end`. App kiểm tra `state` rồi gọi `POST /v1/auth/apple` như iOS. Supabase: thêm Services ID vào **Client IDs** của provider Apple.
 - **Quên mật khẩu:** `recover` gửi email chứa mã (template "Reset Password" của Supabase phải có `{{ .Token }}`). Luôn trả `200` dù email có tài khoản hay không. App hỏi mã + mật khẩu mới rồi gọi `recover/verify`: đúng mã thì đặt mật khẩu mới và trả session (đăng nhập luôn). Sai hoặc hết hạn: `400 RESET_CODE_INVALID`.
 - **Đổi mật khẩu:** `PUT /v1/me/password` (bearer) body `{currentPassword, newPassword}` trả `200 {changed: true}`. Sai mật khẩu hiện tại: `403 WRONG_PASSWORD` (không dùng 401 để client không đăng xuất). Tài khoản chỉ đăng nhập bằng Google/Apple chưa có mật khẩu: dùng "Quên mật khẩu" để tạo.
 - **Lưu token:** Keychain. Refresh token dùng một lần, mỗi lần refresh nhận cặp token mới và phải thay cả hai.
@@ -1165,7 +1167,7 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
 
 ## 16. Premium và giới hạn free
 
-Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1/me` và gửi giao dịch StoreKit lên. Cờ `FREEMIUM_ENABLED` tắt thì `plan.limits` luôn `null`: không giới hạn gì, app cũ vẫn chạy như trước.
+Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1/me` và gửi giao dịch StoreKit (iOS) hoặc purchase Play Billing (Android) lên. Cờ `FREEMIUM_ENABLED` tắt thì `plan.limits` luôn `null`: không giới hạn gì, app cũ vẫn chạy như trước.
 
 ### 16.1 `GET /v1/me` trả thêm
 
@@ -1173,9 +1175,9 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 "plan": {
   "tier": "free",              // free | premium
   "premiumUntil": null,        // ISO, khi premium
-  "source": null,              // appstore | redeem
+  "source": null,              // appstore | playstore | redeem
   "productId": null,           // vd. syll.premium.yearly
-  "autoRenew": null,           // chỉ với appstore, khi đã biết
+  "autoRenew": null,           // chỉ với appstore / playstore, khi đã biết
   "limits": { "maxTopics": 3, "maxNewWords": 150, "newWordsUsed": 42 }  // null khi không bị giới hạn
 },
 "features": { "freemiumEnabled": true, "redeemEnabled": false, "adEverySessions": 3 }  // 0: no ads
@@ -1203,7 +1205,21 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 - Lỗi: `422 APPSTORE_TRANSACTION_INVALID` (chữ ký, bundle, product sai), `409 APPSTORE_TRANSACTION_OWNED` (gói đang thuộc tài khoản khác). Với 409, app hiện thông báo và vẫn `finish()`.
 - Notification URL (production và sandbox) trỏ về `/v1/appstore/notifications`. Gia hạn, grace period, hết hạn, hoàn tiền và thu hồi đều cập nhật `plan`.
 
-### 16.4 Redeem code
+### 16.4 Google Play
+
+| Endpoint | Body | Response |
+|---|---|---|
+| `POST /v1/me/subscriptions/playstore` | `{purchaseToken, productId}` (`Purchase.purchaseToken`, `Purchase.products[0]`) | `200 plan` |
+| `POST /v1/playstore/notifications` | Pub/Sub push của Real-time Developer Notifications (public, xác thực bằng OIDC token của Pub/Sub) | `200 {applied}` |
+
+- App gắn `obfuscatedAccountId = user id` (UUID trong `GET /me`) khi mở billing flow (`BillingFlowParams.setObfuscatedAccountId`).
+- Sau khi profile đã tải, gửi mỗi purchase `PURCHASED` từ `PurchasesUpdatedListener` và từ `queryPurchasesAsync(SUBS)` (khôi phục, gia hạn thấy trên máy). Purchase `PENDING` chưa gửi; nếu có gửi, server trả `200 plan` không cấp gì.
+- Server tự hỏi Google Play Developer API, không acknowledge. App chỉ `acknowledgePurchase` sau khi server trả 200 (Play hoàn tiền purchase không được acknowledge trong 3 ngày).
+- Lỗi: `422 PLAYSTORE_PURCHASE_INVALID` (token không tồn tại, package hoặc product sai): token đó không bao giờ hợp lệ, app bỏ nó và không acknowledge. `409 PLAYSTORE_PURCHASE_OWNED` (gói đang thuộc tài khoản khác): app hiện thông báo và vẫn acknowledge, như `finish()` trên iOS. `503 PLAYSTORE_UNAVAILABLE` (`retryable`): thử lại sau, chưa acknowledge.
+- Nâng/hạ gói hoặc đăng ký lại: purchase mới có `linkedPurchaseToken`, server cho gói cũ hết hạn khi nhận purchase mới.
+- RTDN: topic Pub/Sub trong Play Console, subscription kiểu push trỏ về `https://<api>/v1/playstore/notifications`, bật authentication với audience = `PLAYSTORE_PUSH_AUDIENCE`. Gia hạn, grace period, on hold, huỷ, hết hạn và thu hồi (`revoked`) đều cập nhật `plan`.
+
+### 16.5 Redeem code
 
 `POST /v1/me/redeem {code}` → `200 plan`. Chỉ khi `features.redeemEnabled`; tắt thì `404`. Code không phân biệt hoa thường, bỏ khoảng trắng.
 

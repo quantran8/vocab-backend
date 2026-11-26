@@ -1,19 +1,26 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminOnly, AuthUser, CurrentUser, FullAdminOnly, Public } from '../../../common/auth/auth.decorators';
 import { ZodPipe } from '../../../common/http/zod.pipe';
-import { appStoreNotificationSchema, appStoreSyncSchema, createRedeemCodeSchema, listRedeemCodesSchema, redeemSchema } from '../dto/entitlement.schemas';
+import { appStoreNotificationSchema, appStoreSyncSchema, createRedeemCodeSchema, listRedeemCodesSchema, playStoreSyncSchema, redeemSchema } from '../dto/entitlement.schemas';
 import { AppStoreService } from '../services/appstore.service';
 import { EntitlementService } from '../services/entitlement.service';
+import { PlayStoreService } from '../services/playstore.service';
 
 @Controller('v1/me')
 export class MeEntitlementController {
-  constructor(private readonly entitlements: EntitlementService, private readonly appStore: AppStoreService) {}
+  constructor(private readonly entitlements: EntitlementService, private readonly appStore: AppStoreService, private readonly playStore: PlayStoreService) {}
 
   @Post('subscriptions/appstore')
   @HttpCode(200)
   syncAppStore(@CurrentUser() user: AuthUser, @Body(new ZodPipe(appStoreSyncSchema, 'VALIDATION_FAILED')) body: z.infer<typeof appStoreSyncSchema>) {
     return this.appStore.syncTransaction(user.id, body.signedTransaction);
+  }
+
+  @Post('subscriptions/playstore')
+  @HttpCode(200)
+  syncPlayStore(@CurrentUser() user: AuthUser, @Body(new ZodPipe(playStoreSyncSchema, 'VALIDATION_FAILED')) body: z.infer<typeof playStoreSyncSchema>) {
+    return this.playStore.syncPurchase(user.id, body.purchaseToken, body.productId);
   }
 
   @Post('redeem')
@@ -33,6 +40,20 @@ export class AppStoreNotificationsController {
   @HttpCode(200)
   notify(@Body(new ZodPipe(appStoreNotificationSchema, 'VALIDATION_FAILED')) body: z.infer<typeof appStoreNotificationSchema>) {
     return this.appStore.handleNotification(body.signedPayload);
+  }
+}
+
+/** The push endpoint of the Pub/Sub subscription that receives Play's Real-time Developer Notifications. */
+@Public()
+@Controller('v1/playstore')
+export class PlayStoreNotificationsController {
+  constructor(private readonly playStore: PlayStoreService) {}
+
+  // The body is validated after the push token, so an unauthenticated caller learns nothing.
+  @Post('notifications')
+  @HttpCode(200)
+  notify(@Headers('authorization') authorization: string | undefined, @Body() body: unknown) {
+    return this.playStore.handleNotification(authorization, body);
   }
 }
 

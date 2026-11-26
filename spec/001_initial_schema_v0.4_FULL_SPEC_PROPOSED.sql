@@ -615,11 +615,11 @@ CREATE TABLE ranking_eligibility_audit (
 );
 CREATE INDEX idx_ranking_eligibility_audit_user ON ranking_eligibility_audit(user_id, created_at);
 
--- Premium: App Store subscriptions and redeem codes (0023_freemium)
+-- Premium: App Store and Google Play subscriptions, redeem codes (0025_freemium, 0028_playstore)
 CREATE TABLE user_entitlements (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-    source VARCHAR(16) NOT NULL CHECK (source IN ('appstore','redeem')),
+    source VARCHAR(16) NOT NULL CHECK (source IN ('appstore','playstore','redeem')),
     product_id TEXT,
     original_transaction_id TEXT,
     environment VARCHAR(16),
@@ -631,7 +631,7 @@ CREATE TABLE user_entitlements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT user_entitlements_original_transaction_id_key UNIQUE (original_transaction_id),
-    CHECK ((source = 'appstore') = (original_transaction_id IS NOT NULL))
+    CHECK ((source IN ('appstore','playstore')) = (original_transaction_id IS NOT NULL))
 );
 CREATE INDEX idx_user_entitlements_user ON user_entitlements (user_id, expires_at);
 CREATE TABLE appstore_notifications (
@@ -641,6 +641,13 @@ CREATE TABLE appstore_notifications (
     environment VARCHAR(16),
     original_transaction_id TEXT,
     signed_at TIMESTAMPTZ NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE playstore_notifications (
+    message_id TEXT PRIMARY KEY,
+    notification_type INTEGER,
+    purchase_token TEXT,
+    event_at TIMESTAMPTZ NOT NULL,
     received_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE redeem_codes (

@@ -410,8 +410,10 @@ export const RANKING_POSITION_KIND = { RANK: 'rank', PERCENTILE: 'percentile', U
 export type RankingPositionKind = (typeof RANKING_POSITION_KIND)[keyof typeof RANKING_POSITION_KIND];
 export const LEADERBOARD_VIEW = { TOP: 'top', AROUND: 'around' } as const;
 
-export const ENTITLEMENT_SOURCE = { APPSTORE: 'appstore', REDEEM: 'redeem' } as const;
+export const ENTITLEMENT_SOURCE = { APPSTORE: 'appstore', PLAYSTORE: 'playstore', REDEEM: 'redeem' } as const;
 export type EntitlementSource = (typeof ENTITLEMENT_SOURCE)[keyof typeof ENTITLEMENT_SOURCE];
+/** Stored as a Play subscription's environment; App Store rows keep Apple's own value. */
+export const PLAYSTORE_ENVIRONMENT = { SANDBOX: 'sandbox', PRODUCTION: 'production' } as const;
 
 /** active and grace grant Premium until expiresAt; the others never do. */
 export const ENTITLEMENT_STATUS = { ACTIVE: 'active', GRACE: 'grace', EXPIRED: 'expired', REVOKED: 'revoked' } as const;

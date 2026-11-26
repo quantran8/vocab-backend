@@ -3,7 +3,7 @@ import { and, count, desc, eq, isNull, lte, max, or, sql } from 'drizzle-orm';
 import { ENTITLEMENT_SOURCE, ENTITLEMENT_STATUS } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
 import { DB, Db, Executor } from '../../../db/db';
-import { appStoreNotifications, appUsers, redeemCodeUses, redeemCodes, userEntitlements, userLearningScope, userMeaningProgress } from '../../../db/schema';
+import { appStoreNotifications, appUsers, playStoreNotifications, redeemCodeUses, redeemCodes, userEntitlements, userLearningScope, userMeaningProgress } from '../../../db/schema';
 import type { EntitlementUpdate } from '../domain/appstore';
 import type { EntitlementRow } from '../domain/entitlement';
 import { redeemExpiry } from '../domain/entitlement';
@@ -16,6 +16,16 @@ export interface NotificationRecord {
   originalTransactionId: string | null;
   signedAt: Date;
 }
+
+export interface PlayNotificationRecord {
+  messageId: string;
+  notificationType: number | null;
+  purchaseToken: string | null;
+  eventAt: Date;
+}
+
+/** The store subscriptions `upsertSubscription` writes. */
+export type StoreSource = typeof ENTITLEMENT_SOURCE.APPSTORE | typeof ENTITLEMENT_SOURCE.PLAYSTORE;
 
 export interface NewRedeemCode {
   code: string;
@@ -62,8 +72,8 @@ export class EntitlementRepository {
   }
 
   /** Inserts or moves the subscription to `userId`; a payload older than the stored one changes nothing. */
-  async upsertAppStore(userId: string, update: EntitlementUpdate, now: Date, db: Executor = this.db) {
-    const values = { ...update, userId, source: ENTITLEMENT_SOURCE.APPSTORE, updatedAt: now };
+  async upsertSubscription(userId: string, source: StoreSource, update: EntitlementUpdate, now: Date, db: Executor = this.db) {
+    const values = { ...update, userId, source, updatedAt: now };
     await db.insert(userEntitlements).values(values).onConflictDoUpdate({
       target: userEntitlements.originalTransactionId,
       set: {
@@ -74,10 +84,29 @@ export class EntitlementRepository {
     });
   }
 
+  /** Writes a Play subscription and ends the one it replaced (upgrade, downgrade, resubscribe) in one transaction. */
+  async upsertPlayStore(userId: string, update: EntitlementUpdate, replacedToken: string | null, now: Date, db?: Executor): Promise<void> {
+    if (!db) return this.db.transaction((tx) => this.upsertPlayStore(userId, update, replacedToken, now, tx));
+    await this.upsertSubscription(userId, ENTITLEMENT_SOURCE.PLAYSTORE, update, now, db);
+    if (!replacedToken || replacedToken === update.originalTransactionId) return;
+    await db.update(userEntitlements).set({ status: ENTITLEMENT_STATUS.EXPIRED, autoRenew: false, signedAt: update.signedAt, updatedAt: now })
+      .where(and(eq(userEntitlements.originalTransactionId, replacedToken), eq(userEntitlements.source, ENTITLEMENT_SOURCE.PLAYSTORE)));
+  }
+
   /** Runs `apply` once per notification UUID: a redelivery finds the row and skips it. */
   async onceForNotification(record: NotificationRecord, apply: (tx: Executor) => Promise<void>) {
     return this.db.transaction(async (tx) => {
       const inserted = await tx.insert(appStoreNotifications).values(record).onConflictDoNothing().returning({ id: appStoreNotifications.notificationUuid });
+      if (inserted.length === 0) return false;
+      await apply(tx);
+      return true;
+    });
+  }
+
+  /** `onceForNotification` for Play, keyed by the Pub/Sub message id. */
+  async onceForPlayNotification(record: PlayNotificationRecord, apply: (tx: Executor) => Promise<void>) {
+    return this.db.transaction(async (tx) => {
+      const inserted = await tx.insert(playStoreNotifications).values(record).onConflictDoNothing().returning({ id: playStoreNotifications.messageId });
       if (inserted.length === 0) return false;
       await apply(tx);
       return true;

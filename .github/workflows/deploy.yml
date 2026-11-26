@@ -161,6 +161,11 @@ jobs:
           AD_EVERY_SESSIONS: ${{ vars.AD_EVERY_SESSIONS }}
           APPSTORE_BUNDLE_ID: ${{ vars.APPSTORE_BUNDLE_ID }}
           APPSTORE_PRODUCT_IDS: ${{ vars.APPSTORE_PRODUCT_IDS }}
+          PLAYSTORE_PACKAGE_NAME: ${{ vars.PLAYSTORE_PACKAGE_NAME }}
+          PLAYSTORE_PRODUCT_IDS: ${{ vars.PLAYSTORE_PRODUCT_IDS }}
+          PLAYSTORE_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAYSTORE_SERVICE_ACCOUNT_JSON }}
+          PLAYSTORE_PUSH_AUDIENCE: ${{ vars.PLAYSTORE_PUSH_AUDIENCE }}
+          PLAYSTORE_PUSH_SERVICE_ACCOUNT: ${{ vars.PLAYSTORE_PUSH_SERVICE_ACCOUNT }}
           CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
           SEED_ADMIN_USERNAME: ${{ vars.SEED_ADMIN_USERNAME }}
           SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
@@ -176,6 +181,8 @@ jobs:
                        SEED_ADMIN_USERNAME SEED_ADMIN_EMAIL \
                        FREEMIUM_ENABLED FREE_MAX_TOPICS FREE_MAX_NEW_WORDS REDEEM_ENABLED AD_EVERY_SESSIONS \
                        APPSTORE_BUNDLE_ID APPSTORE_PRODUCT_IDS \
+                       PLAYSTORE_PACKAGE_NAME PLAYSTORE_PRODUCT_IDS PLAYSTORE_SERVICE_ACCOUNT_JSON \
+                       PLAYSTORE_PUSH_AUDIENCE PLAYSTORE_PUSH_SERVICE_ACCOUNT \
                        ENABLE_CRON RANKING_ENABLED CORS_ORIGINS BACKEND_IMAGE APP_PORT; do
               # Unset must be absent, not KEY="": optional providers switch on by presence, and "" beats zod defaults.
               if [ -z "${!key}" ]; then continue; fi
