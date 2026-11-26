@@ -73,7 +73,7 @@ export class ContentReportService {
   }
 
   async list(query: ListReports) {
-    return { items: await this.repository.list(query) };
+    return this.repository.list(query);
   }
 
   async detail(id: string) {

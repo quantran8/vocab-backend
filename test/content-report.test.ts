@@ -199,6 +199,7 @@ describe('content reports', () => {
 
       const { body: list } = await adminApi('get', '/admin/content-reports?sort=most_reported').expect(200);
       expect(list.items).toHaveLength(2);
+      expect(list.total).toBe(2);
       expect(list.items[0]).toMatchObject({ reporterCount: 2, lemma: 'wordaa', reason: R.INCORRECT_EXAMPLE });
 
       const { body: one } = await adminApi('get', `/admin/content-reports/${mine.reportId}`).expect(200);
