@@ -16,6 +16,8 @@ import vocabPack2 from './data/vocab-pack-2.json';
 import vocab from './data/vocab.json';
 
 const SNAPSHOT_REVISION = 1;
+// One fixed colour per demo topic, no purple (Premium's hue).
+const TOPIC_COLORS = ['#2F9BF4', '#F2994A', '#27AE60', '#EB5757', '#F2C94C', '#14B8A6', '#E8618C', '#8D6E63', '#1E3A8A', '#84CC16', '#607D8B', '#B45309', '#0891B2'];
 
 // Ids come from the data files so curated items can reference them; everything is idempotent.
 export async function seedDemoContent(db: Db) {
@@ -29,6 +31,11 @@ export async function seedDemoContent(db: Db) {
     await tx.insert(collections).values(vocab.collections.map((c) => ({ id: c.id, slug: c.slug, title: c.title, status: CONTENT_STATUS.PUBLISHED }))).onConflictDoNothing();
     await tx.insert(collectionLocalizations).values(vocab.collections.map((c) => ({ collectionId: c.id, locale: DEFAULT_LOCALE, ...c.vi }))).onConflictDoNothing();
     await tx.insert(topics).values(topicRows.map((t) => ({ id: t.id, collectionId: t.collectionId, slug: t.slug, title: t.title, status: CONTENT_STATUS.PUBLISHED }))).onConflictDoNothing();
+    // Also colours topics seeded before colours existed; never overwrites an admin's choice.
+    const colors = JSON.stringify(topicRows.map((t, i) => ({ id: t.id, color: TOPIC_COLORS[i % TOPIC_COLORS.length] })));
+    await tx.execute(sql`
+      UPDATE topics t SET color = x.color FROM jsonb_to_recordset(${colors}::jsonb) AS x(id uuid, color varchar)
+      WHERE t.id = x.id AND t.color IS NULL`);
     await tx.insert(topicLocalizations).values(topicRows.map((t) => ({ topicId: t.id, locale: DEFAULT_LOCALE, ...t.vi }))).onConflictDoNothing();
 
     // A custom word may already own a lemma, so attach to its rows. NULLS LAST lets the unkeyed word win in the Map.

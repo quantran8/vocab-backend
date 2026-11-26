@@ -76,6 +76,8 @@ export const topics = pgTable('topics', {
   ownerUserId: uuid('owner_user_id'),
   /** SF Symbol name; other platforms get their own column. */
   iosIcon: varchar('ios_icon', { length: 100 }),
+  /** #RRGGBB, the topic's fixed colour in apps. */
+  color: varchar('color', { length: 7 }),
 }, (t) => [unique('topics_collection_id_slug_key').on(t.collectionId, t.slug)]);
 
 export const collectionLocalizations = pgTable('collection_localizations', {

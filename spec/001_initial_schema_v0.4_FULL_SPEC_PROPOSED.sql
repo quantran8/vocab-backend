@@ -63,6 +63,7 @@ CREATE TABLE topics (
        CHECK (status IN ('draft','published','archived')),
     owner_user_id UUID REFERENCES app_user(id), -- set only on a learner's personal roadmap topic
     ios_icon VARCHAR(100) CHECK (ios_icon ~ '^[a-z0-9]+(\.[a-z0-9]+)*$'), -- SF Symbol name
+    color VARCHAR(7) CHECK (color ~ '^#[0-9A-F]{6}$'), -- #RRGGBB shown by apps
     UNIQUE (collection_id, slug)
 );
 CREATE UNIQUE INDEX topics_owner_user_id_key ON topics(owner_user_id) WHERE owner_user_id IS NOT NULL;

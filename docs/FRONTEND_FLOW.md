@@ -92,7 +92,7 @@ User mới: `proficiencyLevel` và `scope` là `null` thì đi onboarding. Chưa
 |---|---|
 | Chọn level | `PUT /v1/me/levels` `{proficiencyLevel: "A1".."C2"}`; level chỉ dùng để sắp xếp từ mới (từ ≥ level trước), không loại từ nào |
 | Chưa biết level | Làm bài test ngắn thay cho bước trên, xem bên dưới |
-| Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,color,topics:[{id,slug,title,description,iosIcon}]}]}`, đã localize theo `uiLocale`. `color` là `#RRGGBB` hoặc null; `iosIcon` là tên SF Symbol hoặc null. Null hoặc symbol không tồn tại trên máy thì app dùng màu/icon mặc định |
+| Danh sách nội dung | `GET /v1/catalog/collections` → `{collections:[{id,slug,title,description,color,topics:[{id,slug,title,description,iosIcon,color}]}]}`, đã localize theo `uiLocale`. `color` (của Collection và của Topic) là `#RRGGBB` hoặc null; `iosIcon` là tên SF Symbol hoặc null. Màu của Topic cố định theo Topic (không theo thứ hạng), dùng ở mọi nơi vẽ Topic đó (vd. §17). Null hoặc symbol không tồn tại trên máy thì app dùng màu/icon mặc định |
 | Chọn phạm vi học | `PUT /v1/me/scope` `{collectionId, topicIds:[1..100]}`. Topic phải published và thuộc collection, nếu không thì `400` |
 | Cài đặt | `PUT /v1/me/settings` (strict, ít nhất 1 trường): `explanationLocale`, `uiLocale` (`en-US` hoặc `vi-VN`), `timeZone` (IANA, ví dụ `Asia/Ho_Chi_Minh`), `dailyNewWordGoal` (1–30), `weeklySessionGoal` (1–7), `reviewsPerSession` (1–50 hoặc `null`; `null` theo `dailyNewWordGoal`, ít nhất 5), `dailySpeaking` (boolean) |
 
@@ -1257,7 +1257,13 @@ Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays,
     "bucketGranularity": "day",            // day | month | quarter | year
     "wordsAtStart": 120, "wordsAtEnd": 248, "newWords": 128,
     "activeDays": 18, "completedSessions": 26, "reviewedMeanings": 312,
-    "points": [ { "date": "2026-11-01", "cumulativeWords": 124 } /* ... đến hôm nay */ ]
+    "points": [ { "date": "2026-11-01", "cumulativeWords": 124 } /* ... đến hôm nay */ ],
+    "newWordsByTopic": [                   // count giảm dần, rồi title tăng dần; nhóm topicId null luôn cuối
+      { "topicId": "...", "title": "Du lịch", "iosIcon": "airplane", "color": "#2F9BF4",
+        "count": 40, "recentLemmas": ["itinerary", "layover", "customs"], "finishedInPeriod": true },
+      { "topicId": null, "title": null, "iosIcon": null, "color": null,
+        "count": 3, "recentLemmas": ["serendipity"], "finishedInPeriod": false }
+    ]
   }
 }
 ```
@@ -1269,9 +1275,18 @@ Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays,
 - **`completedSessions`:** session commit thành công, mọi mode trừ `checkpoint_challenge`. Match Madness và placement không phải session. Daily tách phần ôn và phần từ mới thành hai session nên tính hai buổi.
 - **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
 - **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
+- **`newWordsByTopic`:** từ mới của kỳ theo Topic. Mỗi Word thuộc đúng một Topic: Topic mà nghĩa đầu tiên của từ được học qua (`learned_via_topic_id` của Meaning có `learned_at` sớm nhất, hoà thì theo meaning id). Vì vậy tổng `count` = `period.newWords`. Mảng rỗng khi kỳ không có từ mới.
+  - `topicId: null`: từ không học qua Topic nào (từ tự thêm, dữ liệu cũ). `title`, `iosIcon`, `color` đều null; app tự localize nhãn (vd. "Từ của bạn").
+  - `title`: tên Topic theo `uiLocale`, giống `GET /catalog/collections`. `iosIcon`, `color`: như catalog (§3).
+  - `color`: app vẽ đoạn của Topic (thanh tỷ lệ) và chấm trước tên bằng màu này; null thì dùng xám trung tính.
+  - `recentLemmas`: tối đa 3 từ của nhóm, mới nhất trước (cùng thứ tự với `recentWords` và danh sách từ).
+  - `finishedInPeriod`: Topic đã học hết (`learnedMeanings` = `totalMeanings` như catalog) **và** lần học cuối cùng trong Topic đó rơi vào kỳ (ngày local). Luôn false cho nhóm null.
+  - App hiện mỗi nhóm một dòng, 4 dòng đầu rồi "Xem thêm"; chạm một dòng mở sheet danh sách từ của Topic đó bằng `words?topicId=`.
 - Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.
 
-`GET /v1/me/learning-journey/words?period=week|month|all&limit=20&offset=0` (limit 1–50): các từ học lần đầu trong kỳ, mới nhất trước, cùng cách đếm và múi giờ với `newWords` (nên `total` = `period.newWords`).
+`GET /v1/me/learning-journey/words?period=week|month|all&limit=20&offset=0[&topicId=]` (limit 1–50): các từ học lần đầu trong kỳ, mới nhất trước, cùng cách đếm và múi giờ với `newWords` (nên `total` = `period.newWords`).
+
+- `topicId` (tuỳ chọn): một uuid → chỉ các từ được gán cho Topic đó theo quy tắc của `newWordsByTopic`; `none` → chỉ nhóm `topicId: null`. Khi lọc, `total` = `count` của nhóm đó. Giá trị khác → 400. Bỏ trống → mọi từ của kỳ.
 
 ```jsonc
 { "total": 128,

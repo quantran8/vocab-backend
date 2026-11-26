@@ -1,21 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { HISTORY_BUCKET, HISTORY_PERIOD, HistoryBucket, HistoryPeriod, SESSION_MODE, SESSION_STATUS } from '../../../common/constants/domain';
+import { HISTORY_BUCKET, HISTORY_PERIOD, HistoryBucket, HistoryPeriod, JOURNEY_TOPIC_FILTER, SESSION_MODE, SESSION_STATUS } from '../../../common/constants/domain';
 import { POLICY } from '../../../config/policy';
 import { DB, Db } from '../../../db/db';
+import { topicMeaningsSql } from '../../catalog/repositories/topic-meanings.sql';
 
 export type HistoryDayRow = { date: string; sessions: number; newWords: number };
 export type HistoryPointRow = { date: string; cumulativeWords: number };
+export type HistoryTopicRow = {
+  topicId: string | null; title: string | null; iosIcon: string | null; color: string | null; count: number; recentLemmas: string[]; finishedInPeriod: boolean;
+};
 export type HistoryRow = {
   timeZone: string; weeklySessionGoal: number; today: string; firstDay: string | null;
   weekStart: string; weekEnd: string; periodStart: string; periodEnd: string; bucket: HistoryBucket;
   wordsAtStart: number; wordsAtEnd: number; activeDays: number; completedSessions: number; reviewedMeanings: number;
   days: HistoryDayRow[]; points: HistoryPointRow[]; recentWords: { wordId: string; lemma: string }[];
+  newWordsByTopic: HistoryTopicRow[];
 };
+
+/** A Topic id, `none` for words learned outside any Topic, or undefined for every word. */
+export type JourneyTopicFilter = string | undefined;
 
 export type JourneyWordRow = { wordId: string; lemma: string; meaningTexts: string[]; learnedOn: string };
 
-/** Home names this many of the week's newest words. */
+/** Home names this many of the week's newest words; each topic row names as many of its own. */
 const RECENT_WORDS = 3;
 
 const { monthlyBucketsUpToMonths, quarterlyBucketsUpToMonths } = POLICY.learningHistory;
@@ -27,14 +35,15 @@ const iso = (column: ReturnType<typeof sql>) => sql`to_char(${column}, 'YYYY-MM-
  */
 const periodCtes = (userId: string, period: HistoryPeriod, now: Date) => sql`
       cfg AS (
-        SELECT time_zone AS tz, weekly_session_goal::int AS goal, (${now}::timestamptz AT TIME ZONE time_zone)::date AS today
+        SELECT time_zone AS tz, ui_locale, weekly_session_goal::int AS goal, (${now}::timestamptz AT TIME ZONE time_zone)::date AS today
         FROM user_settings WHERE user_id = ${userId}::uuid
       ), firsts AS (
-        -- A Word counts once, when its first Meaning was learned; learned_at is never rewritten.
-        SELECT wt.word_id, min(p.learned_at) AS at, (min(p.learned_at) AT TIME ZONE cfg.tz)::date AS day
+        -- A Word counts once, when its first Meaning was learned (learned_at is never rewritten), in that Meaning's topic.
+        SELECT DISTINCT ON (wt.word_id) wt.word_id, p.learned_at AS at, (p.learned_at AT TIME ZONE cfg.tz)::date AS day,
+          p.learned_via_topic_id AS topic_id
         FROM cfg, user_meaning_progress p JOIN meanings m ON m.id = p.meaning_id JOIN word_types wt ON wt.id = m.type_id
         WHERE p.user_id = ${userId}::uuid AND p.learned_at <= ${now}::timestamptz
-        GROUP BY wt.word_id, cfg.tz
+        ORDER BY wt.word_id, p.learned_at, p.meaning_id
       ), sess AS (
         SELECT s.id, (s.committed_at AT TIME ZONE cfg.tz)::date AS day
         FROM cfg, learning_sessions s
@@ -74,6 +83,20 @@ export class LearningHistoryRepository {
       ), buckets AS (
         SELECT b::date AS start_day, (b + g.step)::date AS end_day
         FROM grain g, generate_series(date_trunc(g.unit, g.period_start::timestamp), g.today::timestamp, g.step) b
+      ), in_period AS (
+        SELECT f.word_id, f.at, f.topic_id, row_number() OVER (PARTITION BY f.topic_id ORDER BY f.at DESC, f.word_id) AS rank
+        FROM firsts f, span WHERE f.day >= span.period_start AND f.day < span.period_end
+      ), topic_groups AS (
+        SELECT ip.topic_id, count(*)::int AS count,
+          COALESCE(json_agg(w.lemma ORDER BY ip.at DESC, ip.word_id) FILTER (WHERE ip.rank <= ${RECENT_WORDS}::int), '[]'::json) AS recent
+        FROM in_period ip JOIN words w ON w.id = ip.word_id GROUP BY ip.topic_id
+      ), topic_done AS (
+        -- Finished as the catalog counts it (learned = total), stamped with the Topic's last learning.
+        SELECT x.topic_id, count(DISTINCT x.meaning_id) FILTER (WHERE x.learned_at IS NOT NULL) = count(DISTINCT x.meaning_id) AS complete,
+          max(x.learned_at) AS last_at
+        FROM (${topicMeaningsSql(userId)}) x
+        WHERE x.topic_id IN (SELECT topic_id FROM topic_groups WHERE topic_id IS NOT NULL)
+        GROUP BY x.topic_id
       )
       SELECT
         g.tz AS "timeZone", g.goal AS "weeklySessionGoal", ${iso(sql`g.today`)} AS today, ${iso(sql`g.first_day`)} AS "firstDay",
@@ -97,25 +120,39 @@ export class LearningHistoryRepository {
          FROM generate_series(g.week_start::timestamp, g.week_start::timestamp + interval '6 days', interval '1 day') d) AS days,
         (SELECT json_agg(json_build_object('date', ${iso(sql`LEAST(b.end_day - 1, g.today)`)},
             'cumulativeWords', (SELECT count(*) FROM firsts WHERE firsts.day < b.end_day)) ORDER BY b.start_day)
-         FROM buckets b) AS points
+         FROM buckets b) AS points,
+        (SELECT COALESCE(json_agg(json_build_object(
+            'topicId', tg.topic_id, 'title', COALESCE(tl.title, t.title), 'iosIcon', t.ios_icon, 'color', t.color, 'count', tg.count,
+            'recentLemmas', tg.recent,
+            'finishedInPeriod', COALESCE(td.complete AND (td.last_at AT TIME ZONE g.tz)::date >= g.period_start
+              AND (td.last_at AT TIME ZONE g.tz)::date < g.period_end, false)
+          ) ORDER BY tg.topic_id IS NULL, tg.count DESC, COALESCE(tl.title, t.title), tg.topic_id), '[]'::json)
+         FROM topic_groups tg
+         LEFT JOIN topics t ON t.id = tg.topic_id
+         LEFT JOIN topic_localizations tl ON tl.topic_id = tg.topic_id AND tl.locale = g.ui_locale
+         LEFT JOIN topic_done td ON td.topic_id = tg.topic_id) AS "newWordsByTopic"
       FROM grain g`);
     return row;
   }
 
   /**
    * Words first learned in the period, newest first, with the meanings of each learned in that period (as the
-   * learner reads them, their own edit included). One statement; `total` counts the whole period.
+   * learner reads them, their own edit included). One statement; `total` counts the whole period, or the topic's words.
    */
-  async words(userId: string, period: HistoryPeriod, now: Date, limit: number, offset: number) {
+  async words(userId: string, period: HistoryPeriod, now: Date, limit: number, offset: number, topic: JourneyTopicFilter) {
+    const inTopic = topic === undefined ? sql`TRUE`
+      : topic === JOURNEY_TOPIC_FILTER.NONE ? sql`f.topic_id IS NULL` : sql`f.topic_id = ${topic}::uuid`;
     const { rows: [row] } = await this.db.execute<{ total: number; items: JourneyWordRow[] | null }>(sql`
-      WITH ${periodCtes(userId, period, now)}, picked AS (
+      WITH ${periodCtes(userId, period, now)}, chosen AS (
         SELECT f.word_id, f.at, f.day FROM firsts f, span
-        WHERE f.day >= span.period_start AND f.day < span.period_end
+        WHERE f.day >= span.period_start AND f.day < span.period_end AND ${inTopic}
+      ), picked AS (
+        SELECT f.word_id, f.at, f.day FROM chosen f
         ORDER BY f.at DESC, f.word_id
         LIMIT ${limit}::int OFFSET ${offset}::int
       )
       SELECT
-        (SELECT count(*)::int FROM firsts f, span WHERE f.day >= span.period_start AND f.day < span.period_end) AS total,
+        (SELECT count(*)::int FROM chosen) AS total,
         (SELECT json_agg(json_build_object(
             'wordId', pk.word_id, 'lemma', w.lemma, 'learnedOn', ${iso(sql`pk.day`)},
             'meaningTexts', (

@@ -245,6 +245,8 @@ export type HistoryPeriod = (typeof HISTORY_PERIOD)[keyof typeof HISTORY_PERIOD]
 export const HISTORY_PERIODS = Object.values(HISTORY_PERIOD);
 export const HISTORY_BUCKET = { DAY: 'day', MONTH: 'month', QUARTER: 'quarter', YEAR: 'year' } as const;
 export type HistoryBucket = (typeof HISTORY_BUCKET)[keyof typeof HISTORY_BUCKET];
+/** `topicId` filter of the journey's word list for words learned outside any Topic. */
+export const JOURNEY_TOPIC_FILTER = { NONE: 'none' } as const;
 
 export const CONTENT_REPORT_SOURCE = { LEARN_CARD: 'learn_card', PRACTICE_TASK: 'practice_task', WORD_DETAIL: 'word_detail' } as const;
 export type ContentReportSource = (typeof CONTENT_REPORT_SOURCE)[keyof typeof CONTENT_REPORT_SOURCE];

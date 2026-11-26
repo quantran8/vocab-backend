@@ -104,7 +104,7 @@ describe('scope completion and review load', () => {
       const { collections } = (await api('get', '/v1/catalog/collections').expect(200)).body;
       const collection = collections.find((c: { id: string }) => c.id === a.collectionId);
       expect(collection).toMatchObject({ learnedMeanings: 1, totalMeanings: 3, color: null });
-      expect(collection.topics[0]).toMatchObject({ id: a.topicId, learnedMeanings: 1, totalMeanings: 3, iosIcon: null });
+      expect(collection.topics[0]).toMatchObject({ id: a.topicId, learnedMeanings: 1, totalMeanings: 3, iosIcon: null, color: null });
     });
   });
 

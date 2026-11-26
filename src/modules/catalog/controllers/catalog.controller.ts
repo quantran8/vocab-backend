@@ -22,7 +22,7 @@ export class CatalogController {
     });
     return {
       collections: rows.map((c) => ({
-        ...view(c), color: c.color, topics: c.topics.map((t) => ({ ...view(t), iosIcon: t.iosIcon })),
+        ...view(c), color: c.color, topics: c.topics.map((t) => ({ ...view(t), iosIcon: t.iosIcon, color: t.color })),
       })),
     };
   }
