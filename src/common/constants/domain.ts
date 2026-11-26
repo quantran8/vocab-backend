@@ -240,6 +240,12 @@ export type JourneyNodeState = (typeof JOURNEY_NODE_STATE)[keyof typeof JOURNEY_
 export const JOURNEY_SEGMENT_STATUS = { COMPLETED: 'completed', ACTIVE: 'active', PREVIEW: 'preview' } as const;
 export type JourneySegmentStatus = (typeof JOURNEY_SEGMENT_STATUS)[keyof typeof JOURNEY_SEGMENT_STATUS];
 
+export const HISTORY_PERIOD = { WEEK: 'week', MONTH: 'month', ALL: 'all' } as const;
+export type HistoryPeriod = (typeof HISTORY_PERIOD)[keyof typeof HISTORY_PERIOD];
+export const HISTORY_PERIODS = Object.values(HISTORY_PERIOD);
+export const HISTORY_BUCKET = { DAY: 'day', MONTH: 'month', QUARTER: 'quarter', YEAR: 'year' } as const;
+export type HistoryBucket = (typeof HISTORY_BUCKET)[keyof typeof HISTORY_BUCKET];
+
 export const GAME_MODE = { MATCH_MADNESS: 'match_madness' } as const;
 export type GameMode = (typeof GAME_MODE)[keyof typeof GAME_MODE];
 export const CHALLENGE_ROLE = { CORE: 'core', REVIEW: 'review' } as const;

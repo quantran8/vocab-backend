@@ -108,6 +108,8 @@ export const POLICY = {
   },
   // Legacy: no new challenges are generated and nothing gates Daily; the Challenge Map replaces them.
   checkpoint: { defaultSessionsPerChallenge: 7, maxSessionsPerChallenge: 7 },
+  // All-time chart: monthly points up to this span, then quarterly, then yearly.
+  learningHistory: { monthlyBucketsUpToMonths: 24, quarterlyBucketsUpToMonths: 120 },
   journey: { defaultHistorySegments: 2, maxHistorySegments: 10, defaultFutureSegments: 1, maxFutureSegments: 3 },
   // Match Madness [TRIAL]: recognition practice only, never SRS or speaking progress. Bump `version` when any value changes.
   challenge: {

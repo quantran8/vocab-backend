@@ -1155,6 +1155,7 @@ describe('Vocab Flow API', () => {
       const home = await h.countQueries(() => api('get', '/v1/me/learn-home').expect(200));
       const list = await h.countQueries(() => api('get', '/v1/me/words').expect(200));
       const path = await h.countQueries(() => api('get', '/v1/me/journey').expect(200));
+      const history = await h.countQueries(() => api('get', '/v1/me/learning-journey?period=all').expect(200));
       await api('put', '/v1/me/settings').send({ leaderboardVisible: true }).expect(200);
       const ranking = await h.countQueries(() => api('get', '/v1/me/ranking').expect(200));
       const tier = await h.countQueries(() => api('get', '/v1/me/tier').expect(200));
@@ -1176,7 +1177,7 @@ describe('Vocab Flow API', () => {
       const detail = await h.countQueries(() => api('get', `/v1/words/${wordId}`).expect(200));
       const stats = await h.countQueries(() => api('get', '/v1/me/words/stats').expect(200));
       return {
-        plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries,
+        plan: planned.queries, commit: committed.queries, home: home.queries, words: list.queries, journey: path.queries, learningJourney: history.queries,
         ranking: ranking.queries, tier: tier.queries, top: top.queries, around: around.queries, me: me.queries,
         reviewCommit: reviewed.queries, practiceCommit: practiced.queries,
         speakingPlan: spoken.queries, speakingCommit: speakingCommit.queries, wordDetail: detail.queries, wordStats: stats.queries,

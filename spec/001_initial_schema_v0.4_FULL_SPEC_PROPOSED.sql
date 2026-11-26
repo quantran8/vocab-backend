@@ -328,6 +328,7 @@ CREATE TABLE learning_sessions (
 );
 CREATE INDEX idx_sessions_user_issued ON learning_sessions(user_id, issued_at DESC);
 CREATE INDEX idx_sessions_expiry ON learning_sessions(expires_at) WHERE status = 'issued';
+CREATE INDEX idx_sessions_user_committed ON learning_sessions(user_id, committed_at) WHERE status = 'committed';
 
 -- Azure result receipt is temporary technical staging, not learned progress.
 CREATE TABLE speech_assessment_receipts (

@@ -1214,3 +1214,40 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 | `409 REDEEM_ALREADY_USED` | Tài khoản này đã dùng code |
 
 Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays, maxUses?, expiresAt?, note?}`, `POST /admin/redeem-codes/{code}/disable`.
+
+## 17. Hành trình học tập (lịch sử)
+
+`GET /v1/me/learning-journey?period=week|month|all` (mặc định `week`). Home gọi `week`; màn chi tiết mặc định `month`. Chỉ đọc lịch sử, không ảnh hưởng plan hay commit. Không liên quan `GET /v1/me/journey` (deprecated, §4).
+
+```jsonc
+{
+  "asOf": "2026-11-26T04:00:00.000Z",
+  "timezone": "Asia/Ho_Chi_Minh",          // = user_settings.timeZone
+  "historyAvailableFrom": "2026-08-01",    // ngày local đầu tiên có học; null khi chưa học bao giờ
+  "historyComplete": true,                 // luôn true: lịch sử có đủ từ ngày đầu
+  "week": {                                // luôn là tuần hiện tại, T2–CN, không theo period
+    "startDate": "2026-11-23", "endDateExclusive": "2026-11-30",
+    "newWords": 24, "completedSessions": 5, "activeDays": 4,
+    "weeklySessionGoal": 7,
+    "days": [
+      { "date": "2026-11-23", "completed": true, "completedSessions": 2, "newWords": 5 },
+      // ... ngày tương lai: completed/completedSessions/newWords đều null
+    ]
+  },
+  "period": {
+    "kind": "month", "startDate": "2026-11-01", "endDateExclusive": "2026-12-01",
+    "bucketGranularity": "day",            // day | month | quarter | year
+    "wordsAtStart": 120, "wordsAtEnd": 248, "newWords": 128,
+    "activeDays": 18, "completedSessions": 26, "reviewedMeanings": 312,
+    "points": [ { "date": "2026-11-01", "cumulativeWords": 124 } /* ... đến hôm nay */ ]
+  }
+}
+```
+
+- **Mục tiêu tuần tính theo buổi:** hiển thị `week.completedSessions / weeklySessionGoal` (cùng setting với lộ trình checkpoint). Vượt mục tiêu thì hiện số thật. `activeDays` và `days[].completed` dùng cho dải ngày.
+- **Ngày** là ngày lịch theo `timeZone` trong settings, không theo request. Client cập nhật `PUT /v1/me/settings {timeZone}` khi múi giờ máy đổi rồi tải lại. Đổi múi giờ có thể dời ngày của các buổi cũ, tổng không đổi.
+- **Từ mới / `cumulativeWords`:** số Word (không phải Meaning) học lần đầu. Hai nghĩa của một từ tính một. Không giảm khi đổi scope, tạm dừng ôn hay quên; chỉ xoá tài khoản mới xoá.
+- **`completedSessions`:** session commit thành công, mọi mode trừ `checkpoint_challenge`. Match Madness và placement không phải session. Daily tách phần ôn và phần từ mới thành hai session nên tính hai buổi.
+- **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
+- **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
+- Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.

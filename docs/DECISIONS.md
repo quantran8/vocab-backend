@@ -119,6 +119,18 @@ Built from "Syll — Ranking & Tier" v1.2, whose LP formula (§2) stands in for 
 | Ads | `features.adEverySessions` (`AD_EVERY_SESSIONS`, default 3; 0 off, and 0 while freemium is off). The app counts finished sessions on the device and shows a Google AdMob interstitial after every Nth, only to learners with `plan.limits` | The server tunes frequency without an app release; counting locally keeps it off the commit path |
 | Redeem codes | `REDEEM_ENABLED` (default `false`); off, `POST /me/redeem` is `404`. A code adds `durationDays` after any redeemed time still left (never on top of a subscription). One use per account, `maxUses` in total. Admins create, list and disable codes at `/admin/redeem-codes` | Promotions without App Store offer codes |
 
+## Learning journey history
+
+| Topic | Current behavior | Why |
+| --- | --- | --- |
+| Data source | `GET /v1/me/learning-journey` reads `user_meaning_progress.learned_at`, committed `learning_sessions` and `memory_observations`; no ledger table, no backfill. One SQL statement | `learned_at` is never overwritten and these rows are only deleted with the account, so history is complete from day one |
+| Weekly goal | Counted in sessions against `weekly_session_goal`, not in days | Product decision 2026-11-26: one goal setting, same unit as the checkpoint path |
+| Time zone | `user_settings.time_zone`; the request carries none | One source per account, so two devices never disagree; review-load already uses it |
+| Word | Counted per Word (`word_types.word_id`), first Meaning learned wins | A Word with several Meanings is one new word to the learner |
+| Sessions | Committed sessions of every mode except `checkpoint_challenge`. A Daily split into reviews then new words counts twice | There is no flow id to merge them by |
+| Reviews | One per (session, Meaning) with a memory observation, excluding Meanings that session learned | Observations already exclude failed known-checks and skipped tasks |
+| LP days differ | LP `scoring_day` is UTC; journey days are local | The two are never shown side by side |
+
 ## Session result statistics
 
 Built from "Session Result Statistics v1" (v1 daily + v1.1 Random/Weak, iOS repo). Contract: `FRONTEND_FLOW.md` §15.

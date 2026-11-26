@@ -82,6 +82,9 @@ import { RankingRepository } from './modules/ranking/repositories/ranking.reposi
 import { RankingService } from './modules/ranking/services/ranking.service';
 import { AdminRedeemCodesController, AppStoreNotificationsController, MeEntitlementController } from './modules/entitlement/controllers/entitlement.controller';
 import { EntitlementRepository } from './modules/entitlement/repositories/entitlement.repository';
+import { LearningHistoryController } from './modules/learning-history/controllers/learning-history.controller';
+import { LearningHistoryRepository } from './modules/learning-history/repositories/learning-history.repository';
+import { LearningHistoryService } from './modules/learning-history/services/learning-history.service';
 import { AppStoreService } from './modules/entitlement/services/appstore.service';
 import { EntitlementService } from './modules/entitlement/services/entitlement.service';
 
@@ -89,7 +92,7 @@ import { EntitlementService } from './modules/entitlement/services/entitlement.s
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
+    SessionCommitController, SpeechController, CheckpointController, JourneyController, LearningHistoryController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController, AdminAudioController,
     MeRankingController, RankingController, HealthController, MeEntitlementController, AppStoreNotificationsController, AdminRedeemCodesController,
   ],
@@ -108,7 +111,7 @@ import { EntitlementService } from './modules/entitlement/services/entitlement.s
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker, PronunciationAudio, ReviewLoadRepository, ReviewLoadService,
     EffortRepository, RankingRepository, RankingService, AdminRankingService, AdminAudioRepository, AdminAudioService,
-    EntitlementRepository, EntitlementService, AppStoreService,
+    EntitlementRepository, EntitlementService, AppStoreService, LearningHistoryRepository, LearningHistoryService,
   ],
 })
 export class AppModule {}
