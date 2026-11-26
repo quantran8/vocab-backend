@@ -18,6 +18,10 @@ import { createHttpAdapter } from '../../src/common/http/http-adapter';
 import { DB, Db, QueryStats } from '../../src/db/db';
 import { AdminService } from '../../src/modules/admin/services/admin.service';
 import { AudioStorage } from '../../src/modules/custom-words/providers/audio-storage';
+import { ApiError } from '../../src/common/http/api-error';
+import type { PlaySubscription } from '../../src/modules/entitlement/domain/playstore';
+import { GooglePlayClient } from '../../src/modules/entitlement/providers/google-play.client';
+import { PubSubPushVerifier } from '../../src/modules/entitlement/providers/pubsub-push.verifier';
 import { CustomWordsService } from '../../src/modules/custom-words/services/custom-words.service';
 import { GeneratedWord, GenerateRequest, LexicalProvider, SourceMeaning, TranslatedMeaning } from '../../src/modules/custom-words/providers/lexical.provider';
 import { TtsProvider } from '../../src/modules/custom-words/providers/tts.provider';
@@ -136,6 +140,27 @@ export class FakeAudioStorage extends AudioStorage {
   }
 }
 
+/** Subscriptions by purchase token for `PLAY_PACKAGE`; `error` stands for Google failing. */
+export class FakeGooglePlay extends GooglePlayClient {
+  subscriptions = new Map<string, PlaySubscription>();
+  calls: string[] = [];
+  error?: Error;
+  async subscription(packageName: string, purchaseToken: string) {
+    this.calls.push(purchaseToken);
+    if (this.error) throw this.error;
+    return packageName === PLAY_PACKAGE ? this.subscriptions.get(purchaseToken) ?? null : null;
+  }
+}
+
+export const PLAY_PACKAGE = 'com.syll';
+export const PUSH_TOKEN = 'good-push-token';
+
+export class FakePushVerifier extends PubSubPushVerifier {
+  async verify(authorization: string | undefined) {
+    if (authorization !== `Bearer ${PUSH_TOKEN}`) throw new ApiError('UNAUTHORIZED', 'Invalid push token');
+  }
+}
+
 export const seedWord = (i: number, overrides: Partial<SeedWord> = {}): SeedWord => {
   const lemma = `word${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + (Math.floor(i / 26) % 26))}`;
   return {
@@ -161,6 +186,7 @@ export interface Harness {
   lexical: FakeLexical;
   tts: FakeTts;
   authAdmin: FakeAuthAdmin;
+  play: FakeGooglePlay;
   customWords: CustomWordsService;
   planner: PlannerService;
   http: () => ReturnType<typeof request>;
@@ -255,12 +281,15 @@ export async function createHarness(): Promise<Harness> {
   const speech = new FakeSpeech();
   const lexical = new FakeLexical();
   const tts = new FakeTts();
+  const play = new FakeGooglePlay();
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(Clock).useValue(clock)
     .overrideProvider(SpeechProvider).useValue(speech)
     .overrideProvider(LexicalProvider).useValue(lexical)
     .overrideProvider(TtsProvider).useValue(tts)
     .overrideProvider(AudioStorage).useValue(new FakeAudioStorage())
+    .overrideProvider(GooglePlayClient).useValue(play)
+    .overrideProvider(PubSubPushVerifier).useValue(new FakePushVerifier())
     .compile();
   const app = module.createNestApplication<NestFastifyApplication>(createHttpAdapter());
   configureCors(app);
@@ -271,7 +300,7 @@ export async function createHarness(): Promise<Harness> {
   const stats = app.get(QueryStats);
 
   return {
-    app, db, authUsers, authAdmin, clock, speech, lexical, tts,
+    app, db, authUsers, authAdmin, clock, speech, lexical, tts, play,
     customWords: app.get(CustomWordsService),
     count: async (table, where) => (await db.select({ n: countRows() }).from(table).where(where))[0].n,
     first: async (table, where) => {
@@ -296,6 +325,8 @@ export async function createHarness(): Promise<Harness> {
       lexical.invalid.clear();
       Object.assign(tts, { calls: [], voices: [], error: undefined });
       Object.assign(authAdmin, { deleted: [], deleteStatus: 200 });
+      Object.assign(play, { calls: [], error: undefined });
+      play.subscriptions.clear();
       const { rows } = await db.execute<{ tablename: string }>(sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
       await db.execute(sql.raw(`TRUNCATE ${rows.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`));
     },

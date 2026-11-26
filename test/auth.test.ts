@@ -52,6 +52,16 @@ describe('Auth', () => {
     await post('google', { idToken: 'bad' }).expect(401);
   });
 
+  it('sends Sign in with Apple web results back to the Android app', async () => {
+    const res = await h.http().post('/v1/auth/apple/callback').type('form')
+      .send({ id_token: 'apple-token', state: 's1', code: 'c1', user: '{"email":"x@privaterelay.appleid.com"}' })
+      .expect(303);
+    expect(res.headers.location).toBe('intent://callback?id_token=apple-token&state=s1#Intent;package=com.syll;scheme=syll-apple;end');
+
+    const cancelled = await h.http().post('/v1/auth/apple/callback').type('form').send({ error: 'user_cancelled_authorize', state: 's2' }).expect(303);
+    expect(cancelled.headers.location).toBe('intent://callback?state=s2&error=user_cancelled_authorize#Intent;package=com.syll;scheme=syll-apple;end');
+  });
+
   it('refreshes a session', async () => {
     await post('refresh', { refreshToken: 'refresh-a@example.com' }).expect(200);
     await post('refresh', { refreshToken: 'stale' }).expect(401);

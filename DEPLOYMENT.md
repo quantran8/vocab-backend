@@ -50,6 +50,7 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | from `.env` |
 | `AZURE_SPEECH_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY` | optional; unset disables that provider |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | R2 API token for audio uploads; unset disables generated audio |
+| `PLAYSTORE_SERVICE_ACCOUNT_JSON` | base64 of the Play service account's JSON key (`base64 -i key.json`); the account needs "View financial data" in Play Console. Unset: Play purchases answer `503 PLAYSTORE_UNAVAILABLE` |
 
 **Variables**:
 
@@ -62,7 +63,8 @@ push to master ──> build arm64 image ──> OCIR (vocab-backend repo) ─�
 | `BUILD_PLATFORM` | `linux/arm64` (default) or `linux/amd64` |
 | `APP_PORT` | loopback port on the VM, default `3001` (money-space uses 3000) |
 | `EDGE_DIR` | money-space's `APP_DIR`, default `/opt/money-space` |
-| optional | `AZURE_SPEECH_REGION`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_VOICE_OPTIONS`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED`, `FREEMIUM_ENABLED`, `FREE_MAX_TOPICS`, `FREE_MAX_NEW_WORDS`, `REDEEM_ENABLED`, `AD_EVERY_SESSIONS`, `APPSTORE_BUNDLE_ID`, `APPSTORE_PRODUCT_IDS` |
+| optional | `AZURE_SPEECH_REGION`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `LEXICAL_AI_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_VOICE_OPTIONS`, `DB_POOL_SIZE`, `JWT_AUDIENCE`, `ENABLE_CRON`, `RANKING_ENABLED`, `FREEMIUM_ENABLED`, `FREE_MAX_TOPICS`, `FREE_MAX_NEW_WORDS`, `REDEEM_ENABLED`, `AD_EVERY_SESSIONS`, `APPSTORE_BUNDLE_ID`, `APPSTORE_PRODUCT_IDS`, `PLAYSTORE_PACKAGE_NAME`, `PLAYSTORE_PRODUCT_IDS` |
+| `PLAYSTORE_PUSH_AUDIENCE`, `PLAYSTORE_PUSH_SERVICE_ACCOUNT` | audience and service account email of the Pub/Sub push subscription for Play Real-time Developer Notifications (push URL `https://<domain>/v1/playstore/notifications`). Unset audience refuses every push |
 | `CORS_ORIGINS` | comma-separated browser origins allowed to call the API, e.g. `https://vocab-admin.vercel.app`. Unset keeps CORS off |
 | `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` | login name and address of the seeded admin. Without them the admin signs in by email only. The password is not deployed: `pnpm db:seed` reads it from your local `.env` |
 

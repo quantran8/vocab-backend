@@ -471,10 +471,14 @@ describe('custom words', () => {
       await api('put', '/v1/me/settings').send({ dailyNewWordGoal: 1 }).expect(200);
       const p = await plan();
       await api('post', `/v1/sessions/${p.sessionId}/commit`).send(answers(p)).expect(200);
-      expect(JSON.stringify((await api('get', '/v1/me/words').expect(200)).body)).toContain(edits.meaningText);
+      const words = (await api('get', '/v1/me/words').expect(200)).body;
+      expect(JSON.stringify(words)).toContain(edits.meaningText);
+      const detail = async () => (await api('get', `/v1/words/${words.words[0].wordId}`).expect(200)).body.meanings[0];
+      expect(await detail()).toMatchObject({ meaningId, edited: true });
 
       await api('delete', `/v1/custom-words/${meaningId}/override`).expect(200);
       expect(JSON.stringify((await api('get', '/v1/me/words').expect(200)).body)).not.toContain(edits.meaningText);
+      expect(await detail()).toMatchObject({ edited: false });
     });
 
     it('returns the definition and examples on progress views', async () => {

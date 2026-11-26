@@ -29,3 +29,10 @@ export const recoverVerifySchema = z.strictObject({ email, code: z.string().trim
 export const changePasswordSchema = z.strictObject({ currentPassword: password, newPassword });
 
 export const refreshSchema = z.strictObject({ refreshToken: z.string().min(1) });
+
+// What Apple posts to `auth/apple/callback`: an ID token, or `error` (e.g. `user_cancelled_authorize`).
+export const appleCallbackSchema = z.object({
+  id_token: z.string().min(1).max(8192).optional(),
+  state: z.string().max(256).optional(),
+  error: z.string().max(256).optional(),
+});

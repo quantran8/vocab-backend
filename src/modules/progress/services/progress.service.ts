@@ -22,12 +22,14 @@ interface MeaningRow {
   nextReviewAt: Date | null;
   lastReviewedAt?: Date | null;
   stability?: number | null;
+  edited?: boolean;
 }
 
 const parseMeaningRows = <T extends RawMeaningRow>(rows: T[]) =>
   rows.map(({ override, ...r }) => ({
     ...r,
     snapshot: applyOverride(r.snapshot, override ?? undefined),
+    edited: override != null,
     learnedAt: r.learnedAt ? toDate(r.learnedAt) : null,
     nextReviewAt: r.nextReviewAt ? toDate(r.nextReviewAt) : null,
     lastReviewedAt: r.lastReviewedAt ? toDate(r.lastReviewedAt) : null,
@@ -76,6 +78,8 @@ function meaningView(row: WordMeaningRow, allowPlaceholderAudio: boolean, now: D
     // Removed for one release: older clients still find the key.
     skills: null,
     needsPractice: row.needsPractice,
+    // The learner's own edit is shown; it cannot be reported (docs/content-reports.md).
+    edited: row.edited,
   };
 }
 

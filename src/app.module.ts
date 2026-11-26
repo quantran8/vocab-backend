@@ -80,18 +80,30 @@ import { EffortRepository } from './modules/learning-points/repositories/effort.
 import { MeRankingController, RankingController } from './modules/ranking/controllers/ranking.controller';
 import { RankingRepository } from './modules/ranking/repositories/ranking.repository';
 import { RankingService } from './modules/ranking/services/ranking.service';
-import { AdminRedeemCodesController, AppStoreNotificationsController, MeEntitlementController } from './modules/entitlement/controllers/entitlement.controller';
+import {
+  AdminRedeemCodesController, AppStoreNotificationsController, MeEntitlementController, PlayStoreNotificationsController,
+} from './modules/entitlement/controllers/entitlement.controller';
+import { GooglePlayApiClient, GooglePlayClient } from './modules/entitlement/providers/google-play.client';
+import { GooglePubSubPushVerifier, PubSubPushVerifier } from './modules/entitlement/providers/pubsub-push.verifier';
 import { EntitlementRepository } from './modules/entitlement/repositories/entitlement.repository';
+import { AdminContentReportController, ContentReportController } from './modules/content-report/controllers/content-report.controller';
+import { ContentReportRepository } from './modules/content-report/repositories/content-report.repository';
+import { ContentReportService } from './modules/content-report/services/content-report.service';
+import { LearningHistoryController } from './modules/learning-history/controllers/learning-history.controller';
+import { LearningHistoryRepository } from './modules/learning-history/repositories/learning-history.repository';
+import { LearningHistoryService } from './modules/learning-history/services/learning-history.service';
 import { AppStoreService } from './modules/entitlement/services/appstore.service';
 import { EntitlementService } from './modules/entitlement/services/entitlement.service';
+import { PlayStoreService } from './modules/entitlement/services/playstore.service';
 
 @Module({
   imports: [DbModule, ScheduleModule.forRoot()],
   controllers: [
     AuthController, IdentityController, PlacementController, CatalogController, ProgressController, SessionPlannerController,
-    SessionCommitController, SpeechController, CheckpointController, JourneyController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
+    SessionCommitController, SpeechController, CheckpointController, JourneyController, LearningHistoryController, ContentReportController, AdminContentReportController, ChallengeController, ReviewLoadController, CustomWordsController, AdminController,
     AdminWordsController, AdminPracticeItemsController, AdminCatalogController, AdminUsersController, AdminRankingController, AdminAudioController,
-    MeRankingController, RankingController, HealthController, MeEntitlementController, AppStoreNotificationsController, AdminRedeemCodesController,
+    MeRankingController, RankingController, HealthController, MeEntitlementController, AppStoreNotificationsController, PlayStoreNotificationsController,
+    AdminRedeemCodesController,
   ],
   providers: [
     UserIdCache, UserProvisioningRepository, SpeechRepository,
@@ -101,6 +113,8 @@ import { EntitlementService } from './modules/entitlement/services/entitlement.s
     { provide: LexicalProvider, useClass: AnthropicLexicalProvider },
     { provide: TtsProvider, useClass: ElevenLabsTtsProvider },
     { provide: AudioStorage, useClass: R2AudioStorage },
+    { provide: GooglePlayClient, useClass: GooglePlayApiClient },
+    { provide: PubSubPushVerifier, useClass: GooglePubSubPushVerifier },
     AuthProvider, AuthService, IdentityService, PlacementRepository, PlacementService, AccountDeletionService, ProgressService, PlannerRepository, PlannerService, CommitService,
     SpeechService, CheckpointService, JourneyService, ChallengeMapService, ChallengeRunService, ChallengeRepository, MaintenanceService, AdminService, PublicationService,
     AdminRepository, PublicationRepository, AdminWordsRepository, AdminPracticeItemsRepository, AdminCatalogRepository, AdminUsersRepository,
@@ -108,7 +122,9 @@ import { EntitlementService } from './modules/entitlement/services/entitlement.s
     CommitRepository, ProgressRepository, IdentityRepository, AccountDeletionRepository, CheckpointRepository, JourneyRepository, MaintenanceRepository, CatalogRepository,
     CustomWordsRepository, CustomWordsService, CustomWordsWorker, PronunciationAudio, ReviewLoadRepository, ReviewLoadService,
     EffortRepository, RankingRepository, RankingService, AdminRankingService, AdminAudioRepository, AdminAudioService,
-    EntitlementRepository, EntitlementService, AppStoreService,
+    EntitlementRepository, EntitlementService, AppStoreService, LearningHistoryRepository, LearningHistoryService,
+    ContentReportRepository, ContentReportService,
+    EntitlementRepository, EntitlementService, AppStoreService, PlayStoreService,
   ],
 })
 export class AppModule {}

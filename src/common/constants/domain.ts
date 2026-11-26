@@ -240,6 +240,30 @@ export type JourneyNodeState = (typeof JOURNEY_NODE_STATE)[keyof typeof JOURNEY_
 export const JOURNEY_SEGMENT_STATUS = { COMPLETED: 'completed', ACTIVE: 'active', PREVIEW: 'preview' } as const;
 export type JourneySegmentStatus = (typeof JOURNEY_SEGMENT_STATUS)[keyof typeof JOURNEY_SEGMENT_STATUS];
 
+export const HISTORY_PERIOD = { WEEK: 'week', MONTH: 'month', ALL: 'all' } as const;
+export type HistoryPeriod = (typeof HISTORY_PERIOD)[keyof typeof HISTORY_PERIOD];
+export const HISTORY_PERIODS = Object.values(HISTORY_PERIOD);
+export const HISTORY_BUCKET = { DAY: 'day', MONTH: 'month', QUARTER: 'quarter', YEAR: 'year' } as const;
+export type HistoryBucket = (typeof HISTORY_BUCKET)[keyof typeof HISTORY_BUCKET];
+
+export const CONTENT_REPORT_SOURCE = { LEARN_CARD: 'learn_card', PRACTICE_TASK: 'practice_task', WORD_DETAIL: 'word_detail' } as const;
+export type ContentReportSource = (typeof CONTENT_REPORT_SOURCE)[keyof typeof CONTENT_REPORT_SOURCE];
+export const CONTENT_REPORT_REASON = {
+  INCORRECT_MEANING: 'incorrect_meaning',
+  INCORRECT_DEFINITION: 'incorrect_definition',
+  INCORRECT_EXAMPLE: 'incorrect_example',
+  ANSWER_SHOULD_BE_ACCEPTED: 'answer_should_be_accepted',
+  INCORRECT_QUESTION: 'incorrect_question',
+  AUDIO_ISSUE: 'audio_issue',
+  OTHER: 'other',
+} as const;
+export type ContentReportReason = (typeof CONTENT_REPORT_REASON)[keyof typeof CONTENT_REPORT_REASON];
+export const CONTENT_REPORT_REASONS = Object.values(CONTENT_REPORT_REASON);
+export const CONTENT_REPORT_STATUS = { PENDING: 'pending', UNDER_REVIEW: 'under_review', RESOLVED: 'resolved', DISMISSED: 'dismissed' } as const;
+export type ContentReportStatus = (typeof CONTENT_REPORT_STATUS)[keyof typeof CONTENT_REPORT_STATUS];
+export const CONTENT_REPORT_STATUSES = Object.values(CONTENT_REPORT_STATUS);
+export const CONTENT_REPORT_SORT = { OLDEST: 'oldest', MOST_REPORTED: 'most_reported' } as const;
+
 export const GAME_MODE = { MATCH_MADNESS: 'match_madness' } as const;
 export type GameMode = (typeof GAME_MODE)[keyof typeof GAME_MODE];
 export const CHALLENGE_ROLE = { CORE: 'core', REVIEW: 'review' } as const;
@@ -386,8 +410,10 @@ export const RANKING_POSITION_KIND = { RANK: 'rank', PERCENTILE: 'percentile', U
 export type RankingPositionKind = (typeof RANKING_POSITION_KIND)[keyof typeof RANKING_POSITION_KIND];
 export const LEADERBOARD_VIEW = { TOP: 'top', AROUND: 'around' } as const;
 
-export const ENTITLEMENT_SOURCE = { APPSTORE: 'appstore', REDEEM: 'redeem' } as const;
+export const ENTITLEMENT_SOURCE = { APPSTORE: 'appstore', PLAYSTORE: 'playstore', REDEEM: 'redeem' } as const;
 export type EntitlementSource = (typeof ENTITLEMENT_SOURCE)[keyof typeof ENTITLEMENT_SOURCE];
+/** Stored as a Play subscription's environment; App Store rows keep Apple's own value. */
+export const PLAYSTORE_ENVIRONMENT = { SANDBOX: 'sandbox', PRODUCTION: 'production' } as const;
 
 /** active and grace grant Premium until expiresAt; the others never do. */
 export const ENTITLEMENT_STATUS = { ACTIVE: 'active', GRACE: 'grace', EXPIRED: 'expired', REVOKED: 'revoked' } as const;

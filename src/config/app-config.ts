@@ -48,6 +48,20 @@ const envSchema = z.object({
     .string()
     .default('63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179')
     .transform((v) => v.split(',').map((f) => f.replace(/[^0-9a-f]/gi, '').toUpperCase()).filter(Boolean)),
+  PLAYSTORE_PACKAGE_NAME: z.string().regex(/^[A-Za-z][\w.]*$/).default('com.syll'),
+  // Comma-separated subscription product ids that grant Premium.
+  PLAYSTORE_PRODUCT_IDS: z
+    .string()
+    .default('syll.premium.monthly,syll.premium.yearly')
+    .transform((v) => v.split(',').map((p) => p.trim()).filter(Boolean)),
+  // Service account key with access to the Play Developer API: the JSON file's content, raw or base64.
+  PLAYSTORE_SERVICE_ACCOUNT_JSON: z.preprocess((v) => (v === '' ? undefined : v), z.string().transform(parseServiceAccount).optional()),
+  // Audience set on the Pub/Sub push subscription for Real-time Developer Notifications; unset refuses every push.
+  PLAYSTORE_PUSH_AUDIENCE: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  // The push subscription's service account; when set, a push token must carry this email.
+  PLAYSTORE_PUSH_SERVICE_ACCOUNT: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
+  // The Android app that `auth/apple/callback` sends Sign in with Apple's result back to.
+  APPLE_ANDROID_PACKAGE: z.string().regex(/^[A-Za-z][\w.]*$/).default('com.syll'),
   SEED_ADMIN_USERNAME: z.string().trim().toLowerCase().min(1).optional(),
   SEED_ADMIN_EMAIL: z.string().trim().toLowerCase().pipe(z.email()).optional(),
   SEED_ADMIN_PASSWORD: z.string().optional(),
@@ -100,12 +114,42 @@ export class AppConfig {
   readonly appStoreProductIds = this.env.APPSTORE_PRODUCT_IDS;
   readonly appStoreAllowXcode = this.env.APPSTORE_ALLOW_XCODE;
   readonly appStoreRootFingerprints = this.env.APPSTORE_ROOT_FINGERPRINTS;
+  readonly playStorePackageName = this.env.PLAYSTORE_PACKAGE_NAME;
+  readonly playStoreProductIds = this.env.PLAYSTORE_PRODUCT_IDS;
+  readonly playStoreServiceAccount = this.env.PLAYSTORE_SERVICE_ACCOUNT_JSON;
+  readonly playStorePushAudience = this.env.PLAYSTORE_PUSH_AUDIENCE;
+  readonly playStorePushServiceAccount = this.env.PLAYSTORE_PUSH_SERVICE_ACCOUNT;
+  readonly appleAndroidPackage = this.env.APPLE_ANDROID_PACKAGE;
   readonly seedAdminUsername = this.env.SEED_ADMIN_USERNAME;
   readonly seedAdminEmail = this.env.SEED_ADMIN_EMAIL;
   readonly seedAdminPassword = this.env.SEED_ADMIN_PASSWORD;
   readonly corsOrigins = this.env.CORS_ORIGINS;
   readonly appVersion = this.env.APP_VERSION;
   readonly appCommit = this.env.APP_COMMIT;
+}
+
+export interface ServiceAccount {
+  clientEmail: string;
+  privateKey: string;
+  privateKeyId?: string;
+}
+
+const serviceAccountSchema = z.object({ client_email: z.email(), private_key: z.string().min(1), private_key_id: z.string().optional() });
+
+/** A Google service account key file, given as its JSON or base64 of it. */
+export function parseServiceAccount(raw: string, ctx: z.RefinementCtx): ServiceAccount {
+  const text = raw.trim().startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8');
+  let parsed: z.ZodSafeParseResult<z.infer<typeof serviceAccountSchema>>;
+  try {
+    parsed = serviceAccountSchema.safeParse(JSON.parse(text));
+  } catch {
+    parsed = serviceAccountSchema.safeParse(null);
+  }
+  if (!parsed.success) {
+    ctx.addIssue({ code: 'custom', message: 'Not a service account key (JSON or base64 of it)' });
+    return z.NEVER;
+  }
+  return { clientEmail: parsed.data.client_email, privateKey: parsed.data.private_key, privateKeyId: parsed.data.private_key_id };
 }
 
 export function parseVoices(defaultId: string | undefined, options: string | undefined) {

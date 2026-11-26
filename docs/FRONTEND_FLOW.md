@@ -44,6 +44,7 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 | `POST /v1/auth/login` | `{email, password}` | `200 session` |
 | `POST /v1/auth/google` | `{idToken, nonce?}` | `200 session` |
 | `POST /v1/auth/apple` | `{idToken, nonce?}` | `200 session` |
+| `POST /v1/auth/apple/callback` | form Apple post (`id_token`, `state`, `error`) | `303` về app Android |
 | `POST /v1/auth/recover` | `{email}` | `200 {sent: true}` |
 | `POST /v1/auth/recover/verify` | `{email, code, password}` | `200 session` |
 | `POST /v1/auth/refresh` | `{refreshToken}` | `200 session` |
@@ -57,6 +58,7 @@ Backend proxy sang Supabase Auth. Mọi route đều public.
 - **Signup:** nếu project bật xác nhận email, response là `{session: null, confirmationRequired: true}`. Hiện màn "kiểm tra email", sau khi xác nhận thì gọi `login`.
 - **Google:** dùng Google Sign-In SDK trên iOS lấy ID token, gửi `idToken`. Nếu SDK yêu cầu nonce, gửi nonce **gốc** (chưa hash) vào `nonce`. Không có redirect OAuth.
 - **Apple:** Sign in with Apple trên iOS lấy `identityToken`, gửi vào `idToken`. Gửi SHA-256 của nonce cho Apple, nonce **gốc** vào `nonce`. Supabase phải bật provider Apple với bundle ID của app làm client ID.
+- **Apple trên Android (web flow):** app mở `https://appleid.apple.com/auth/authorize` trong Custom Tab với client ID là **Services ID**, `response_type=code id_token`, `response_mode=form_post`, `scope=email`, `state` ngẫu nhiên và nonce đã hash. Return URL của Services ID là `…/v1/auth/apple/callback`: Apple post form về đây, backend chỉ giữ `id_token`, `state`, `error` (bỏ `code`, `user`), không xác thực gì và trả `303` tới `intent://callback?…#Intent;package=<APPLE_ANDROID_PACKAGE>;scheme=syll-apple;end`. App kiểm tra `state` rồi gọi `POST /v1/auth/apple` như iOS. Supabase: thêm Services ID vào **Client IDs** của provider Apple.
 - **Quên mật khẩu:** `recover` gửi email chứa mã (template "Reset Password" của Supabase phải có `{{ .Token }}`). Luôn trả `200` dù email có tài khoản hay không. App hỏi mã + mật khẩu mới rồi gọi `recover/verify`: đúng mã thì đặt mật khẩu mới và trả session (đăng nhập luôn). Sai hoặc hết hạn: `400 RESET_CODE_INVALID`.
 - **Đổi mật khẩu:** `PUT /v1/me/password` (bearer) body `{currentPassword, newPassword}` trả `200 {changed: true}`. Sai mật khẩu hiện tại: `403 WRONG_PASSWORD` (không dùng 401 để client không đăng xuất). Tài khoản chỉ đăng nhập bằng Google/Apple chưa có mật khẩu: dùng "Quên mật khẩu" để tạo.
 - **Lưu token:** Keychain. Refresh token dùng một lần, mỗi lần refresh nhận cặp token mới và phải thay cả hai.
@@ -176,6 +178,7 @@ Response `200 {proficiencyLevel, correctCount, totalCount}`. Level được lưu
   - `needsPractice`: nghĩa đang yếu theo trí nhớ, cùng định nghĩa với Weak (§5). Tắt ngay sau một lần trả lời đúng, không chờ 12h.
   - `skills` luôn là `null` trong một bản phát hành rồi bỏ; không dùng nữa.
   - `needsPractice` ở cấp Word. Không còn `fullyVerified` và trạng thái `verified`.
+  - `edited`: `true` khi meaning đang hiện bản user tự sửa (§11.5). Không hiện nút báo lỗi trên meaning đó (§18).
 
 ## 5. Plan một session
 
@@ -1164,7 +1167,7 @@ Mảng trong `groups` luôn có mặt (rỗng khi không có), thứ tự theo p
 
 ## 16. Premium và giới hạn free
 
-Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1/me` và gửi giao dịch StoreKit lên. Cờ `FREEMIUM_ENABLED` tắt thì `plan.limits` luôn `null`: không giới hạn gì, app cũ vẫn chạy như trước.
+Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1/me` và gửi giao dịch StoreKit (iOS) hoặc purchase Play Billing (Android) lên. Cờ `FREEMIUM_ENABLED` tắt thì `plan.limits` luôn `null`: không giới hạn gì, app cũ vẫn chạy như trước.
 
 ### 16.1 `GET /v1/me` trả thêm
 
@@ -1172,9 +1175,9 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 "plan": {
   "tier": "free",              // free | premium
   "premiumUntil": null,        // ISO, khi premium
-  "source": null,              // appstore | redeem
+  "source": null,              // appstore | playstore | redeem
   "productId": null,           // vd. syll.premium.yearly
-  "autoRenew": null,           // chỉ với appstore, khi đã biết
+  "autoRenew": null,           // chỉ với appstore / playstore, khi đã biết
   "limits": { "maxTopics": 3, "maxNewWords": 150, "newWordsUsed": 42 }  // null khi không bị giới hạn
 },
 "features": { "freemiumEnabled": true, "redeemEnabled": false, "adEverySessions": 3 }  // 0: no ads
@@ -1202,7 +1205,21 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 - Lỗi: `422 APPSTORE_TRANSACTION_INVALID` (chữ ký, bundle, product sai), `409 APPSTORE_TRANSACTION_OWNED` (gói đang thuộc tài khoản khác). Với 409, app hiện thông báo và vẫn `finish()`.
 - Notification URL (production và sandbox) trỏ về `/v1/appstore/notifications`. Gia hạn, grace period, hết hạn, hoàn tiền và thu hồi đều cập nhật `plan`.
 
-### 16.4 Redeem code
+### 16.4 Google Play
+
+| Endpoint | Body | Response |
+|---|---|---|
+| `POST /v1/me/subscriptions/playstore` | `{purchaseToken, productId}` (`Purchase.purchaseToken`, `Purchase.products[0]`) | `200 plan` |
+| `POST /v1/playstore/notifications` | Pub/Sub push của Real-time Developer Notifications (public, xác thực bằng OIDC token của Pub/Sub) | `200 {applied}` |
+
+- App gắn `obfuscatedAccountId = user id` (UUID trong `GET /me`) khi mở billing flow (`BillingFlowParams.setObfuscatedAccountId`).
+- Sau khi profile đã tải, gửi mỗi purchase `PURCHASED` từ `PurchasesUpdatedListener` và từ `queryPurchasesAsync(SUBS)` (khôi phục, gia hạn thấy trên máy). Purchase `PENDING` chưa gửi; nếu có gửi, server trả `200 plan` không cấp gì.
+- Server tự hỏi Google Play Developer API, không acknowledge. App chỉ `acknowledgePurchase` sau khi server trả 200 (Play hoàn tiền purchase không được acknowledge trong 3 ngày).
+- Lỗi: `422 PLAYSTORE_PURCHASE_INVALID` (token không tồn tại, package hoặc product sai): token đó không bao giờ hợp lệ, app bỏ nó và không acknowledge. `409 PLAYSTORE_PURCHASE_OWNED` (gói đang thuộc tài khoản khác): app hiện thông báo và vẫn acknowledge, như `finish()` trên iOS. `503 PLAYSTORE_UNAVAILABLE` (`retryable`): thử lại sau, chưa acknowledge.
+- Nâng/hạ gói hoặc đăng ký lại: purchase mới có `linkedPurchaseToken`, server cho gói cũ hết hạn khi nhận purchase mới.
+- RTDN: topic Pub/Sub trong Play Console, subscription kiểu push trỏ về `https://<api>/v1/playstore/notifications`, bật authentication với audience = `PLAYSTORE_PUSH_AUDIENCE`. Gia hạn, grace period, on hold, huỷ, hết hạn và thu hồi (`revoked`) đều cập nhật `plan`.
+
+### 16.5 Redeem code
 
 `POST /v1/me/redeem {code}` → `200 plan`. Chỉ khi `features.redeemEnabled`; tắt thì `404`. Code không phân biệt hoa thường, bỏ khoảng trắng.
 
@@ -1214,3 +1231,82 @@ Server quyết định ai là Premium. Client chỉ đọc `plan` trong `GET /v1
 | `409 REDEEM_ALREADY_USED` | Tài khoản này đã dùng code |
 
 Admin: `GET /admin/redeem-codes`, `POST /admin/redeem-codes {code, durationDays, maxUses?, expiresAt?, note?}`, `POST /admin/redeem-codes/{code}/disable`.
+
+## 17. Hành trình học tập (lịch sử)
+
+`GET /v1/me/learning-journey?period=week|month|all` (mặc định `week`). Home gọi `week`; màn chi tiết mặc định `month`. Chỉ đọc lịch sử, không ảnh hưởng plan hay commit. Không liên quan `GET /v1/me/journey` (deprecated, §4).
+
+```jsonc
+{
+  "asOf": "2026-11-26T04:00:00.000Z",
+  "timezone": "Asia/Ho_Chi_Minh",          // = user_settings.timeZone
+  "historyAvailableFrom": "2026-08-01",    // ngày local đầu tiên có học; null khi chưa học bao giờ
+  "historyComplete": true,                 // luôn true: lịch sử có đủ từ ngày đầu
+  "week": {                                // luôn là tuần hiện tại, T2–CN, không theo period
+    "startDate": "2026-11-23", "endDateExclusive": "2026-11-30",
+    "newWords": 24, "completedSessions": 5, "activeDays": 4,
+    "weeklySessionGoal": 3,
+    "recentWords": [ { "wordId": "...", "lemma": "resilient" } ],  // tối đa 3, mới nhất trước
+    "days": [
+      { "date": "2026-11-23", "completed": true, "completedSessions": 2, "newWords": 5 },
+      // ... ngày tương lai: completed/completedSessions/newWords đều null
+    ]
+  },
+  "period": {
+    "kind": "month", "startDate": "2026-11-01", "endDateExclusive": "2026-12-01",
+    "bucketGranularity": "day",            // day | month | quarter | year
+    "wordsAtStart": 120, "wordsAtEnd": 248, "newWords": 128,
+    "activeDays": 18, "completedSessions": 26, "reviewedMeanings": 312,
+    "points": [ { "date": "2026-11-01", "cumulativeWords": 124 } /* ... đến hôm nay */ ]
+  }
+}
+```
+
+- **Mục tiêu tuần tính theo ngày học:** Home hiện `week.activeDays / weeklySessionGoal` (app đặt goal = số ngày học người học chọn) bằng thẻ tem: số ô = goal, mỗi ngày có học (`days[].completed`) một tem ghi thứ của ngày đó. Không vẽ 7 ngày, không đánh dấu ngày bỏ lỡ. Vượt mục tiêu thì hiện số thật. `completedSessions` chỉ dùng ở Hoạt động.
+- **`recentWords`:** tối đa 3 từ học lần đầu tuần này, mới nhất trước, cho dòng "resilient, meticulous, ambiguous và 21 từ khác" (21 = `newWords` − số từ đã nêu).
+- **Ngày** là ngày lịch theo `timeZone` trong settings, không theo request. Client cập nhật `PUT /v1/me/settings {timeZone}` khi múi giờ máy đổi rồi tải lại. Đổi múi giờ có thể dời ngày của các buổi cũ, tổng không đổi.
+- **Từ mới / `cumulativeWords`:** số Word (không phải Meaning) học lần đầu. Hai nghĩa của một từ tính một. Không giảm khi đổi scope, tạm dừng ôn hay quên; chỉ xoá tài khoản mới xoá.
+- **`completedSessions`:** session commit thành công, mọi mode trừ `checkpoint_challenge`. Match Madness và placement không phải session. Daily tách phần ôn và phần từ mới thành hai session nên tính hai buổi.
+- **`reviewedMeanings`:** lượt ôn: mỗi Meaning đã học từ trước và có bằng chứng trong một session tính một lần cho session đó. Từ học mới, known-check trượt và task bỏ qua không tính.
+- **`points`:** mỗi bucket một điểm, `date` là ngày cuối bucket (bucket hiện tại kết thúc hôm nay), không có điểm tương lai. Client tự thêm điểm đầu kỳ `wordsAtStart` tại `startDate`. `all` bắt đầu từ `historyAvailableFrom`, gộp theo tháng tới 24 tháng, theo quý tới 10 năm, sau đó theo năm.
+- Lỗi endpoint này không được chặn Home; không hiển thị 0 khi request lỗi.
+
+`GET /v1/me/learning-journey/words?period=week|month|all&limit=20&offset=0` (limit 1–50): các từ học lần đầu trong kỳ, mới nhất trước, cùng cách đếm và múi giờ với `newWords` (nên `total` = `period.newWords`).
+
+```jsonc
+{ "total": 128,
+  "items": [ { "wordId": "...", "lemma": "resilient", "meaningTexts": ["kiên cường", "đàn hồi"], "learnedOn": "2026-11-26" } ] }
+```
+
+- `meaningTexts`: các nghĩa của từ đó học trong kỳ, theo thứ tự học, đúng chữ người học thấy (gồm bản tự sửa). App nối bằng "; ".
+- `learnedOn`: ngày local học từ đó lần đầu. App gom các từ theo ngày này thành dòng thời gian; "Xem thêm" tải trang tiếp và nối vào ngày đang dở.
+
+## 18. Báo lỗi nội dung
+
+`POST /v1/me/content-reports`. Quy tắc đầy đủ: `docs/content-reports.md`. Báo cáo không ảnh hưởng task, attempt, commit, SRS hay LP; gửi trước hoặc sau commit đều được.
+
+```jsonc
+{
+  "clientReportId": "988269d9-0505-4a77-bf2d-4fc4478e033a", // UUID tạo một lần cho mỗi lần gửi, giữ nguyên khi retry
+  "source": "practice_task",                                // learn_card | practice_task | word_detail
+  "reason": "answer_should_be_accepted",
+  "context": {
+    "sessionId": "...", "taskId": "...",                     // learn_card: sessionId + learnStepId; word_detail: meaningId
+    "attemptExcerpt": { "submittedText": "resilient" }      // chỉ practice_task; submittedText | optionId | tileIds | receiptId
+  },
+  "note": "Tôi nghĩ câu này cũng đúng"                       // tuỳ chọn, ≤ 500 ký tự; bắt buộc với other
+}
+```
+
+- Trả `{reportId, duplicate, status: "received"}`. `201`: báo cáo mới. `200`: retry của cùng `clientReportId`, hoặc user đã có báo cáo đang mở cho đúng nội dung và lý do này (`duplicate: true`). Cả hai đều hiện toast thành công.
+- Không gửi nội dung, wordId, revision hay locale: server tự lấy. `learnStepId` và `taskId` là `id` của step/task trong plan.
+- Lý do theo nguồn: `incorrect_question` và `answer_should_be_accepted` chỉ cho `practice_task`, và `answer_should_be_accepted` cần `attemptExcerpt` (chỉ hiện sau khi user đã nộp). `incorrect_meaning`, `incorrect_definition`, `incorrect_example`, `audio_issue`, `other` dùng cho mọi nguồn.
+- Custom word dùng `word_detail` với `meaningId` của nó. Không có nút báo lỗi trên meaning user đã tự sửa: server trả `422 REPORT_TARGET_OVERRIDDEN`.
+- Không có nút trong Checkpoint challenge, Match Madness, placement.
+- Lỗi:
+  - `400 VALIDATION_FAILED`: sai lý do hoặc thiếu note; giữ nháp.
+  - `404 REPORT_CONTEXT_UNAVAILABLE`: không tìm thấy nội dung; đóng sheet.
+  - `409 REPORT_IDEMPOTENCY_CONFLICT`: cùng `clientReportId` nhưng nội dung khác; không retry, tạo id mới nếu user sửa.
+  - `422 REPORT_TARGET_OVERRIDDEN`.
+  - `429 REPORT_LIMIT_REACHED`: quá 20 báo cáo mới trong 24 giờ.
+  - `5xx`/mạng: retry với đúng body và `clientReportId` cũ.

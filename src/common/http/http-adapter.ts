@@ -5,6 +5,7 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 export const REQUEST_ID_HEADER = 'x-request-id';
 
 const JSON_BODY_LIMIT_BYTES = 1024 * 1024;
+const APPLE_FORM_FIELDS = ['id_token', 'state', 'error'];
 
 const logger = new Logger('HTTP');
 
@@ -32,6 +33,14 @@ export function createHttpAdapter() {
     bodyLimit: JSON_BODY_LIMIT_BYTES,
     genReqId: () => randomUUID(),
     routerOptions: { ignoreTrailingSlash: true },
+  });
+  // Sign in with Apple's web flow posts its result as a form (`response_mode=form_post`, see AuthController), the
+  // only form the API takes. Keep just the fields the app needs, before the body is logged: Apple's `user` JSON
+  // carries the email and `code` is a credential.
+  adapter.getInstance().addHook('preValidation', async (request) => {
+    if (!request.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) return;
+    const form = (request.body ?? {}) as Record<string, unknown>;
+    request.body = Object.fromEntries(APPLE_FORM_FIELDS.filter((key) => form[key] !== undefined).map((key) => [key, form[key]]));
   });
   adapter.getInstance().addHook('onRequest', async (request, reply) => {
     reply.header(REQUEST_ID_HEADER, request.id);

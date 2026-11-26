@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
+import { ENTITLEMENT_SOURCE } from '../../../common/constants/domain';
 import { ApiError } from '../../../common/http/api-error';
+import { isUuid } from '../../../common/ids';
 import { AppConfig } from '../../../config/app-config';
 import { Executor } from '../../../db/db';
 import {
@@ -10,8 +12,6 @@ import {
 import { AppleJwsError, verifyAppleJws } from '../domain/apple-jws';
 import { EntitlementRepository } from '../repositories/entitlement.repository';
 import { EntitlementService } from './entitlement.service';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class AppStoreService {
@@ -34,7 +34,7 @@ export class AppStoreService {
     this.assertOurs(tx.bundleId, tx.productId);
     const owner = await this.repository.transactionOwner(tx.originalTransactionId);
     if (owner && owner !== userId) throw new ApiError('APPSTORE_TRANSACTION_OWNED');
-    await this.repository.upsertAppStore(userId, entitlementFrom(tx, null, null), this.clock.now());
+    await this.repository.upsertSubscription(userId, ENTITLEMENT_SOURCE.APPSTORE, entitlementFrom(tx, null, null), this.clock.now());
     return this.entitlements.plan(userId);
   }
 
@@ -63,7 +63,7 @@ export class AppStoreService {
         this.logger.warn(`No account for original transaction ${tx.originalTransactionId}`);
         return;
       }
-      await this.repository.upsertAppStore(userId, entitlementFrom(tx, renewal, notification.notificationType), this.clock.now(), db);
+      await this.repository.upsertSubscription(userId, ENTITLEMENT_SOURCE.APPSTORE, entitlementFrom(tx, renewal, notification.notificationType), this.clock.now(), db);
     });
     return { applied };
   }
@@ -72,7 +72,7 @@ export class AppStoreService {
     const owner = await this.repository.transactionOwner(tx.originalTransactionId, db);
     if (owner) return owner;
     const token = tx.appAccountToken;
-    return token && UUID.test(token) && (await this.repository.userExists(token, db)) ? token : null;
+    return token && isUuid(token) && (await this.repository.userExists(token, db)) ? token : null;
   }
 
   private assertOurs(bundleId: string, productId: string) {
