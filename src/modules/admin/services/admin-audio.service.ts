@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Clock } from '../../../common/clock';
 import { DEFAULT_ACCENT } from '../../../common/constants/domain';
@@ -6,9 +7,20 @@ import { newId } from '../../../common/ids';
 import { AppConfig } from '../../../config/app-config';
 import { POLICY } from '../../../config/policy';
 import { bareIpa } from '../../custom-words/domain/custom-word-text';
+import { AudioStorage } from '../../custom-words/providers/audio-storage';
 import { IPA_MISSING, PronunciationAudio } from '../../custom-words/services/pronunciation-audio.service';
 import { GenerateAudio, ListAudioMissing, ListAudioStale, RefreshAudio } from '../dto/admin.schemas';
 import { AdminAudioRepository, AudioTarget } from '../repositories/admin-audio.repository';
+
+const UPLOAD_EXTENSIONS: Record<string, string> = {
+  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac',
+  'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/ogg': 'ogg', 'audio/webm': 'webm',
+};
+
+export interface AudioUpload {
+  buffer: Buffer;
+  mimetype: string;
+}
 
 type Voiced = { ok: true; url: string } | { ok: false; message: string };
 
@@ -19,6 +31,7 @@ export class AdminAudioService {
   constructor(
     private readonly repository: AdminAudioRepository,
     private readonly audio: PronunciationAudio,
+    private readonly storage: AudioStorage,
     private readonly clock: Clock,
     private readonly config: AppConfig,
   ) {}
@@ -33,6 +46,15 @@ export class AdminAudioService {
 
   listStale(query: ListAudioStale) {
     return this.repository.listStale(query);
+  }
+
+  /** Stores an admin's own recording; keyed by content so re-uploading the same file keeps one URL. */
+  async upload(file: AudioUpload | undefined) {
+    if (!file?.buffer.length) throw new ApiError('VALIDATION_FAILED', 'audio: file is required');
+    const extension = UPLOAD_EXTENSIONS[file.mimetype];
+    if (!extension) throw new ApiError('VALIDATION_FAILED', `audio: unsupported type ${file.mimetype}`);
+    const key = `uploads/${createHash('sha256').update(file.buffer).digest('hex')}.${extension}`;
+    return { url: await this.storage.upload(key, file.buffer, file.mimetype) };
   }
 
   /** Puts each pronunciation's current IPA and audio into live snapshots as new revisions; nothing else in them changes. */

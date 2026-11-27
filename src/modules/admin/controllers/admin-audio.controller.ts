@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-fastify/multipart';
 import { AdminOnly } from '../../../common/auth/auth.decorators';
 import { ZodPipe } from '../../../common/http/zod.pipe';
+import { POLICY } from '../../../config/policy';
 import {
   GenerateAudio, generateAudioSchema, ListAudioMissing, listAudioMissingSchema, ListAudioStale, listAudioStaleSchema, RefreshAudio, refreshAudioSchema,
 } from '../dto/admin.schemas';
-import { AdminAudioService } from '../services/admin-audio.service';
+import { AdminAudioService, AudioUpload } from '../services/admin-audio.service';
 
 @AdminOnly()
 @Controller('admin/audio')
@@ -39,5 +41,13 @@ export class AdminAudioController {
   @HttpCode(200)
   generate(@Body(new ZodPipe(generateAudioSchema)) body: GenerateAudio) {
     return this.audio.generate(body);
+  }
+
+  /** Multipart field `audio`; returns the public URL to put in a pronunciation's audioAssetKey. */
+  @Post('upload')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('audio', { limits: { fileSize: POLICY.audio.maxUploadBytes } }))
+  upload(@UploadedFile() audio?: AudioUpload) {
+    return this.audio.upload(audio);
   }
 }

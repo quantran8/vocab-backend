@@ -654,6 +654,16 @@ describe('admin API', () => {
       await api('get', '/admin/audio/status', learner).expect(403);
     });
 
+    it('stores an uploaded file under a content key and refuses other types and learners', async () => {
+      const upload = (type: string, token = admin) => api('post', '/admin/audio/upload', token).attach('audio', Buffer.from('ID3 fake'), { filename: 'a', contentType: type });
+      const first = (await upload('audio/mpeg').expect(200)).body.url;
+      expect(first).toMatch(/^https:\/\/cdn\.example\.invalid\/uploads\/[0-9a-f]{64}\.mp3$/);
+      expect((await upload('audio/mpeg').expect(200)).body.url).toBe(first);
+      expect((await upload('text/plain').expect(400)).body.code).toBe('VALIDATION_FAILED');
+      await api('post', '/admin/audio/upload').expect(400);
+      await upload('audio/mpeg', await h.token('learner')).expect(403);
+    });
+
     it('counts live snapshots that still miss the new audio until republished', async () => {
       const { meaningId } = await publishWord('probe');
       await generate().expect(200);
