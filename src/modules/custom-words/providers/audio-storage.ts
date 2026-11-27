@@ -6,7 +6,7 @@ import { encodeRfc3986, sha256Hex, signV4 } from './sigv4';
 
 export abstract class AudioStorage {
   /** Returns a stable public URL: snapshots keep it forever, so it must not expire. */
-  abstract upload(key: string, audio: Buffer): Promise<string>;
+  abstract upload(key: string, audio: Buffer, contentType?: string): Promise<string>;
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -21,7 +21,7 @@ export class R2AudioStorage extends AudioStorage {
     super();
   }
 
-  async upload(key: string, audio: Buffer): Promise<string> {
+  async upload(key: string, audio: Buffer, contentType = AUDIO_CONTENT_TYPE): Promise<string> {
     const { r2AccountId: account, r2AccessKeyId: accessKeyId, r2SecretAccessKey: secretAccessKey, r2Bucket: bucket, r2PublicBaseUrl: publicBase } = this.config;
     if (!account || !accessKeyId || !secretAccessKey || !bucket || !publicBase) throw new ApiError('TTS_PROVIDER_UNAVAILABLE', 'Audio storage is not configured');
 
@@ -37,7 +37,7 @@ export class R2AudioStorage extends AudioStorage {
     try {
       response = await fetch(url, {
         method: 'PUT',
-        headers: { ...signed, 'content-type': AUDIO_CONTENT_TYPE, 'cache-control': CACHE_CONTROL },
+        headers: { ...signed, 'content-type': contentType, 'cache-control': CACHE_CONTROL },
         body,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
